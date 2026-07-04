@@ -77,6 +77,24 @@ Two source-data notes for this dataset:
 Global **filters** (year, branch, and — for Branch Defects — process area) apply
 across all tabs. The header **⤓ button** exports the current filtered scope to CSV.
 
+### Settings (admin)
+
+A fourth **Settings** tab mirrors the risk app's admin screen. It's gated behind
+an admin sign-in (a lock shows on the tab until you sign in):
+
+- **Download** the current dataset as an `.xlsx` (rebuilt client-side from the
+  in-app data via a vendored copy of SheetJS — no CDN).
+- **Upload** an updated `.xlsx`. The file type (Branch Defects vs Operational
+  Standard) is auto-detected from its headers, parsed in the browser, and stored
+  in `localStorage` so it survives reloads. **Reset to built-in** clears it.
+- **Change the admin password** and **sign out**.
+
+Because this app is fully static (no server), these are **browser-local**
+equivalents of the risk app's server-backed features: uploaded data lives in
+your browser only, and the admin password is stored client-side (default:
+`admin`) — it is not shared across devices and is not a real security boundary.
+The default admin password gates the editing UI, not the read-only dashboards.
+
 ## Running it
 
 ```bash
@@ -105,7 +123,8 @@ python3 scripts/convert_opstd.py path/to/Operational_Standards_Consolidated.xlsx
 ├── css/styles.css           # VMBS design system (ported from My-Risk)
 ├── js/data.js               # Branch Defects dataset (generated from the xlsx)
 ├── js/opstd.js              # Operational Standard dataset (generated from the xlsx)
-├── js/app.js                # state, models, screens (Pulse/Heatmap/Register), CSV export
+├── js/app.js                # state, models, screens, Settings (upload/download/auth), CSV export
+├── js/vendor/xlsx.full.min.js  # SheetJS 0.18.5 (vendored, for .xlsx import/export)
 └── scripts/
     ├── convert.py           # xlsx → js/data.js
     └── convert_opstd.py     # xlsx → js/opstd.js

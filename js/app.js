@@ -302,8 +302,143 @@
 
   function assign(f, over) { var o = {}; for (var k in f) o[k] = f[k]; for (var k2 in over) o[k2] = over[k2]; return o; }
 
-  // ---- Models ----
-  var MODELS = { defects: buildDefects(), opstd: window.OPSTD_DATA ? buildOpStd() : null };
+  // ---- Models (rebuildable, so uploaded data can replace built-in) ----
+  var MODELS = {};
+  var BUILTIN = { defects: window.DEFECT_DATA, opstd: window.OPSTD_DATA };
+  var OVR = { defects: "vmbs-tracker:ovr:defects", opstd: "vmbs-tracker:ovr:opstd" };
+  var uploaded = { defects: false, opstd: false };
+  function applyOverrides() {
+    ["defects", "opstd"].forEach(function (k) {
+      try {
+        var raw = localStorage.getItem(OVR[k]);
+        if (raw) { var p = JSON.parse(raw); if (k === "defects") window.DEFECT_DATA = p; else window.OPSTD_DATA = p; uploaded[k] = true; }
+      } catch (e) {}
+    });
+  }
+  function rebuildModels() { MODELS.defects = window.DEFECT_DATA ? buildDefects() : null; MODELS.opstd = window.OPSTD_DATA ? buildOpStd() : null; }
+  applyOverrides();
+  rebuildModels();
+
+  // ---- Admin auth (browser-local; not server-backed like the risk app) ----
+  var PW_KEY = "vmbs-tracker:pwhash", SESS = "vmbs-tracker:admin", DEFAULT_PW = "admin";
+  function hashPw(s) { var h = 0x811c9dc5; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(16); }
+  function storedHash() { try { return localStorage.getItem(PW_KEY) || hashPw(DEFAULT_PW); } catch (e) { return hashPw(DEFAULT_PW); } }
+  function isAdmin() { try { return sessionStorage.getItem(SESS) === "1"; } catch (e) { return false; } }
+  function doLogin(pw) { if (hashPw(pw) === storedHash()) { try { sessionStorage.setItem(SESS, "1"); } catch (e) {} return true; } return false; }
+  function doLogout() { try { sessionStorage.removeItem(SESS); } catch (e) {} }
+  function changePassword(cur, nw) {
+    if (hashPw(cur) !== storedHash()) return { ok: false, error: "Current password is incorrect." };
+    if (nw.length < 4) return { ok: false, error: "New password must be at least 4 characters." };
+    try { localStorage.setItem(PW_KEY, hashPw(nw)); } catch (e) {}
+    return { ok: true };
+  }
+
+  // ---- XLSX import / export (SheetJS) ----
+  var MON_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  var BRANCH_NORM = { "Duke St": "Duke Street" };
+  function normBranch(b) { return BRANCH_NORM[b] || b; }
+  function isoOf(v) {
+    if (v instanceof Date) return v.getUTCFullYear() + "-" + String(v.getUTCMonth() + 1).padStart(2, "0") + "-" + String(v.getUTCDate()).padStart(2, "0");
+    return String(v).slice(0, 10);
+  }
+  function idxMap(hdr) { var o = {}; hdr.forEach(function (h, i) { o[h] = i; }); return o; }
+  function toInt(v) { return typeof v === "number" ? Math.round(v) : 0; }
+  function toNumOrNull(v) { return typeof v === "number" ? Math.round(v * 100) / 100 : null; }
+
+  var OPSTD_METRIC_COLS = [
+    ["Operational Standard Score", "Op Standard Score"], ["Average SLA Score", "Average SLA"], ["% Queue SLA Adherence", "Queue SLA"],
+    ["Onboarding SLA", "Onboarding SLA"], ["Procurement Score", "Procurement"], ["Compliance to Major Procedure Policy", "Major Procedure"],
+    ["Avg Compliance to Major Procedure Policy", "Avg Procedure Compliance"], ["Customer Complaints Resolved", "Complaints Resolved"], ["Audit Resolution", "Audit Resolution"],
+  ];
+
+  function parseWorkbook(buf) {
+    if (typeof XLSX === "undefined") throw new Error("Spreadsheet library not loaded.");
+    var wb = XLSX.read(new Uint8Array(buf), { type: "array", cellDates: true });
+    var ws = wb.Sheets[wb.SheetNames[0]];
+    var aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+    var hdr = (aoa[0] || []).map(function (h) { return h == null ? "" : String(h).trim(); });
+    var rows = aoa.slice(1).filter(function (r) { return r && r.some(function (c) { return c != null && c !== ""; }); });
+    if (hdr.indexOf("Process Area") >= 0 && hdr.indexOf("# of Defects") >= 0) return { type: "defects", payload: parseDefects(hdr, rows) };
+    if (hdr.indexOf("Operational Standard Score") >= 0 || hdr.indexOf("% Queue SLA Adherence") >= 0) return { type: "opstd", payload: parseOpstd(hdr, rows) };
+    throw new Error("Unrecognized layout — expected the Branch Defects or Operational Standards sheet.");
+  }
+  function parseDefects(hdr, rows) {
+    var c = idxMap(hdr);
+    var periods = [], branches = [], areas = [];
+    rows.forEach(function (r) {
+      var p = isoOf(r[c["Period"]]); if (periods.indexOf(p) < 0) periods.push(p);
+      var b = normBranch(r[c["Branch"]]); if (branches.indexOf(b) < 0) branches.push(b);
+      var a = r[c["Process Area"]]; if (areas.indexOf(a) < 0) areas.push(a);
+    });
+    periods.sort(); branches.sort(); areas.sort();
+    var pI = idxMap(periods), bI = idxMap(branches), aI = idxMap(areas);
+    var out = rows.map(function (r) {
+      return [pI[isoOf(r[c["Period"]])], bI[normBranch(r[c["Branch"]])], aI[r[c["Process Area"]]],
+        toInt(r[c["# of Items Reviewed"]]), toInt(r[c["# of Possible Instances"]]), toInt(r[c["# of Defects"]]),
+        toInt(r[c["# of Resolvable Defects"]]), toInt(r[c["# of Defects Resolved"]]), toInt(r[c["# of Recurring Defects"]])];
+    });
+    return { meta: { source: "uploaded" }, periods: periods, branches: branches, areas: areas, rows: out };
+  }
+  function parseOpstd(hdr, rows) {
+    var c = idxMap(hdr);
+    var periods = [], branches = [];
+    function isoRow(r) { var y = String(r[c["Year"]]); var m = MON_FULL.indexOf(r[c["Month"]]) + 1; return y + "-" + String(m).padStart(2, "0") + "-01"; }
+    rows.forEach(function (r) {
+      var p = isoRow(r); if (periods.indexOf(p) < 0) periods.push(p);
+      var b = normBranch(r[c["Branch"]]); if (branches.indexOf(b) < 0) branches.push(b);
+    });
+    periods.sort(); branches.sort();
+    var pI = idxMap(periods), bI = idxMap(branches);
+    var out = [], audit = [];
+    rows.forEach(function (r) {
+      var row = [pI[isoRow(r)], bI[normBranch(r[c["Branch"]])]];
+      OPSTD_METRIC_COLS.forEach(function (m) { row.push(toNumOrNull(r[c[m[0]]])); });
+      out.push(row);
+      audit.push(toNumOrNull(r[c["Audit Score"]]));
+    });
+    return { meta: { source: "uploaded" }, metrics: OPSTD_METRIC_COLS.map(function (m) { return { key: m[0], label: m[1] }; }), periods: periods, branches: branches, rows: out, auditRaw: audit };
+  }
+
+  function writeXlsx(aoa, sheetName, fname) {
+    var ws = XLSX.utils.aoa_to_sheet(aoa), wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    var out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+    var blob = new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    var url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = fname; a.click(); URL.revokeObjectURL(url);
+  }
+  function downloadData(mode) {
+    if (mode === "defects") {
+      var D = window.DEFECT_DATA;
+      var aoa = [["Year", "Period", "Month", "Branch", "Process Area", "# of Items Reviewed", "# of Possible Instances", "# of Defects", "% Defects", "# of Resolvable Defects", "# of Defects Resolved", "% Defects Resolved", "# of Recurring Defects", "% of Recurring Defects"]];
+      D.rows.forEach(function (r) {
+        var iso = D.periods[r[0]], y = iso.slice(0, 4), mi = parseInt(iso.slice(5, 7), 10) - 1;
+        var rev = r[3], inst = r[4], def = r[5], resv = r[6], res = r[7], rec = r[8];
+        aoa.push([y, iso, MON_FULL[mi], D.branches[r[1]], D.areas[r[2]], rev, inst, def, inst ? def / inst : 0, resv, res, resv ? res / resv : 0, rec, def ? rec / def : 0]);
+      });
+      writeXlsx(aoa, "Branch Defects 2024-2026", "Branch_Defects_Consolidated.xlsx");
+    } else {
+      var O = window.OPSTD_DATA;
+      var head = ["Year", "Month", "Branch"].concat(O.metrics.map(function (m) { return m.key; })).concat(["Audit Score"]);
+      var aoa2 = [head];
+      O.rows.forEach(function (r, i) {
+        var iso = O.periods[r[0]], y = iso.slice(0, 4), mi = parseInt(iso.slice(5, 7), 10) - 1;
+        var vals = O.metrics.map(function (m, j) { return r[2 + j] == null ? "" : r[2 + j]; });
+        aoa2.push([y, MON_FULL[mi], O.branches[r[1]]].concat(vals).concat([O.auditRaw[i] == null ? "" : O.auditRaw[i]]));
+      });
+      writeXlsx(aoa2, "Op Standards 2024-2026", "Operational_Standards_Consolidated.xlsx");
+    }
+  }
+  function persistUpload(mode, payload) {
+    if (mode === "defects") window.DEFECT_DATA = payload; else window.OPSTD_DATA = payload;
+    try { localStorage.setItem(OVR[mode], JSON.stringify(payload)); uploaded[mode] = true; } catch (e) { throw new Error("File too large to store in this browser."); }
+    rebuildModels();
+  }
+  function resetData(mode) {
+    try { localStorage.removeItem(OVR[mode]); } catch (e) {}
+    if (mode === "defects") window.DEFECT_DATA = BUILTIN.defects; else window.OPSTD_DATA = BUILTIN.opstd;
+    uploaded[mode] = false; rebuildModels();
+  }
 
   // ---- State ----
   var state = {
@@ -312,6 +447,8 @@
     heatMetric: { defects: "defectRate", opstd: 0 },
     sort: { defects: { key: "defects", dir: -1 }, opstd: { key: 0, dir: -1 } },
     heatSel: null,
+    ui: { msg: "", msgKind: "", pwMsg: "", pwOk: false },
+    pendingTab: null,
   };
   try {
     var saved = JSON.parse(localStorage.getItem(STORAGE) || "{}");
@@ -536,17 +673,93 @@
       footer(m);
   }
 
+  // ---- Screen: Settings (admin only) ----
+  function renderSettings() {
+    var m = model();
+    if (!isAdmin()) {
+      document.getElementById("content").innerHTML =
+        '<div class="card awaiting"><div class="ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#E4012B" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>' +
+        '<div class="t15" style="margin-bottom:6px">Admin sign-in required</div>' +
+        '<div class="sub13" style="max-width:320px;margin:0 auto 14px">Settings — data download/upload and the admin password — are available to admins.</div>' +
+        '<button class="cta" style="max-width:220px;margin:0 auto" data-action="login">Sign in as admin</button></div>' + footer(m);
+      return;
+    }
+    var ui = state.ui;
+    var badge = uploaded[state.mode] ? '<span class="srcbadge live">Uploaded</span>' : '<span class="srcbadge">Built-in</span>';
+    var msgHtml = ui.msg ? '<div class="msgbox ' + (ui.msgKind === "ok" ? "ok" : "info") + '">' + esc(ui.msg) + "</div>" : "";
+    var pwHtml = ui.pwMsg ? '<div style="font-size:12px;margin-top:8px;font-weight:600;color:' + (ui.pwOk ? "#0E8A4D" : "#8E0E1F") + '">' + esc(ui.pwMsg) + "</div>" : "";
+
+    var steps = m.kind === "defects"
+      ? [["1", "Download", 'Tap "Download" above to get the current Branch Defects workbook.'],
+         ["2", "Add the new month", "Append rows for the new period — one per branch × process area. Keep the same headers (Year, Period, Branch, Process Area, counts). The app derives rates and month from the Period date."],
+         ["3", "Upload & verify", 'Save the file, then tap "Upload" below. It replaces the dataset in this browser and refreshes.']]
+      : [["1", "Download", 'Tap "Download" above to get the current Operational Standard workbook.'],
+         ["2", "Add the new month", "Append one row per branch for the new Year/Month with each 0–100 score. Leave a cell blank if not measured. Audit Score may be a 1–5 or 20–100 value — the app derives the letter grade."],
+         ["3", "Upload & verify", 'Save the file, then tap "Upload" below. It replaces the dataset in this browser and refreshes.']];
+
+    document.getElementById("content").innerHTML =
+      '<div class="h2l">Data file · ' + esc(m.label) + "</div>" +
+      '<div class="card" style="margin-bottom:10px">' +
+        '<div class="row between mid" style="margin-bottom:12px"><div><div class="t14">Current data</div>' +
+          '<div class="sub13" style="margin-top:3px">' + (uploaded[state.mode] ? "Uploaded in this browser" : "Built-in") + " · " + m.periods.length + " months · " + m.branches.length + ' branches</div></div>' + badge + "</div>" +
+        '<div class="row gap8" style="margin-bottom:10px">' +
+          '<button class="cta" style="flex:1" data-action="download">⬇ Download .xlsx</button>' +
+          '<button class="cta" style="flex:1;background:#1C1416" data-action="reset-data">↺ Reset to built-in</button></div>' +
+        '<label class="dropzone">⬆ Upload updated .xlsx<input type="file" accept=".xlsx" id="upload-input" style="display:none" /></label>' +
+        msgHtml +
+      "</div>" +
+      '<div class="card" style="margin-bottom:10px"><div class="t14" style="margin-bottom:10px">Monthly update instructions</div>' +
+        steps.map(function (s, i) {
+          return '<div style="display:flex;gap:10px;padding:9px 0;' + (i ? "border-top:1px solid #F1ECE9;" : "") + 'align-items:flex-start">' +
+            '<div style="font-family:Sora;font-size:11px;font-weight:800;color:var(--red);flex-shrink:0;padding-top:2px;min-width:16px">' + s[0] + "</div>" +
+            '<div><div style="font-size:12px;font-weight:700;margin-bottom:2px">' + esc(s[1]) + '</div><div class="sub13" style="line-height:1.5">' + esc(s[2]) + "</div></div></div>";
+        }).join("") + "</div>" +
+      '<div class="h2l" style="margin-top:18px">Admin password</div>' +
+      '<div class="card" style="margin-bottom:10px"><div class="sub13" style="margin-bottom:12px">Change the password used to sign in as admin. It is stored in this browser (client-side); it is not shared across devices.</div>' +
+        '<input class="login-in" id="pw-cur" type="password" autocomplete="current-password" placeholder="Current password" />' +
+        '<input class="login-in" id="pw-new" type="password" autocomplete="new-password" placeholder="New password" />' +
+        '<input class="login-in" id="pw-new2" type="password" autocomplete="new-password" placeholder="Confirm new password" />' +
+        '<button class="cta" data-action="change-pw">Update password</button>' + pwHtml + "</div>" +
+      '<div class="h2l" style="margin-top:18px">Admin session</div>' +
+      '<div class="card"><div class="sub13" style="margin-bottom:12px">You are signed in as admin.</div>' +
+        '<button class="cta2" data-action="logout">Sign out</button></div>' +
+      footer(m);
+  }
+
+  // ---- Login modal ----
+  function showLoginModal(err) {
+    document.getElementById("modal-root").innerHTML =
+      '<div class="overlay" data-action="modal-close"><div class="modal" data-stop>' +
+        '<button class="modalx" data-action="modal-close">✕</button>' +
+        '<div class="t15" style="margin-bottom:4px">Admin sign-in</div>' +
+        '<div class="sub13" style="margin-bottom:12px">Enter the admin password to manage data. Default password is <b>admin</b>.</div>' +
+        (err ? '<div class="errmsg">' + esc(err) + "</div>" : "") +
+        '<input class="login-in" id="login-pw" type="password" placeholder="Password" />' +
+        '<button class="cta" data-action="login-submit">Unlock</button></div></div>';
+    var el = document.getElementById("login-pw");
+    if (el) { el.focus(); el.addEventListener("keydown", function (e) { if (e.key === "Enter") submitLogin(); }); }
+  }
+  function hideModal() { document.getElementById("modal-root").innerHTML = ""; }
+  function submitLogin() {
+    var el = document.getElementById("login-pw");
+    if (doLogin(el ? el.value : "")) { hideModal(); if (state.pendingTab) { state.tab = state.pendingTab; state.pendingTab = null; } persist(); render(); }
+    else showLoginModal("Incorrect password.");
+  }
+
   // ---- Tabs ----
   var TABS = [
     { id: "pulse", label: "Pulse", icon: "M3 12h4l3-8 4 16 3-8h4" },
     { id: "heatmap", label: "Heatmap", icon: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" },
     { id: "register", label: "Register", icon: "M4 6h16M4 12h16M4 18h10" },
+    { id: "settings", label: "Settings", admin: true, icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" },
   ];
   function renderTabs() {
     document.getElementById("tabbar").innerHTML = TABS.map(function (t) {
+      var locked = t.admin && !isAdmin();
       return '<button class="tabbtn' + (state.tab === t.id ? " on" : "") + '" data-tab="' + t.id + '">' +
-        '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="' + t.icon + '"/></svg>' +
-        "<span>" + t.label + "</span></button>";
+        '<span class="iconwrap"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="' + t.icon + '"/></svg>' +
+        (locked ? '<span class="tablock"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8A7E7A" stroke-width="3"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>' : "") +
+        "</span><span>" + t.label + "</span></button>";
     }).join("");
   }
 
@@ -560,11 +773,18 @@
     }
     document.getElementById("tabbar").style.display = "";
     document.getElementById("appbar-sub").textContent = m.label + " · Latest data " + m.periods[m.lastActive].full;
+    var badge = document.getElementById("src-badge");
+    if (uploaded[state.mode]) { badge.textContent = "Uploaded"; badge.className = "srcbadge live"; }
+    else { badge.textContent = "Built-in data"; badge.className = "srcbadge live"; }
+    document.getElementById("auth-slot").innerHTML = isAdmin()
+      ? '<button class="userchip" data-action="logout" title="Sign out of admin">A</button>'
+      : '<button class="loginpill" data-action="login"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Login</button>';
     Array.prototype.forEach.call(document.querySelectorAll("#mode-toggle button"), function (b) {
       b.classList.toggle("on", b.getAttribute("data-mode") === state.mode);
     });
     renderTabs();
-    if (state.tab === "heatmap") renderHeatmap();
+    if (state.tab === "settings") renderSettings();
+    else if (state.tab === "heatmap") renderHeatmap();
     else if (state.tab === "register") renderRegister();
     else renderPulse();
   }
@@ -595,10 +815,16 @@
 
   // ---- Events ----
   function onClick(e) {
-    var t = e.target.closest("[data-mode],[data-tab],[data-branch],[data-area],[data-heat],[data-b][data-p],[data-sort]");
+    var t = e.target.closest("[data-mode],[data-tab],[data-branch],[data-area],[data-heat],[data-b][data-p],[data-sort],[data-action],[data-stop]");
     if (!t) return;
-    if (t.hasAttribute("data-mode")) { if (state.mode !== t.getAttribute("data-mode")) { state.mode = t.getAttribute("data-mode"); state.branch = -1; state.area = -1; state.heatSel = null; } persist(); render(); return; }
-    if (t.hasAttribute("data-tab")) { state.tab = t.getAttribute("data-tab"); state.heatSel = null; persist(); render(); window.scrollTo(0, 0); return; }
+    if (t.hasAttribute("data-action")) { handleAction(t.getAttribute("data-action")); return; }
+    if (t.hasAttribute("data-stop")) return; // click inside modal — don't close
+    if (t.hasAttribute("data-mode")) { if (state.mode !== t.getAttribute("data-mode")) { state.mode = t.getAttribute("data-mode"); state.branch = -1; state.area = -1; state.heatSel = null; state.ui.msg = ""; } persist(); render(); return; }
+    if (t.hasAttribute("data-tab")) {
+      var tab = t.getAttribute("data-tab");
+      if (tab === "settings" && !isAdmin()) { state.pendingTab = "settings"; showLoginModal(); return; }
+      state.tab = tab; state.heatSel = null; state.ui.msg = ""; persist(); render(); window.scrollTo(0, 0); return;
+    }
     if (t.hasAttribute("data-heat")) { var k = t.getAttribute("data-heat"); state.heatMetric[state.mode] = isNaN(+k) ? k : +k; state.heatSel = null; persist(); render(); return; }
     if (t.hasAttribute("data-sort")) {
       var sk = t.getAttribute("data-sort"); var key = isNaN(+sk) ? sk : +sk;
@@ -614,13 +840,53 @@
     if (t.hasAttribute("data-branch")) { state.branch = +t.getAttribute("data-branch"); state.heatSel = null; render(); return; }
     if (t.hasAttribute("data-area")) { state.area = +t.getAttribute("data-area"); state.heatSel = null; render(); return; }
   }
-  function onChange(e) { if (e.target.id === "year-sel") { state.year = e.target.value; state.heatSel = null; persist(); render(); } }
+  function handleAction(a) {
+    if (a === "login") { showLoginModal(); return; }
+    if (a === "login-submit") { submitLogin(); return; }
+    if (a === "modal-close") { hideModal(); state.pendingTab = null; return; }
+    if (a === "logout") { doLogout(); if (state.tab === "settings") state.tab = "pulse"; render(); return; }
+    if (a === "download") { try { downloadData(state.mode); state.ui.msg = "✓ Downloaded the current " + model().label + " workbook."; state.ui.msgKind = "ok"; } catch (e) { state.ui.msg = "Download failed: " + e.message; state.ui.msgKind = "info"; } render(); return; }
+    if (a === "reset-data") {
+      if (!uploaded[state.mode]) { state.ui.msg = "Already using built-in data."; state.ui.msgKind = "info"; render(); return; }
+      resetData(state.mode); state.ui.msg = "✓ Reset to built-in " + model().label + " data."; state.ui.msgKind = "ok"; render(); return;
+    }
+    if (a === "change-pw") {
+      var cur = val("pw-cur"), nw = val("pw-new"), nw2 = val("pw-new2");
+      if (nw !== nw2) { state.ui.pwMsg = "New passwords don't match."; state.ui.pwOk = false; render(); return; }
+      var res = changePassword(cur, nw);
+      state.ui.pwOk = res.ok; state.ui.pwMsg = res.ok ? "✓ Admin password updated." : res.error;
+      render(); return;
+    }
+  }
+  function val(id) { var el = document.getElementById(id); return el ? el.value : ""; }
+
+  function handleUpload(file) {
+    state.ui.msg = "Reading…"; state.ui.msgKind = "info"; render();
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var parsed = parseWorkbook(reader.result);
+        persistUpload(parsed.type, parsed.payload);
+        if (state.mode !== parsed.type) { state.mode = parsed.type; state.branch = -1; state.area = -1; }
+        state.tab = "settings"; state.heatSel = null;
+        var mm = MODELS[parsed.type];
+        state.ui.msg = "✓ " + mm.label + " uploaded & saved in this browser — " + mm.periods.length + " months · " + mm.branches.length + " branches.";
+        state.ui.msgKind = "ok";
+        persist(); render();
+      } catch (err) { state.ui.msg = "Upload failed: " + err.message; state.ui.msgKind = "info"; render(); }
+    };
+    reader.onerror = function () { state.ui.msg = "Could not read file."; state.ui.msgKind = "info"; render(); };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function onChange(e) {
+    if (e.target.id === "year-sel") { state.year = e.target.value; state.heatSel = null; persist(); render(); }
+    else if (e.target.id === "upload-input") { var f = e.target.files && e.target.files[0]; if (f) handleUpload(f); e.target.value = ""; }
+  }
 
   function init() {
-    document.getElementById("content").addEventListener("click", onClick);
-    document.getElementById("mode-toggle").addEventListener("click", onClick);
-    document.getElementById("tabbar").addEventListener("click", onClick);
-    document.getElementById("content").addEventListener("change", onChange);
+    document.body.addEventListener("click", onClick);
+    document.body.addEventListener("change", onChange);
     document.getElementById("export-btn").addEventListener("click", exportCSV);
     render();
   }
