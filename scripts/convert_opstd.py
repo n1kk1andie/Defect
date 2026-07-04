@@ -33,6 +33,14 @@ METRICS = [
 ]
 
 
+# Canonical branch names, so labels read identically across datasets.
+BRANCH_NORMALIZE = {"Duke St": "Duke Street"}
+
+
+def branch(name):
+    return BRANCH_NORMALIZE.get(name, name)
+
+
 def numOrNull(v):
     return round(float(v), 2) if isinstance(v, (int, float)) else None
 
@@ -51,14 +59,14 @@ def main(path):
         return "%s-%02d-01" % (y, m)
 
     periods = sorted({iso(r) for r in data})
-    branches = sorted({r[ci["Branch"]] for r in data})
+    branches = sorted({branch(r[ci["Branch"]]) for r in data})
     pI = {p: i for i, p in enumerate(periods)}
     bI = {b: i for i, b in enumerate(branches)}
 
     out_rows = []
     audit_raw = []
     for r in data:
-        row = [pI[iso(r)], bI[r[ci["Branch"]]]]
+        row = [pI[iso(r)], bI[branch(r[ci["Branch"]])]]
         for col, _ in METRICS:
             row.append(numOrNull(r[ci[col]]))
         out_rows.append(row)

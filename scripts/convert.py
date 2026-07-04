@@ -24,6 +24,14 @@ import json
 import openpyxl
 
 
+# Canonical branch names, so labels read identically across datasets.
+BRANCH_NORMALIZE = {"Duke St": "Duke Street"}
+
+
+def branch(name):
+    return BRANCH_NORMALIZE.get(name, name)
+
+
 def num(v):
     return int(v) if isinstance(v, (int, float)) else 0
 
@@ -40,7 +48,7 @@ def main(path):
         return ci[name]
 
     periods = sorted({str(r[col("Period")])[:10] for r in data})
-    branches = sorted({r[col("Branch")] for r in data})
+    branches = sorted({branch(r[col("Branch")]) for r in data})
     areas = sorted({r[col("Process Area")] for r in data})
     pI = {p: i for i, p in enumerate(periods)}
     bI = {b: i for i, b in enumerate(branches)}
@@ -50,7 +58,7 @@ def main(path):
     for r in data:
         out_rows.append([
             pI[str(r[col("Period")])[:10]],
-            bI[r[col("Branch")]],
+            bI[branch(r[col("Branch")])],
             aI[r[col("Process Area")]],
             num(r[col("# of Items Reviewed")]),
             num(r[col("# of Possible Instances")]),
