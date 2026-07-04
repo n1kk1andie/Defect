@@ -28,7 +28,7 @@ export default function TrackerApp({ datasets, initialAdmin }: { datasets: any; 
             <div className="sub" style={{ fontWeight: 500 }} id="appbar-sub">Branch Defects</div>
           </div>
           <span className="srcbadge live" id="src-badge">Loading…</span>
-          <button className="lockbtn" id="export-btn" title="Export current view (CSV)" aria-label="Export CSV">
+          <button className="lockbtn" id="export-btn" title="Download data (CSV, Excel, PDF)" aria-label="Download data">
             <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
             </svg>
