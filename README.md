@@ -60,8 +60,8 @@ Set these in Vercel (see `.env.example`):
 | Var | Purpose |
 |---|---|
 | `SESSION_SECRET` | **Required.** Signs the session cookie. `openssl rand -base64 32`. |
+| `ADMIN_PASSWORD` | **Required.** Password for the Settings page. No built-in default — if unset, sign-in is disabled. |
 | `BLOB_READ_WRITE_TOKEN` | Injected automatically when you connect a Vercel Blob store. |
-| `ADMIN_PASSWORD` | Optional initial password. If unset, the default is **`pa55w0rd`**. |
 
 The admin password can be changed in-app (Settings → Admin password); the new
 scrypt hash is persisted to Blob and takes precedence over `ADMIN_PASSWORD`.
@@ -70,13 +70,13 @@ scrypt hash is persisted to Blob and takes precedence over `ADMIN_PASSWORD`.
 
 ```bash
 npm install
-cp .env.example .env.local        # set SESSION_SECRET; Blob token optional (uses ./.data)
+cp .env.example .env.local        # set SESSION_SECRET and ADMIN_PASSWORD; Blob token optional (uses ./.data)
 npm run dev                        # http://localhost:3000
 npm run build                      # production build
 npm run typecheck
 ```
 
-Default admin password locally: **`pa55w0rd`**.
+Set `ADMIN_PASSWORD` in `.env.local` to sign in to Settings — there is no default.
 
 ## Regenerating the seed from spreadsheets
 

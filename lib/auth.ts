@@ -8,7 +8,6 @@ import { getStorage } from "@/lib/storage";
 export const SESSION_COOKIE = "vmbs_session";
 const MAX_AGE = 60 * 60 * 12; // 12h
 const CRED_BLOB = "admin-credentials.json";
-const DEFAULT_PASSWORD = "pa55w0rd"; // initial password until changed in-app or overridden by ADMIN_PASSWORD
 
 interface StoredCredential { alg: "scrypt"; salt: string; hash: string; updatedAt: string; }
 
@@ -55,13 +54,21 @@ export async function setPassword(newPassword: string): Promise<void> {
   await getStorage().write(CRED_BLOB, Buffer.from(JSON.stringify(cred), "utf8"), "application/json");
 }
 
-/** The effective fallback password when none has been set in-app. */
-function fallbackPassword(): string { return process.env.ADMIN_PASSWORD || DEFAULT_PASSWORD; }
-
+// Admin password is REQUIRED: an in-app password (persisted to Blob) takes
+// precedence; otherwise the ADMIN_PASSWORD env var is used. If neither is set,
+// sign-in is disabled (there is no built-in default).
 export async function checkPassword(submitted: string): Promise<boolean> {
   const stored = await readStoredCredential();
   if (stored) return safeEqual(hashPassword(submitted, stored.salt), stored.hash);
-  return safeEqual(submitted, fallbackPassword());
+  const expected = process.env.ADMIN_PASSWORD;
+  if (!expected) return false; // auth disabled until ADMIN_PASSWORD is configured
+  return safeEqual(submitted, expected);
+}
+
+/** Whether admin auth is usable (an env or in-app password exists). */
+export async function adminConfigured(): Promise<boolean> {
+  if (process.env.ADMIN_PASSWORD) return true;
+  return (await readStoredCredential()) !== null;
 }
 
 export function isAdmin(now: number): boolean {
