@@ -50,7 +50,7 @@ async function readStoredCredential(): Promise<StoredCredential | null> {
 
 export async function setPassword(newPassword: string): Promise<void> {
   const salt = randomBytes(16).toString("hex");
-  const cred: StoredCredential = { alg: "scrypt", salt, hash: hashPassword(newPassword, salt), updatedAt: new Date().toISOString() };
+  const cred: StoredCredential = { alg: "scrypt", salt, hash: hashPassword(newPassword.trim(), salt), updatedAt: new Date().toISOString() };
   await getStorage().write(CRED_BLOB, Buffer.from(JSON.stringify(cred), "utf8"), "application/json");
 }
 
@@ -58,11 +58,14 @@ export async function setPassword(newPassword: string): Promise<void> {
 // precedence; otherwise the ADMIN_PASSWORD env var is used. If neither is set,
 // sign-in is disabled (there is no built-in default).
 export async function checkPassword(submitted: string): Promise<boolean> {
+  // Trim surrounding whitespace on both sides — env values pasted into Vercel often
+  // carry a trailing space/newline, which would otherwise reject a correct password.
+  const pw = (submitted || "").trim();
   const stored = await readStoredCredential();
-  if (stored) return safeEqual(hashPassword(submitted, stored.salt), stored.hash);
-  const expected = process.env.ADMIN_PASSWORD;
+  if (stored) return safeEqual(hashPassword(pw, stored.salt), stored.hash);
+  const expected = (process.env.ADMIN_PASSWORD || "").trim();
   if (!expected) return false; // auth disabled until ADMIN_PASSWORD is configured
-  return safeEqual(submitted, expected);
+  return safeEqual(pw, expected);
 }
 
 /** Whether admin auth is usable (an env or in-app password exists). */
