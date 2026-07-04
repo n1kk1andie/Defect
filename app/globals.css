@@ -125,13 +125,22 @@ table.reg tbody tr.total td { font-weight:800; background:#FAF7F5; border-top:2p
 .msgbox.ok { background:#E5F4EC; color:#0E8A4D; }
 .msgbox.info { background:#FBF2DC; color:#A07208; }
 
+/* ---- report page — document look ---- */
+.report { background:#fff; border-radius:16px; box-shadow:0 1px 3px rgba(28,20,22,.07); padding:26px 24px; }
+.report-title { font-family:Sora; font-size:22px; font-weight:800; letter-spacing:-.01em; }
+.report-h { font-family:Sora; font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin-bottom:10px; }
+.report-rule { border:none; border-top:1px solid var(--line); margin:18px 0; }
+.report .tbl-wrap { border-radius:12px; }
+@media (min-width:768px) { .report { padding:34px 32px; } }
+
 /* ---- print (report page) ---- */
 @media print {
   .appbar, .tabbar, .toggle, .no-print { display:none !important; }
   body { background:#fff; }
   .content { padding:0 !important; }
   .app { max-width:none; }
-  .card, .hero, .tbl-wrap { box-shadow:none; }
+  .card, .hero, .tbl-wrap, .report { box-shadow:none; }
+  .report { padding:0; }
   .chips { display:none; }
 }
 
