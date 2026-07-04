@@ -1,143 +1,53 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Defect Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>VM Building Society — Branch Defects Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
-  <header class="app-header">
-    <div class="brand">
-      <span class="brand-mark">🐞</span>
-      <div>
-        <h1>Defect Tracker</h1>
-        <p class="tagline">Track, triage and resolve software defects</p>
-      </div>
-    </div>
-    <div class="header-actions">
-      <button id="theme-toggle" class="btn btn-ghost" title="Toggle theme" aria-label="Toggle theme">🌙</button>
-      <button id="export-btn" class="btn btn-ghost">Export</button>
-      <button id="import-btn" class="btn btn-ghost">Import</button>
-      <input id="import-file" type="file" accept="application/json" hidden />
-      <button id="new-defect-btn" class="btn btn-primary">+ New Defect</button>
-    </div>
-  </header>
-
-  <!-- Stats dashboard -->
-  <section class="stats" id="stats" aria-label="Summary statistics"></section>
-
-  <!-- Toolbar: search + filters -->
-  <section class="toolbar">
-    <div class="search-wrap">
-      <input id="search" type="search" placeholder="Search title, description, component, assignee…" autocomplete="off" />
-    </div>
-    <div class="filters">
-      <select id="filter-status" aria-label="Filter by status">
-        <option value="">All statuses</option>
-        <option value="Open">Open</option>
-        <option value="In Progress">In Progress</option>
-        <option value="Resolved">Resolved</option>
-        <option value="Closed">Closed</option>
-      </select>
-      <select id="filter-severity" aria-label="Filter by severity">
-        <option value="">All severities</option>
-        <option value="Critical">Critical</option>
-        <option value="High">High</option>
-        <option value="Medium">Medium</option>
-        <option value="Low">Low</option>
-      </select>
-      <select id="filter-assignee" aria-label="Filter by assignee">
-        <option value="">All assignees</option>
-      </select>
-      <select id="sort" aria-label="Sort by">
-        <option value="updated-desc">Newest updated</option>
-        <option value="created-desc">Newest created</option>
-        <option value="created-asc">Oldest created</option>
-        <option value="severity-desc">Severity (high → low)</option>
-        <option value="priority-desc">Priority (high → low)</option>
-        <option value="title-asc">Title (A → Z)</option>
-      </select>
-      <div class="view-toggle" role="group" aria-label="View mode">
-        <button id="view-board" class="view-btn active" title="Board view">▦</button>
-        <button id="view-table" class="view-btn" title="Table view">☰</button>
-      </div>
-    </div>
-  </section>
-
-  <main id="content" class="content"></main>
-
-  <!-- Defect editor dialog -->
-  <div id="dialog-backdrop" class="dialog-backdrop" hidden>
-    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
-      <div class="dialog-head">
-        <h2 id="dialog-title">New Defect</h2>
-        <button id="dialog-close" class="btn btn-ghost" aria-label="Close">✕</button>
-      </div>
-      <form id="defect-form" class="dialog-body">
-        <input type="hidden" id="f-id" />
-        <label class="field field-full">
-          <span>Title <em>*</em></span>
-          <input id="f-title" type="text" required maxlength="140" placeholder="Short summary of the defect" />
-        </label>
-        <label class="field field-full">
-          <span>Description</span>
-          <textarea id="f-description" rows="4" placeholder="Steps to reproduce, expected vs. actual behaviour…"></textarea>
-        </label>
-        <label class="field">
-          <span>Status</span>
-          <select id="f-status">
-            <option>Open</option>
-            <option>In Progress</option>
-            <option>Resolved</option>
-            <option>Closed</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Severity</span>
-          <select id="f-severity">
-            <option>Critical</option>
-            <option>High</option>
-            <option selected>Medium</option>
-            <option>Low</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Priority</span>
-          <select id="f-priority">
-            <option>P0</option>
-            <option>P1</option>
-            <option selected>P2</option>
-            <option>P3</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Component</span>
-          <input id="f-component" type="text" list="component-list" placeholder="e.g. Auth, API, UI" />
-          <datalist id="component-list"></datalist>
-        </label>
-        <label class="field">
-          <span>Assignee</span>
-          <input id="f-assignee" type="text" list="assignee-list" placeholder="Who owns this?" />
-          <datalist id="assignee-list"></datalist>
-        </label>
-        <label class="field">
-          <span>Reporter</span>
-          <input id="f-reporter" type="text" placeholder="Who found it?" />
-        </label>
-        <div class="dialog-actions field-full">
-          <button type="button" id="delete-btn" class="btn btn-danger" hidden>Delete</button>
-          <div class="spacer"></div>
-          <button type="button" id="cancel-btn" class="btn btn-ghost">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save Defect</button>
+  <div class="shell">
+    <div class="app">
+      <!-- App bar -->
+      <div class="appbar">
+        <svg height="26" viewBox="0 0 500 340" fill="none" style="display:block;flex-shrink:0">
+          <path d="M14 130 L48 74 L112 280 L213 76 L272 204 L341 76 L446 280 L486 216"
+            stroke="#E4012B" stroke-width="42" stroke-linejoin="miter" stroke-miterlimit="3" />
+        </svg>
+        <div style="flex:1;min-width:0">
+          <div class="brand">VM Building Society</div>
+          <div class="sub" style="font-weight:500" id="appbar-sub">Branch Defects · Consolidated Register</div>
         </div>
-      </form>
+        <span class="srcbadge live" id="src-badge">Built-in data</span>
+        <button class="lockbtn" id="export-btn" title="Export current view (CSV)" aria-label="Export CSV">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Mode toggle: Branch Defects / Operational Standard -->
+      <div style="padding:2px 16px 8px">
+        <div class="toggle" id="mode-toggle">
+          <button data-mode="defects" class="on">Branch Defects</button>
+          <button data-mode="opstd">Operational Standard</button>
+        </div>
+      </div>
+
+      <!-- Screen content -->
+      <div class="content" id="content"></div>
+
+      <!-- Bottom tab bar -->
+      <div class="tabbar" id="tabbar"></div>
     </div>
   </div>
 
-  <div id="toast" class="toast" hidden></div>
-
-  <script src="js/seed.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/opstd.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
