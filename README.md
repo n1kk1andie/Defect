@@ -1,131 +1,101 @@
-# VM Building Society — Branch Defects Tracker
+# VM Building Society — Branch Defects & Operational Standard Tracker
 
-A self-contained tracker for VMBS branch audit defects, built to be **visually
-consistent with the VMBS Operational Risk & Audit app** (`n1kk1andie/My-Risk`):
-same Sora + IBM Plex Sans type, VM red (`#E4012B`), card + hero language, RAG
-(red/amber/green) status, heatmaps and bottom-tab navigation.
+A Next.js app for VMBS branch audit data, styled to match the VMBS Operational
+Risk & Audit app (`n1kk1andie/My-Risk`): Sora + IBM Plex Sans, VM red
+(`#E4012B`), card/hero language, RAG (red/amber/green) status, heatmaps and
+bottom-tab navigation. A top toggle switches between two datasets that share the
+same **Pulse / Heatmap / Register** screens.
 
-No build step, no server, no dependencies — open `index.html` and it runs. All
-logic is vanilla JS.
+Data, uploads and admin auth are backed by a **proper server**: Next.js API
+routes with **Vercel Blob** persistence and server-side (scrypt + signed-cookie)
+authentication.
 
-## Data
+## The two datasets
 
-Built from **`Branch_Defects_Consolidated_2024_2026.xlsx`** — a complete grid of
-**16 branches × 5 process areas × 36 months (Jan 2024 – Dec 2026) = 2,880 rows**.
-Each row carries: items reviewed, possible instances, defects, resolvable
-defects, defects resolved, and recurring defects.
-
-The spreadsheet is converted to a compact, indexed [`js/data.js`](js/data.js) at
-~64 KB. Two data-quality decisions, applied on conversion:
-
-- **The `Month` column was dropped** — it was mislabeled (it read "June" for
-  every January-2024 row, and was wrong in 100% of rows). Month is derived from
-  the reliable ISO `Period` date instead.
-- **Percentages are recomputed from raw counts.** The sheet's `% Defects
-  Resolved` was unreliable (it exceeds 100% wherever resolved > resolvable —
-  backlog clearance), so all rates are computed in-app:
-  - Defect rate = defects ÷ possible instances
-  - Resolution rate = defects resolved ÷ resolvable defects *(can exceed 100%)*
-  - Recurring rate = recurring defects ÷ defects
-- **Aug–Dec 2026 are empty placeholders** in the source (400 all-zero rows), so
-  trends and heatmaps run through the last month with activity.
-
-## The two views (top toggle)
-
-Both datasets flow through the same three tabs — **Pulse**, **Heatmap**,
-**Register** — via a small dataset abstraction in `js/app.js`.
-
-| Toggle | Data | Headline metric |
+| Toggle | Headline metric | Shape |
 |---|---|---|
-| **Branch Defects** | `js/data.js` (16 branches × 5 process areas × 36 months) | Defect rate (lower is better) |
-| **Operational Standard** | `js/opstd.js` (16 branches × 9 scores × 29 months) | Operational Standard Score (higher is better) |
+| **Branch Defects** | Defect rate (lower is better) | 16 branches × 5 process areas × 36 months |
+| **Operational Standard** | Operational Standard Score (higher is better) | 16 branches × 9 scores × 29 months |
 
-### Branch Defects
+### Screens (both datasets)
 
-- **Pulse** — headline defect rate (red hero), KPI cards, RAG-coloured monthly
-  trend, and breakdowns by process area and by branch.
-- **Heatmap** — Branch × Month grid, coloured by **defect rate**, **resolution
-  rate**, or **recurring rate** (switchable). Tap any cell for detail.
-- **Register** — consolidated table grouped by branch (or by process area when a
-  single branch is selected), sortable, with a totals row.
+- **Pulse** — headline hero, KPI cards, RAG-coloured monthly trend, and
+  breakdowns. The Operational Standard Pulse also shows an **Audit Grades by
+  Month** stacked bar (grades derived from the mixed-scale audit score — 2024's
+  1–5 scale and the 2025+ A–D scale).
+- **Heatmap** — Branch × Month, switchable across each dataset's metrics.
+- **Register** — per-branch (or per-process-area) table, sortable, with totals.
+- **Settings** (admin) — download/upload the dataset workbook and change the
+  admin password.
 
-### Operational Standard
+Global filters (year, branch, and — for Branch Defects — process area) apply
+across all tabs. The header ⤓ button exports the current filtered scope to CSV.
 
-Per-branch monthly performance **scores (0–100, higher is better)** — SLA
-adherence, onboarding, procurement, procedure compliance, complaints, audit
-resolution — banded on the risk app's world-class scale (≥95 World Class, ≥90
-Industry Average, ≥80 Non-Competitive, <80 Unacceptable).
+Data-quality handling (see `lib/xlsx.ts` / `scripts/`): the mislabeled `Month`
+column is dropped (month derived from `Period`), percentages are recomputed from
+raw counts, the overall Operational Standard Score is shown as untracked before
+May 2025, and empty future placeholder months are excluded from trends.
 
-- **Pulse** — overall Operational Standard Score hero, key-metric KPI cards,
-  score trend, a per-standard breakdown, and an **Audit Grades by Month** stacked
-  bar (see below).
-- **Heatmap** — Branch × Month, switchable across all nine score metrics.
-- **Register** — every branch's average across all nine metrics, sortable.
+## Backend
 
-Two source-data notes for this dataset:
+- **`GET /api/data`** — the two datasets (from Blob if uploaded, else the bundled
+  seed) plus per-dataset `uploaded` flags. Rendered server-side on first paint.
+- **`GET /api/file?dataset=…`** — download the current workbook as `.xlsx`.
+- **`POST /api/upload`** (admin) — upload an `.xlsx` (raw body). The dataset type
+  is auto-detected from the headers, parsed server-side (SheetJS), and persisted
+  to Blob (`defects.json`/`opstd.json` + the workbook). `?reset=…` restores the
+  bundled seed.
+- **`POST /api/login` · `GET /api/login` · `POST /api/logout`** — sign in / status
+  / sign out. A valid password is exchanged for an httpOnly, signed session cookie.
+- **`POST /api/password`** (admin) — change the admin password (scrypt-hashed and
+  persisted to Blob; takes precedence over the fallback).
 
-- **The overall "Operational Standard Score" was only introduced in May 2025**,
-  so it's null before then; the app shows those months as "not tracked" and says
-  so in the hero coverage line.
-- **Audit grades from a messy column.** The `Audit Score` column mixes two
-  scales — a 1–5 scale in 2024 and a 20–100 (D…A) scale from 2025 — so the raw
-  numbers aren't comparable. Rather than chart a misleading metric, the app
-  derives a **letter grade** from each value (2024: 5→A, 4→B, 3→C, 2→D, 1→F;
-  2025+: 100→A, 80→B+, 60→B, 40→C, 20→D — the mapping the source's own formula
-  text uses) and shows the **grade distribution as a stacked bar per month**.
+Storage adapter (`lib/storage.ts`): **Vercel Blob** when `BLOB_READ_WRITE_TOKEN`
+is present (production), otherwise a local `./.data` folder for `next dev`.
 
-Global **filters** (year, branch, and — for Branch Defects — process area) apply
-across all tabs. The header **⤓ button** exports the current filtered scope to CSV.
+## Configuration
 
-### Settings (admin)
+Set these in Vercel (see `.env.example`):
 
-A fourth **Settings** tab mirrors the risk app's admin screen. It's gated behind
-an admin sign-in (a lock shows on the tab until you sign in):
+| Var | Purpose |
+|---|---|
+| `SESSION_SECRET` | **Required.** Signs the session cookie. `openssl rand -base64 32`. |
+| `BLOB_READ_WRITE_TOKEN` | Injected automatically when you connect a Vercel Blob store. |
+| `ADMIN_PASSWORD` | Optional initial password. If unset, the default is **`pa55w0rd`**. |
 
-- **Download** the current dataset as an `.xlsx` (rebuilt client-side from the
-  in-app data via a vendored copy of SheetJS — no CDN).
-- **Upload** an updated `.xlsx`. The file type (Branch Defects vs Operational
-  Standard) is auto-detected from its headers, parsed in the browser, and stored
-  in `localStorage` so it survives reloads. **Reset to built-in** clears it.
-- **Change the admin password** and **sign out**.
+The admin password can be changed in-app (Settings → Admin password); the new
+scrypt hash is persisted to Blob and takes precedence over `ADMIN_PASSWORD`.
 
-Because this app is fully static (no server), these are **browser-local**
-equivalents of the risk app's server-backed features: uploaded data lives in
-your browser only, and the admin password is stored client-side (default:
-`admin`) — it is not shared across devices and is not a real security boundary.
-The default admin password gates the editing UI, not the read-only dashboards.
-
-## Running it
+## Develop
 
 ```bash
-open index.html          # macOS
-xdg-open index.html      # Linux
-# or serve it:
-python3 -m http.server 8000   # then visit http://localhost:8000
+npm install
+cp .env.example .env.local        # set SESSION_SECRET; Blob token optional (uses ./.data)
+npm run dev                        # http://localhost:3000
+npm run build                      # production build
+npm run typecheck
 ```
 
-Fonts (Sora, IBM Plex Sans) load from Google Fonts to match the risk app; if
-offline they degrade gracefully to the system sans-serif.
+Default admin password locally: **`pa55w0rd`**.
 
-## Regenerating the data from new spreadsheets
+## Regenerating the seed from spreadsheets
 
 ```bash
 pip install openpyxl
-python3 scripts/convert.py       path/to/Branch_Defects_Consolidated.xlsx        > js/data.js
-python3 scripts/convert_opstd.py path/to/Operational_Standards_Consolidated.xlsx > js/opstd.js
+python3 scripts/convert.py       Branch_Defects_Consolidated.xlsx        > lib/seed-defects.json
+python3 scripts/convert_opstd.py Operational_Standards_Consolidated.xlsx > lib/seed-opstd.json
 ```
 
-## Project structure
+## Structure
 
 ```
-.
-├── index.html               # shell: appbar, mode toggle, tab bar
-├── css/styles.css           # VMBS design system (ported from My-Risk)
-├── js/data.js               # Branch Defects dataset (generated from the xlsx)
-├── js/opstd.js              # Operational Standard dataset (generated from the xlsx)
-├── js/app.js                # state, models, screens, Settings (upload/download/auth), CSV export
-├── js/vendor/xlsx.full.min.js  # SheetJS 0.18.5 (vendored, for .xlsx import/export)
-└── scripts/
-    ├── convert.py           # xlsx → js/data.js
-    └── convert_opstd.py     # xlsx → js/opstd.js
+app/
+  layout.tsx · page.tsx · globals.css     # shell, fonts, server-loaded initial data
+  api/{data,file,upload,login,logout,password}/route.ts
+components/TrackerApp.tsx                  # client shell; mounts the render engine
+lib/
+  engine.js                               # UI rendering (Pulse/Heatmap/Register/Settings)
+  storage.ts · auth.ts · data.ts · xlsx.ts
+  seed-defects.json · seed-opstd.json
+scripts/convert.py · convert_opstd.py      # xlsx → seed JSON
 ```

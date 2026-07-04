@@ -82,8 +82,7 @@ def main(path):
         "rows": out_rows,
     }
 
-    sys.stdout.write("/* Auto-generated from %s. Do not edit by hand. */\n" % payload["meta"]["source"])
-    sys.stdout.write("window.DEFECT_DATA = " + json.dumps(payload, separators=(",", ":")) + ";\n")
+    sys.stdout.write(json.dumps(payload, separators=(",", ":")))
 
 
 if __name__ == "__main__":
