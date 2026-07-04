@@ -125,6 +125,16 @@ table.reg tbody tr.total td { font-weight:800; background:#FAF7F5; border-top:2p
 .msgbox.ok { background:#E5F4EC; color:#0E8A4D; }
 .msgbox.info { background:#FBF2DC; color:#A07208; }
 
+/* ---- print (report page) ---- */
+@media print {
+  .appbar, .tabbar, .toggle, .no-print { display:none !important; }
+  body { background:#fff; }
+  .content { padding:0 !important; }
+  .app { max-width:none; }
+  .card, .hero, .tbl-wrap { box-shadow:none; }
+  .chips { display:none; }
+}
+
 /* ---- tablet ≥768px ---- */
 @media (min-width:768px) {
   .app { max-width:760px; }
