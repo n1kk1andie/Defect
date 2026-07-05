@@ -1,93 +1,103 @@
-# 🐞 Defect Tracker
+# VM Building Society — Branch Defects & Operational Standard Tracker
 
-A lightweight, self-contained defect (bug) tracker that runs entirely in the
-browser — **no build step, no server, no dependencies**. Open `index.html` and
-start tracking. Data persists in the browser via `localStorage`.
+A Next.js app for VMBS branch audit data, styled to match the VMBS Operational
+Risk & Audit app (`n1kk1andie/My-Risk`): Sora + IBM Plex Sans, VM red
+(`#E4012B`), card/hero language, RAG (red/amber/green) status, heatmaps and
+bottom-tab navigation. A top toggle switches between two datasets that share the
+same **Pulse / Heatmap / Register** screens.
 
-> **Note on the initial data:** the task was to "build a tracker using this
-> data," but no data file was reachable in the session (the repo was empty and
-> the connectors required interactive approval that isn't available in an async
-> run). The tracker therefore ships with realistic **sample defect records** in
-> [`js/seed.js`](js/seed.js). Swapping in real data is a one-file edit or a
-> single **Import** click — see [Using your own data](#using-your-own-data).
+Data, uploads and admin auth are backed by a **proper server**: Next.js API
+routes with **Vercel Blob** persistence and server-side (scrypt + signed-cookie)
+authentication.
 
-## Features
+## The two datasets
 
-- **Board view** — Kanban columns (Open · In Progress · Resolved · Closed) with
-  drag-and-drop to change status.
-- **Table view** — sortable, scannable list.
-- **Dashboard stats** — totals, open/in-progress counts, resolution rate, and
-  open-critical count.
-- **Search & filter** — full-text search plus filters by status, severity, and
-  assignee.
-- **Sort** — by updated/created date, severity, priority, or title.
-- **Create / edit / delete** defects via a modal editor.
-- **Import / Export JSON** — back up or load your data.
-- **Light & dark themes** — toggle in the header (remembered across sessions).
-- **Responsive** — works on desktop and mobile.
+| Toggle | Headline metric | Shape |
+|---|---|---|
+| **Branch Defects** | Defect rate (lower is better) | 16 branches × 5 process areas × 36 months |
+| **Operational Standard** | Operational Standard Score (higher is better) | 16 branches × 9 scores × 29 months |
 
-## Running it
+### Screens (both datasets)
 
-No tooling required. Either:
+- **Pulse** — headline hero, KPI cards, RAG-coloured monthly trend, and
+  breakdowns. The Operational Standard Pulse also shows an **Audit Grades by
+  Month** stacked bar (grades derived from the mixed-scale audit score — 2024's
+  1–5 scale and the 2025+ A–D scale).
+- **Heatmap** — Branch × Month, switchable across each dataset's metrics.
+- **Register** — per-branch (or per-process-area) table, sortable, with totals.
+- **Settings** (admin) — download/upload the dataset workbook and change the
+  admin password.
+
+Global filters (year, branch, and — for Branch Defects — process area) apply
+across all tabs. The header ⤓ button exports the current filtered scope to CSV.
+
+Data-quality handling (see `lib/xlsx.ts` / `scripts/`): the mislabeled `Month`
+column is dropped (month derived from `Period`), percentages are recomputed from
+raw counts, the overall Operational Standard Score is shown as untracked before
+May 2025, and empty future placeholder months are excluded from trends.
+
+## Backend
+
+- **`GET /api/data`** — the two datasets (from Blob if uploaded, else the bundled
+  seed) plus per-dataset `uploaded` flags. Rendered server-side on first paint.
+- **`GET /api/file?dataset=…`** — download the current workbook as `.xlsx`.
+- **`POST /api/upload`** (admin) — upload an `.xlsx` (raw body). The dataset type
+  is auto-detected from the headers, parsed server-side (SheetJS), and persisted
+  to Blob (`defects.json`/`opstd.json` + the workbook). `?reset=…` restores the
+  bundled seed.
+- **`POST /api/login` · `GET /api/login` · `POST /api/logout`** — sign in / status
+  / sign out. A valid password is exchanged for an httpOnly, signed session cookie.
+- **`POST /api/password`** (admin) — change the admin password (scrypt-hashed and
+  persisted to Blob; takes precedence over the fallback).
+
+Storage adapter (`lib/storage.ts`): **Vercel Blob** when `BLOB_READ_WRITE_TOKEN`
+is present (production), otherwise a local `./.data` folder for `next dev`.
+
+## Configuration
+
+Set these in Vercel (see `.env.example`):
+
+| Var | Purpose |
+|---|---|
+| `SESSION_SECRET` | **Required.** Signs the session cookie. `openssl rand -base64 32`. |
+| `ADMIN_PASSWORD` | **Optional.** Password for the Settings page. Overrides the built-in default (`pa55w0rd`) when set. |
+| `BLOB_READ_WRITE_TOKEN` | Injected automatically when you connect a Vercel Blob store. |
+
+Sign-in works out of the box with the built-in default password `pa55w0rd` — no
+env var or Vercel setup required. Override it with `ADMIN_PASSWORD`, or change it
+in-app (Settings → Admin password); the new scrypt hash is persisted to storage
+and takes precedence over both the env var and the default.
+
+## Develop
 
 ```bash
-# Option A — just open the file
-open index.html          # macOS
-xdg-open index.html      # Linux
-
-# Option B — serve it (recommended; avoids any file:// quirks)
-python3 -m http.server 8000
-# then visit http://localhost:8000
+npm install
+cp .env.example .env.local        # SESSION_SECRET recommended; ADMIN_PASSWORD + Blob token optional (uses ./.data)
+npm run dev                        # http://localhost:3000
+npm run build                      # production build
+npm run typecheck
 ```
 
-## Data model
+Sign in to Settings with the default password `pa55w0rd`, or set `ADMIN_PASSWORD` in `.env.local` to override it.
 
-Each defect is a plain object (see [`js/seed.js`](js/seed.js)):
+## Regenerating the seed from spreadsheets
 
-| Field         | Type   | Values / notes                                   |
-|---------------|--------|--------------------------------------------------|
-| `id`          | string | e.g. `DEF-001` (auto-generated for new defects)  |
-| `title`       | string | required                                         |
-| `description` | string | free text                                        |
-| `status`      | string | `Open` · `In Progress` · `Resolved` · `Closed`   |
-| `severity`    | string | `Critical` · `High` · `Medium` · `Low`           |
-| `priority`    | string | `P0` · `P1` · `P2` · `P3`                         |
-| `component`   | string | e.g. `Auth`, `API`, `UI`                         |
-| `assignee`    | string | owner                                            |
-| `reporter`    | string | who filed it                                     |
-| `createdAt`   | string | ISO 8601 timestamp                               |
-| `updatedAt`   | string | ISO 8601 timestamp                               |
-
-## Using your own data
-
-Three ways, easiest first:
-
-1. **Import** — click **Import** in the header and select a JSON file that is an
-   array of defect objects (the same shape as the table above). Missing fields
-   are filled with sensible defaults.
-2. **Edit the seed** — replace the contents of `window.SEED_DEFECTS` in
-   [`js/seed.js`](js/seed.js), then clear the site's `localStorage` (or use a
-   fresh browser profile) so the new seed is applied.
-3. **In-app** — use **+ New Defect** to add records one at a time.
-
-Use **Export** at any time to download the current data as JSON.
-
-## Resetting
-
-The app stores everything under the `localStorage` key `defect-tracker:v1`.
-To start over, clear site data in your browser, or run in the console:
-
-```js
-localStorage.removeItem("defect-tracker:v1");
-location.reload();
+```bash
+pip install openpyxl
+python3 scripts/convert.py       Branch_Defects_Consolidated.xlsx        > lib/seed-defects.json
+python3 scripts/convert_opstd.py Operational_Standards_Consolidated.xlsx > lib/seed-opstd.json
 ```
 
-## Project structure
+## Structure
 
 ```
-.
-├── index.html        # markup + layout
-├── css/styles.css    # styling, light/dark themes, responsive rules
-├── js/seed.js        # sample data (edit to use your own)
-└── js/app.js         # all app logic (state, rendering, persistence)
+app/
+  layout.tsx · page.tsx · globals.css     # shell, fonts, server-loaded initial data
+  api/{data,file,upload,login,logout,password}/route.ts
+components/TrackerApp.tsx                  # client shell; mounts the render engine
+lib/
+  engine.js                               # UI rendering (Pulse/Heatmap/Register/Settings)
+  storage.ts · auth.ts · data.ts · xlsx.ts
+  seed-defects.json · seed-opstd.json
+scripts/convert.py · convert_opstd.py      # xlsx → seed JSON
 ```
