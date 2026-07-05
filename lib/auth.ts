@@ -9,6 +9,18 @@ export const SESSION_COOKIE = "vmbs_session";
 const MAX_AGE = 60 * 60 * 12; // 12h
 const CRED_BLOB = "admin-credentials.json";
 
+// Built-in default admin password. This makes sign-in work out of the box with
+// NO Vercel setup required (no ADMIN_PASSWORD env var, no Blob store). It can be
+// overridden by setting ADMIN_PASSWORD, or by changing the password in-app
+// (Settings → Admin password), which persists a scrypt hash to storage.
+const DEFAULT_ADMIN_PASSWORD = "admin";
+
+/** The effective admin password from env, falling back to the built-in default. */
+function envOrDefaultPassword(): string {
+  const fromEnv = (process.env.ADMIN_PASSWORD || "").trim();
+  return fromEnv || DEFAULT_ADMIN_PASSWORD;
+}
+
 interface StoredCredential { alg: "scrypt"; salt: string; hash: string; updatedAt: string; }
 
 function secret(): string {
@@ -54,24 +66,22 @@ export async function setPassword(newPassword: string): Promise<void> {
   await getStorage().write(CRED_BLOB, Buffer.from(JSON.stringify(cred), "utf8"), "application/json");
 }
 
-// Admin password is REQUIRED: an in-app password (persisted to Blob) takes
-// precedence; otherwise the ADMIN_PASSWORD env var is used. If neither is set,
-// sign-in is disabled (there is no built-in default).
+// Admin password precedence: an in-app password (persisted to storage) takes
+// precedence; otherwise the ADMIN_PASSWORD env var is used; otherwise a built-in
+// default applies. Sign-in always works without any Vercel configuration.
 export async function checkPassword(submitted: string): Promise<boolean> {
-  // Trim surrounding whitespace on both sides — env values pasted into Vercel often
+  // Trim surrounding whitespace on both sides — env values pasted into a host often
   // carry a trailing space/newline, which would otherwise reject a correct password.
   const pw = (submitted || "").trim();
   const stored = await readStoredCredential();
   if (stored) return safeEqual(hashPassword(pw, stored.salt), stored.hash);
-  const expected = (process.env.ADMIN_PASSWORD || "").trim();
-  if (!expected) return false; // auth disabled until ADMIN_PASSWORD is configured
-  return safeEqual(pw, expected);
+  return safeEqual(pw, envOrDefaultPassword());
 }
 
-/** Whether admin auth is usable (an env or in-app password exists). */
+/** Whether admin auth is usable. Always true — a built-in default password
+ *  guarantees sign-in works even with no env var or storage configured. */
 export async function adminConfigured(): Promise<boolean> {
-  if (process.env.ADMIN_PASSWORD) return true;
-  return (await readStoredCredential()) !== null;
+  return true;
 }
 
 export function isAdmin(now: number): boolean {

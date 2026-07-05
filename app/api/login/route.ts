@@ -4,9 +4,8 @@ import { adminConfigured, checkPassword, createSessionToken, isAdmin, SESSION_CO
 
 export const dynamic = "force-dynamic";
 
-// Session status + whether an admin password is configured on this deployment.
-// `configured:false` means ADMIN_PASSWORD is not set (and no in-app password) here —
-// a safe boolean, never the value itself.
+// Session status. `configured` is always true — a built-in default password
+// means sign-in works without any host/env configuration.
 export async function GET() {
   return NextResponse.json({ admin: isAdmin(Date.now()), configured: await adminConfigured() });
 }
@@ -15,12 +14,6 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   let password = "";
   try { password = (await req.json())?.password || ""; } catch { /* empty */ }
-  if (!(await adminConfigured())) {
-    return NextResponse.json(
-      { ok: false, error: "Admin password is not configured on this deployment. Set ADMIN_PASSWORD in Vercel and redeploy." },
-      { status: 503 },
-    );
-  }
   if (!(await checkPassword(password))) {
     return NextResponse.json({ ok: false, error: "Incorrect password." }, { status: 401 });
   }
