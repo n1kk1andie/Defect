@@ -13,7 +13,7 @@ const CRED_BLOB = "admin-credentials.json";
 // NO Vercel setup required (no ADMIN_PASSWORD env var, no Blob store). It can be
 // overridden by setting ADMIN_PASSWORD, or by changing the password in-app
 // (Settings → Admin password), which persists a scrypt hash to storage.
-const DEFAULT_ADMIN_PASSWORD = "admin";
+const DEFAULT_ADMIN_PASSWORD = "pa55w0rd";
 
 /** The effective admin password from env, falling back to the built-in default. */
 function envOrDefaultPassword(): string {
