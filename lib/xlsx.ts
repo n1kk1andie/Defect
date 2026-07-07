@@ -26,31 +26,77 @@ const idx = (hdr: string[]) => { const o: Record<string, number> = {}; hdr.forEa
 const toInt = (v: any) => (typeof v === "number" ? Math.round(v) : 0);
 const toNum = (v: any) => (typeof v === "number" ? Math.round(v * 100) / 100 : null);
 
+// Header normalisation: lower-case, drop punctuation / "# of" filler, collapse
+// whitespace. Lets us match a column by intent instead of an exact string, so an
+// upload whose header reads "Recurring Defects" (no "# of") or has a stray double
+// space still maps to the right field instead of being silently read as 0.
+const normHdr = (h: string) => String(h).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const isPctHdr = (h: string) => /%|percent|\brate\b/.test(String(h).toLowerCase());
+
+/** Match a logical column against the header row by keyword. Percentage columns
+ *  are excluded unless allowPct, so "% of Recurring Defects" never shadows the
+ *  "# of Recurring Defects" count. Returns the column index, or -1 if unmatched. */
+function findCol(hdr: string[], keywords: string[], opts: { exclude?: string[]; allowPct?: boolean } = {}): number {
+  for (let i = 0; i < hdr.length; i++) {
+    if (!opts.allowPct && isPctHdr(hdr[i])) continue;
+    const n = normHdr(hdr[i]);
+    if (!n) continue;
+    if (!keywords.every((k) => n.includes(k))) continue;
+    if (opts.exclude && opts.exclude.some((k) => n.includes(k))) continue;
+    return i;
+  }
+  return -1;
+}
+
 export function parseWorkbook(buf: Buffer): Parsed {
   const wb = XLSX.read(buf, { type: "buffer", cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const aoa: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
   const hdr = (aoa[0] || []).map((h) => (h == null ? "" : String(h).trim()));
   const rows = aoa.slice(1).filter((r) => r && r.some((c) => c != null && c !== ""));
-  if (hdr.includes("Process Area") && hdr.includes("# of Defects")) return { type: "defects", payload: parseDefects(hdr, rows) };
-  if (hdr.includes("Operational Standard Score") || hdr.includes("% Queue SLA Adherence")) return { type: "opstd", payload: parseOpstd(hdr, rows) };
+  const hasArea = findCol(hdr, ["area"]) >= 0, hasDefect = findCol(hdr, ["defect"], { allowPct: true }) >= 0;
+  if (hasArea && hasDefect) return { type: "defects", payload: parseDefects(hdr, rows) };
+  if (findCol(hdr, ["operational", "standard"], { allowPct: true }) >= 0 || findCol(hdr, ["queue", "sla"], { allowPct: true }) >= 0) return { type: "opstd", payload: parseOpstd(hdr, rows) };
   throw new Error("Unrecognized layout — expected the Branch Defects or Operational Standards sheet.");
 }
 
 function parseDefects(hdr: string[], rows: any[][]): DefectsPayload {
-  const c = idx(hdr);
+  // Resolve each column by intent (tolerant of "# of" / spacing / case differences).
+  // Order matters: the specific defect columns are claimed before the generic
+  // "# of Defects" count, which then excludes their keywords.
+  const col = {
+    period: findCol(hdr, ["period"]),
+    branch: findCol(hdr, ["branch"]),
+    area: findCol(hdr, ["area"]),
+    reviewed: findCol(hdr, ["reviewed"]),
+    instances: findCol(hdr, ["instances"]),
+    resolvable: findCol(hdr, ["resolvable"]),
+    resolved: findCol(hdr, ["resolved"]),
+    recurring: findCol(hdr, ["recurring"]),
+    defects: findCol(hdr, ["defects"], { exclude: ["resolvable", "resolved", "recurring", "possible", "reviewed"] }),
+  };
+  // Fail loudly rather than silently reading a missing column as 0 (the bug that
+  // let uploaded recurring counts vanish when the header didn't match exactly).
+  const REQUIRED: [keyof typeof col, string][] = [
+    ["period", "Period"], ["branch", "Branch"], ["area", "Process Area"],
+    ["reviewed", "# of Items Reviewed"], ["instances", "# of Possible Instances"], ["defects", "# of Defects"],
+    ["resolvable", "# of Resolvable Defects"], ["resolved", "# of Defects Resolved"], ["recurring", "# of Recurring Defects"],
+  ];
+  const missing = REQUIRED.filter(([k]) => col[k] < 0).map(([, label]) => label);
+  if (missing.length) throw new Error("Missing column(s) in the Branch Defects sheet: " + missing.join(", ") + ". Found headers: " + hdr.filter(Boolean).join(", "));
+
   const periods: string[] = [], branches: string[] = [], areas: string[] = [];
   rows.forEach((r) => {
-    const p = isoOf(r[c["Period"]]); if (!periods.includes(p)) periods.push(p);
-    const b = normBranch(r[c["Branch"]]); if (!branches.includes(b)) branches.push(b);
-    const a = r[c["Process Area"]]; if (!areas.includes(a)) areas.push(a);
+    const p = isoOf(r[col.period]); if (!periods.includes(p)) periods.push(p);
+    const b = normBranch(r[col.branch]); if (!branches.includes(b)) branches.push(b);
+    const a = r[col.area]; if (!areas.includes(a)) areas.push(a);
   });
   periods.sort(); branches.sort(); areas.sort();
   const pI = idx(periods), bI = idx(branches), aI = idx(areas);
   const out = rows.map((r) => [
-    pI[isoOf(r[c["Period"]])], bI[normBranch(r[c["Branch"]])], aI[r[c["Process Area"]]],
-    toInt(r[c["# of Items Reviewed"]]), toInt(r[c["# of Possible Instances"]]), toInt(r[c["# of Defects"]]),
-    toInt(r[c["# of Resolvable Defects"]]), toInt(r[c["# of Defects Resolved"]]), toInt(r[c["# of Recurring Defects"]]),
+    pI[isoOf(r[col.period])], bI[normBranch(r[col.branch])], aI[r[col.area]],
+    toInt(r[col.reviewed]), toInt(r[col.instances]), toInt(r[col.defects]),
+    toInt(r[col.resolvable]), toInt(r[col.resolved]), toInt(r[col.recurring]),
   ]);
   return { meta: { source: "uploaded", columns: ["periodIdx", "branchIdx", "areaIdx", "reviewed", "instances", "defects", "resolvable", "resolved", "recurring"] }, periods, branches, areas, rows: out };
 }
