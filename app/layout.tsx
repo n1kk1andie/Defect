@@ -23,7 +23,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <footer style={{ textAlign: "center", fontSize: "11px", lineHeight: 1.5, color: "#94a3b8", padding: "20px 12px" }}>
+          Powered by Tumblehill Holdings | Proprietary software licensed to Victoria Mutual Building Society | © 2026 All rights reserved
+        </footer>
+      </body>
     </html>
   );
 }
