@@ -26,7 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         {children}
         <footer style={{ textAlign: "center", fontSize: "10.5px", lineHeight: 1.5, color: "#B7ADA8", padding: "18px 16px calc(96px + env(safe-area-inset-bottom))" }}>
-          Powered by Tumblehill Holdings | Proprietary software licensed to Victoria Mutual Building Society | © 2026 All rights reserved
+          Tumblehill Holdings proprietary software, all rights reserved, © 2026
         </footer>
       </body>
     </html>
