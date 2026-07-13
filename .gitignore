@@ -10,6 +10,9 @@
 # production
 /build
 
+# packaged server bundles (build artifacts)
+*.zip
+
 # local blob storage (local-fs driver)
 /.data
 
