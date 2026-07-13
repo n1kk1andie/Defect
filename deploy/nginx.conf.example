@@ -1,0 +1,36 @@
+# Example nginx reverse proxy for vmbs-defect (VMBS — Branch Defects Register).
+# Copy to /etc/nginx/sites-available/vmbs-defect and symlink into sites-enabled,
+# then `sudo nginx -t && sudo systemctl reload nginx`.
+#
+# The app itself listens on 127.0.0.1:3003 (loopback only); nginx terminates
+# TLS and is the only thing exposed to the network.
+
+server {
+    listen 80;
+    server_name vmbs-defect.gict.local;   # <- change to your hostname
+    # Redirect all plain HTTP to HTTPS.
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name vmbs-defect.gict.local;   # <- change to your hostname
+
+    # ssl_certificate     /etc/ssl/certs/vmbs-defect.crt;
+    # ssl_certificate_key /etc/ssl/private/vmbs-defect.key;
+
+    # Reasonable upload ceiling for spreadsheet/PDF uploads.
+    client_max_body_size 32m;
+
+    location / {
+        proxy_pass         http://127.0.0.1:3003;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   Upgrade           $http_upgrade;
+        proxy_set_header   Connection        "upgrade";
+        proxy_read_timeout 120s;
+    }
+}

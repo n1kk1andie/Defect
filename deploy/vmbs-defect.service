@@ -1,0 +1,32 @@
+# systemd unit for vmbs-defect (VMBS — Branch Defects Register).
+# Install to: /etc/systemd/system/vmbs-defect.service
+# Then:  sudo systemctl daemon-reload
+#        sudo systemctl enable --now vmbs-defect
+#        sudo systemctl status vmbs-defect
+#
+# Assumes the bundle was unzipped to /opt/vmbs-defect (contains server.js).
+# Adjust User, WorkingDirectory and the node path to suit the box.
+
+[Unit]
+Description=VMBS Branch Defects Register (vmbs-defect)
+After=network.target
+
+[Service]
+Type=simple
+User=vmbsapp
+Group=vmbsapp
+WorkingDirectory=/opt/vmbs-defect
+ExecStart=/usr/bin/node /opt/vmbs-defect/server.js
+# Next standalone server reads PORT and HOSTNAME from the environment.
+Environment=NODE_ENV=production
+Environment=PORT=3003
+Environment=HOSTNAME=127.0.0.1
+Restart=on-failure
+RestartSec=5
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -26,3 +26,6 @@ npm-debug.log*
 .DS_Store
 next-env.d.ts
 *.tsbuildinfo
+
+# GICT deployment bundles (built artifacts)
+dist/
