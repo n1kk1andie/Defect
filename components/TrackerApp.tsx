@@ -3,12 +3,12 @@
 import { useEffect, useRef } from "react";
 import { initTracker } from "@/lib/engine";
 
-export default function TrackerApp({ datasets, initialAdmin }: { datasets: any; initialAdmin: boolean }) {
+export default function TrackerApp({ datasets, initialAdmin, canPersist }: { datasets: any; initialAdmin: boolean; canPersist: boolean }) {
   const started = useRef(false);
   useEffect(() => {
     if (started.current) return; // guard StrictMode / re-mounts
     started.current = true;
-    const teardown = initTracker({ datasets, initialAdmin });
+    const teardown = initTracker({ datasets, initialAdmin, canPersist });
     return () => { started.current = false; teardown && teardown(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

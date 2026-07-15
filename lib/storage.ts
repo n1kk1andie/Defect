@@ -76,3 +76,10 @@ const localDriver: StorageDriver = {
 export function getStorage(): StorageDriver {
   return vercelBlobToken() ? vercelDriver : localDriver;
 }
+
+/** Whether writes survive across requests. On Vercel the filesystem is ephemeral,
+ *  so the local-fs driver there loses data on the next cold start — only Vercel
+ *  Blob persists. Off Vercel (local dev / self-host) the local folder is durable. */
+export function storageIsDurable(): boolean {
+  return getStorage().name === "vercel-blob" || !process.env.VERCEL;
+}
