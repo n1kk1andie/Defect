@@ -15,12 +15,26 @@ export type SubStatus = "draft" | "submitted" | "published" | "returned";
 export type SubDataset = "defects" | "opstd";
 
 export interface SubEvent { status: SubStatus; by: string; at: string; note?: string; }
+
+// One sampled transaction from an officer's monthly Process Critical Review. The app
+// computes the branch's sample/defect/resolution/recurring figures — and a compliance
+// score — from these rows, then aggregates them into the dataset on publish.
+export interface DefectItem {
+  area: string;                       // process area
+  txnType: string;                    // Application / Amendment / …
+  checks: Record<string, string>;     // control checks: "yes" | "no" | "na"
+  defects: number;                    // # of defects on this transaction (0 = clean)
+  defectArea: string;                 // nature/category of the defect(s)
+  recurring: boolean;                 // a repeat of a prior defect type
+  status: string;                     // "open" | "resolved"
+}
 export interface Submission {
   id: string;
   dataset: SubDataset;
   branch: string;
   period: string;            // ISO yyyy-mm-01
-  area: string | null;       // process area (defects only)
+  area: string | null;       // single process area (opstd n/a; defects register spans all)
+  items: DefectItem[];       // defects register rows (empty for opstd)
   values: Record<string, number | null>;
   audit: number | null;      // opstd raw audit score (drives the letter grade); null otherwise
   status: SubStatus;
@@ -34,6 +48,40 @@ export interface Submission {
 
 // The six defect counts, in the dataset's row order after [period, branch, area].
 export const DEFECT_FIELDS = ["reviewed", "instances", "defects", "resolvable", "resolved", "recurring"] as const;
+// The control checks captured per transaction, used for per-control compliance.
+export const DEFECT_CHECKS = ["memberVerified", "cardKeyedCMS", "cmsSigMatch", "idCapture", "formCompleted"] as const;
+
+// Aggregate register rows for one area into the dataset's count fields.
+function blankAgg() { return { reviewed: 0, instances: 0, defects: 0, resolvable: 0, resolved: 0, recurring: 0 }; }
+function addItem(a: ReturnType<typeof blankAgg>, it: DefectItem) {
+  const d = Math.max(0, Math.round(it.defects || 0));
+  a.reviewed += 1; a.instances += 1; a.defects += d; a.resolvable += d;
+  if (it.status === "resolved") a.resolved += d;
+  if (it.recurring) a.recurring += d;
+}
+/** Per-area aggregates + overall totals + a compliance score, computed from the rows. */
+export function summariseItems(items: DefectItem[]) {
+  const byArea: Record<string, ReturnType<typeof blankAgg>> = {};
+  const totals = blankAgg();
+  let defectRows = 0;
+  const controlPass: Record<string, { yes: number; applicable: number }> = {};
+  DEFECT_CHECKS.forEach((c) => (controlPass[c] = { yes: 0, applicable: 0 }));
+  (items || []).forEach((it) => {
+    const a = (byArea[it.area] = byArea[it.area] || blankAgg());
+    addItem(a, it); addItem(totals, it);
+    if ((it.defects || 0) > 0) defectRows += 1;
+    DEFECT_CHECKS.forEach((c) => { const v = it.checks?.[c]; if (v === "yes" || v === "no") { controlPass[c].applicable += 1; if (v === "yes") controlPass[c].yes += 1; } });
+  });
+  const sample = totals.reviewed;
+  // Accuracy = share of sampled transactions with no defect. Control compliance = mean
+  // pass rate across the applicable control checks. Overall score is their average.
+  const accuracy = sample ? (sample - defectRows) / sample : null;
+  const controlRates = DEFECT_CHECKS.map((c) => (controlPass[c].applicable ? controlPass[c].yes / controlPass[c].applicable : null));
+  const measured = controlRates.filter((r): r is number => r != null);
+  const compliance = measured.length ? measured.reduce((s, r) => s + r, 0) / measured.length : null;
+  const score = accuracy != null && compliance != null ? Math.round((accuracy + compliance) / 2 * 100) : accuracy != null ? Math.round(accuracy * 100) : null;
+  return { byArea, totals, sample, defectRows, accuracy, compliance, controlRates, score };
+}
 
 // ---- storage ----
 
@@ -96,9 +144,20 @@ function defectRuleError(v: Record<string, number | null>): string | null {
 
 // ---- normalisation from a client payload ----
 
-interface RawInput { dataset?: string; branch?: string; period?: string; area?: string | null; values?: any; audit?: any; }
+interface RawInput { dataset?: string; branch?: string; period?: string; area?: string | null; values?: any; audit?: any; items?: any; }
+interface Parsed { dataset: SubDataset; branch: string; period: string; area: string | null; items: DefectItem[]; values: Record<string, number | null>; audit: number | null; }
 
-function normalise(input: RawInput, session: Session): { ok: true; parsed: { dataset: SubDataset; branch: string; period: string; area: string | null; values: Record<string, number | null>; audit: number | null } } | { ok: false; error: string } {
+function normaliseItem(raw: any): DefectItem | { error: string } {
+  const area = (raw?.area || "").trim();
+  if (!area) return { error: "Each reviewed transaction needs a process area." };
+  const defects = Math.max(0, Math.round(Number(raw?.defects) || 0));
+  const checks: Record<string, string> = {};
+  DEFECT_CHECKS.forEach((c) => { const v = raw?.checks?.[c]; checks[c] = v === "no" ? "no" : v === "na" ? "na" : "yes"; });
+  const status = raw?.status === "resolved" ? "resolved" : "open";
+  return { area, txnType: (raw?.txnType || "").trim(), checks, defects, defectArea: (raw?.defectArea || "").trim(), recurring: !!raw?.recurring, status };
+}
+
+function normalise(input: RawInput, session: Session): { ok: true; parsed: Parsed } | { ok: false; error: string } {
   const dataset = input.dataset === "opstd" ? "opstd" : "defects";
   const branch = (input.branch || "").trim();
   if (!branch) return { ok: false, error: "Choose a branch." };
@@ -108,15 +167,19 @@ function normalise(input: RawInput, session: Session): { ok: true; parsed: { dat
   }
   const period = (input.period || "").trim();
   if (!/^\d{4}-\d{2}-01$/.test(period)) return { ok: false, error: "Choose a valid month." };
-  const area = dataset === "defects" ? (input.area || "").trim() : null;
-  if (dataset === "defects" && !area) return { ok: false, error: "Choose a process area." };
 
   if (dataset === "defects") {
-    const r = toIntMap(input.values, DEFECT_FIELDS);
-    if (!r.ok) return r;
-    const ruleErr = defectRuleError(r.values);
-    if (ruleErr) return { ok: false, error: ruleErr };
-    return { ok: true, parsed: { dataset, branch, period, area, values: r.values, audit: null } };
+    // A monthly Process Critical Review — one row per sampled transaction across areas.
+    const rawItems = Array.isArray(input.items) ? input.items : [];
+    if (!rawItems.length) return { ok: false, error: "Add at least one reviewed transaction." };
+    const items: DefectItem[] = [];
+    for (const r of rawItems) {
+      const it = normaliseItem(r);
+      if ("error" in it) return { ok: false, error: it.error };
+      if (it.defects > 0 && !it.defectArea) return { ok: false, error: "Name the defect area for each transaction with a defect." };
+      items.push(it);
+    }
+    return { ok: true, parsed: { dataset, branch, period, area: null, items, values: {}, audit: null } };
   }
   // opstd — nine 0–100 component scores by index, plus an optional raw audit score.
   const values: Record<string, number | null> = {};
@@ -133,7 +196,7 @@ function normalise(input: RawInput, session: Session): { ok: true; parsed: { dat
     if (!Number.isFinite(a) || a < 0) return { ok: false, error: "Audit score must be a number." };
     audit = a;
   }
-  return { ok: true, parsed: { dataset, branch, period, area: null, values, audit } };
+  return { ok: true, parsed: { dataset, branch, period, area: null, items: [], values, audit } };
 }
 
 // ---- create / update / submit / delete ----
@@ -156,13 +219,13 @@ export async function saveSubmission(session: Session, input: RawInput & { id?: 
   } else {
     sub = {
       id: randomUUID(), dataset: norm.parsed.dataset, branch: norm.parsed.branch, period: norm.parsed.period,
-      area: norm.parsed.area, values: {}, audit: null, status: "draft", inspector: session.username,
+      area: norm.parsed.area, items: [], values: {}, audit: null, status: "draft", inspector: session.username,
       supervisor: null, note: "", history: [{ status: "draft", by: session.username, at: now }], createdAt: now, updatedAt: now,
     };
     list.push(sub);
   }
   sub.dataset = norm.parsed.dataset; sub.branch = norm.parsed.branch; sub.period = norm.parsed.period;
-  sub.area = norm.parsed.area; sub.values = norm.parsed.values; sub.audit = norm.parsed.audit; sub.updatedAt = now;
+  sub.area = norm.parsed.area; sub.items = norm.parsed.items; sub.values = norm.parsed.values; sub.audit = norm.parsed.audit; sub.updatedAt = now;
 
   if (input.submit) {
     sub.status = "submitted"; sub.note = "";
@@ -228,12 +291,16 @@ async function publishToDataset(sub: Submission): Promise<{ ok: true } | { ok: f
   const pi = ensurePeriod(payload, sub.period);
 
   if (sub.dataset === "defects") {
-    const ai = payload.areas.indexOf(sub.area);
-    if (ai < 0) return { ok: false, error: "Unknown process area “" + sub.area + "”." };
-    const v = sub.values;
-    const row = [pi, bi, ai, v.reviewed ?? 0, v.instances ?? 0, v.defects ?? 0, v.resolvable ?? 0, v.resolved ?? 0, v.recurring ?? 0];
-    const at = payload.rows.findIndex((r: any[]) => r[0] === pi && r[1] === bi && r[2] === ai);
-    if (at >= 0) payload.rows[at] = row; else payload.rows.push(row);
+    // Aggregate the register rows by process area, then upsert one dataset row per area.
+    const { byArea } = summariseItems(sub.items || []);
+    for (const areaName of Object.keys(byArea)) {
+      const ai = payload.areas.indexOf(areaName);
+      if (ai < 0) return { ok: false, error: "Unknown process area “" + areaName + "”." };
+      const v = byArea[areaName];
+      const row = [pi, bi, ai, v.reviewed, v.instances, v.defects, v.resolvable, v.resolved, v.recurring];
+      const at = payload.rows.findIndex((r: any[]) => r[0] === pi && r[1] === bi && r[2] === ai);
+      if (at >= 0) payload.rows[at] = row; else payload.rows.push(row);
+    }
   } else {
     const vals = [];
     for (let i = 0; i < payload.metrics.length; i++) vals.push(sub.values[i] ?? null);
