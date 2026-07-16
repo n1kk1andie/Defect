@@ -95,6 +95,49 @@ export async function setPassword(newPassword: string): Promise<void> {
   await getStorage().write(CRED_BLOB, Buffer.from(JSON.stringify(cred), "utf8"), "application/json");
 }
 
+// ---- Shared role passwords (Inspector / Supervisor) ----
+// Staff sign in by role: they pick a role, type their name, and enter one password
+// shared across that role. The admin sets these; until set, they fall back to the
+// admin default so sign-in works out of the box.
+const ROLE_PW_BLOB = "role-passwords.json";
+const ROLE_LOGIN_ROLES: Role[] = ["inspector", "supervisor"];
+
+async function readRolePasswords(): Promise<Partial<Record<Role, StoredCredential>>> {
+  try {
+    const buf = await getStorage().read(ROLE_PW_BLOB);
+    if (!buf) return {};
+    const parsed = JSON.parse(buf.toString("utf8"));
+    const out: Partial<Record<Role, StoredCredential>> = {};
+    for (const r of ROLE_LOGIN_ROLES) { const c = parsed?.[r]; if (c?.alg === "scrypt" && c.salt && c.hash) out[r] = c; }
+    return out;
+  } catch { return {}; }
+}
+
+/** Set the shared password for a role (admin action). */
+export async function setRolePassword(role: Role, newPassword: string): Promise<void> {
+  if (!ROLE_LOGIN_ROLES.includes(role)) throw new Error("Not a sign-in role.");
+  const store = await readRolePasswords();
+  const { salt, hash } = makeHash(newPassword);
+  store[role] = { alg: "scrypt", salt, hash, updatedAt: new Date().toISOString() };
+  await getStorage().write(ROLE_PW_BLOB, Buffer.from(JSON.stringify(store), "utf8"), "application/json");
+}
+
+/** Which role passwords have been set by an admin (vs. still using the default). */
+export async function rolePasswordStatus(): Promise<Record<string, boolean>> {
+  const store = await readRolePasswords();
+  return { inspector: !!store.inspector, supervisor: !!store.supervisor };
+}
+
+/** Verify a role's shared password. Falls back to the admin default until an admin
+ *  sets a role-specific password, so the role login works with zero configuration. */
+export async function checkRoleLogin(role: Role, password: string): Promise<boolean> {
+  if (!ROLE_LOGIN_ROLES.includes(role)) return false;
+  const pw = (password || "").trim();
+  const cred = (await readRolePasswords())[role];
+  if (cred) return safeEqual(hashPassword(pw, cred.salt), cred.hash);
+  return safeEqual(pw, envOrDefaultPassword());
+}
+
 // Admin password precedence: an in-app password (persisted to storage) takes
 // precedence; otherwise the ADMIN_PASSWORD env var is used; otherwise a built-in
 // default applies. Sign-in always works without any Vercel configuration.

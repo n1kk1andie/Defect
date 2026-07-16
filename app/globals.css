@@ -127,6 +127,20 @@ table.reg tbody tr.total td { font-weight:800; background:#FAF7F5; border-top:2p
 .okmsg { font-size:12px; color:#0E8A4D; font-weight:600; text-align:center; margin-top:8px; background:#E5F4EC; border-radius:10px; padding:8px 10px; }
 .dropzone { display:block; padding:12px 16px; border-radius:12px; border:2px dashed #E4DDD9; text-align:center; cursor:pointer;
   background:#FAFAFA; font-size:13px; color:#6E625E; font-family:inherit; }
+
+/* login card (role picker + name + shared role password) */
+.logincard { max-width:380px; max-height:90vh; overflow-y:auto; }
+.loginmark { width:40px; height:40px; border-radius:12px; background:var(--red); display:grid; place-items:center; flex-shrink:0;
+  box-shadow:0 4px 12px rgba(228,1,43,.28); }
+.loginbrand { font-family:Sora; font-size:20px; font-weight:800; letter-spacing:-.01em; line-height:1.1; }
+.roleopt { width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px; text-align:left;
+  border:1.5px solid #E4DDD9; background:#fff; border-radius:14px; padding:14px 16px; cursor:pointer; font-family:inherit; }
+.roleopt.on { border-color:var(--red); border-width:2px; padding:13px 15px; }
+.roleopt-n { font-family:Sora; font-size:15px; font-weight:800; color:var(--ink); }
+.roleopt-d { font-size:12.5px; color:var(--dim); text-align:right; }
+.linkbtn { display:block; width:100%; border:none; background:none; color:#6E625E; font-family:inherit; font-size:13.5px;
+  font-weight:600; text-decoration:underline; text-underline-offset:3px; cursor:pointer; padding:14px 0 4px; }
+.loginfoot { text-align:center; font-size:12px; color:var(--dim); line-height:1.5; margin-top:12px; }
 .dropzone:hover { border-color:var(--red); color:var(--red); }
 .msgbox { font-size:12px; margin-top:10px; padding:8px 12px; border-radius:8px; line-height:1.5; }
 .msgbox.ok { background:#E5F4EC; color:#0E8A4D; }

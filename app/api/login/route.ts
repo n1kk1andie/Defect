@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { adminConfigured, checkLogin, createSessionToken, getSession, SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth";
+import { adminConfigured, checkLogin, checkRoleLogin, createSessionToken, getSession, isRole, SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -19,15 +19,33 @@ export async function GET() {
   });
 }
 
-// Sign in with a username + password. The username is optional — a blank username
-// (or "admin") is treated as the built-in admin login.
+// Two sign-in paths:
+//  • Role login: { role: "inspector"|"supervisor", name, branch, password } — the staff
+//    pick a role, type their name (used as the submission author) and enter the shared
+//    password for that role. Branch scopes what they key/review.
+//  • Admin login: { username, password } — a blank username (or "admin") + the admin
+//    password.
 export async function POST(req: NextRequest) {
-  let username = "", password = "";
-  try { const b = await req.json(); username = b?.username || ""; password = b?.password || ""; } catch { /* empty */ }
-  const result = await checkLogin(username, password);
-  if (!result) {
-    return NextResponse.json({ ok: false, error: "Incorrect username or password." }, { status: 401 });
+  let body: any = {};
+  try { body = await req.json(); } catch { /* empty */ }
+
+  // Role login.
+  if (isRole(body?.role) && body.role !== "admin") {
+    const name = (body?.name || "").trim();
+    const branch = (body?.branch || "").trim();
+    if (!name) return NextResponse.json({ ok: false, error: "Enter your name." }, { status: 400 });
+    if (body.role === "inspector" && !branch) return NextResponse.json({ ok: false, error: "Choose your branch." }, { status: 400 });
+    if (!(await checkRoleLogin(body.role, body?.password || ""))) {
+      return NextResponse.json({ ok: false, error: "Incorrect password for " + body.role + "." }, { status: 401 });
+    }
+    const session = { role: body.role, username: name, branch: branch || null };
+    cookies().set(SESSION_COOKIE, createSessionToken(Date.now(), session), sessionCookieOptions);
+    return NextResponse.json({ ok: true, ...session });
   }
+
+  // Admin login (username optional; blank/"admin" + admin password).
+  const result = await checkLogin(body?.username || "", body?.password || "");
+  if (!result) return NextResponse.json({ ok: false, error: "Incorrect password." }, { status: 401 });
   cookies().set(SESSION_COOKIE, createSessionToken(Date.now(), result), sessionCookieOptions);
   return NextResponse.json({ ok: true, role: result.role, username: result.username, branch: result.branch });
 }
