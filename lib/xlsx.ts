@@ -121,6 +121,98 @@ function parseOpstd(hdr: string[], rows: any[][]): OpstdPayload {
   return { meta: { source: "uploaded", note: "Scores 0–100; percentages/grades derived in-app." }, metrics: OPSTD_METRIC_COLS.map((m) => ({ key: m[0], label: m[1] })), periods, branches, rows: out, auditRaw: audit };
 }
 
+// ---- Process Critical Review: template + parsing (officer register upload) ----
+
+export interface ReviewItem { area: string; txnType: string; checks: Record<string, string>; defects: number; defectArea: string; recurring: boolean; status: string; }
+const REVIEW_HEADERS = ["Date", "Process Area", "Transaction Type", "Member Verified", "Card Keyed to CMS", "CMS & Sig Match", "ID Capture Updated", "Form Completed", "# of Defects", "Defect Area", "Recurring", "Status"];
+
+// Map a free-text process-area value (e.g. "ABM", "Wires / RTGS") to one of the
+// dataset's canonical area names, so uploads from the real branch sheet line up.
+function mapArea(raw: string, areas: string[]): string {
+  const n = normHdr(raw);
+  if (!n) return "";
+  const exact = areas.find((a) => normHdr(a) === n);
+  if (exact) return exact;
+  const kw: [string, RegExp][] = [
+    ["abm", /\babm\b/], ["addition of name", /addition|name/], ["cif merge", /cif|merge|delet/],
+    ["standing order", /standing|order|\bso\b/], ["wire", /wire|rtgs/],
+  ];
+  for (const [key, re] of kw) { if (re.test(n)) { const hit = areas.find((a) => normHdr(a).includes(normHdr(key).split(" ")[0])); if (hit) return hit; } }
+  const contains = areas.find((a) => normHdr(a).includes(n) || n.includes(normHdr(a)));
+  return contains || raw.trim();
+}
+function yesNoNa(v: any): string { const s = String(v ?? "").trim().toLowerCase(); if (["no", "n", "fail", "false", "0"].includes(s)) return "no"; if (["na", "n a", "n/a", "-"].includes(s.replace(/\s/g, ""))) return "na"; return "yes"; }
+function truthy(v: any): boolean { const s = String(v ?? "").trim().toLowerCase(); return ["yes", "y", "true", "1", "recurring"].includes(s); }
+
+/** A blank fill-in template for the officer's monthly Process Critical Review. */
+export function buildReviewTemplate(areas: string[]): Buffer {
+  const example = ["2026-06-15", areas[0] || "ABM", "Application", "Yes", "Yes", "Yes", "No", "Yes", 1, "ID Cap", "No", "Open"];
+  const clean = ["2026-06-16", areas[areas.length - 1] || "Wire Transfers", "Amendment", "Yes", "Yes", "Yes", "Yes", "Yes", 0, "", "No", ""];
+  const aoa = [REVIEW_HEADERS, example, clean];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = REVIEW_HEADERS.map((h) => ({ wch: Math.max(12, h.length + 2) }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Process Critical Review");
+  // A reference sheet listing the valid process areas + control-check values.
+  const ref = [["Valid Process Areas"], ...areas.map((a) => [a]), [""], ["Control checks:", "Yes / No / N/A"], ["Recurring:", "Yes / No"], ["Status:", "Open / Resolved"], ["", ""], ["Add one row per sampled transaction. The app computes the sample, defect rate, resolution, recurring and score."]];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ref), "Guide");
+  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+}
+
+/** Parse a filled review workbook into register rows. Reads every sheet that looks
+ *  like a review (has a Process Area + Defects column); when a Branch column is present
+ *  and `branch` is given, keeps only that branch's rows — so either our template or the
+ *  real multi-branch Process Critical Review workbook can be uploaded. */
+export function parseReviewWorkbook(buf: Buffer, areas: string[], branch?: string): { items: ReviewItem[]; sheets: number; skipped: number } {
+  const wb = XLSX.read(buf, { type: "buffer", cellDates: true });
+  const items: ReviewItem[] = [];
+  let sheets = 0, skipped = 0;
+  const bnorm = branch ? normHdr(branch) : "";
+  for (const name of wb.SheetNames) {
+    const aoa: any[][] = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null });
+    if (!aoa.length) continue;
+    const hdr = (aoa[0] || []).map((h) => (h == null ? "" : String(h)));
+    const cArea = findCol(hdr, ["process", "area"]) >= 0 ? findCol(hdr, ["process", "area"]) : findCol(hdr, ["area"], { exclude: ["defect"] });
+    const cDef = findCol(hdr, ["defect"], { exclude: ["area", "form", "total", "amount"] });
+    if (cArea < 0 || cDef < 0) continue; // not a review sheet
+    // Require a per-transaction signal (a Date or Transaction column) so summary /
+    // roll-up sheets — which also have a Process-Area + Defect column — are skipped.
+    const cTxn = findCol(hdr, ["transaction"]);
+    const cDate = findCol(hdr, ["date"], { exclude: ["follow", "1st", "2nd", "3rd"] });
+    if (cTxn < 0 && cDate < 0) continue;
+    if (/summary|nature|guide|instruction|comment/i.test(name)) continue;
+    sheets++;
+    const cBranch = findCol(hdr, ["branch"]);
+    const cDefArea = findCol(hdr, ["defect", "area"]);
+    const cRec = findCol(hdr, ["recurring"]), cStatus = findCol(hdr, ["status"]);
+    const cChecks: Record<string, number> = {
+      memberVerified: findCol(hdr, ["member", "verif"]), cardKeyedCMS: findCol(hdr, ["card", "cms"]),
+      cmsSigMatch: findCol(hdr, ["sig"]), idCapture: findCol(hdr, ["id", "cap"]), formCompleted: findCol(hdr, ["form", "complet"]),
+    };
+    for (const r of aoa.slice(1)) {
+      if (!r || !r.some((c) => c != null && c !== "")) continue;
+      const rawArea = r[cArea];
+      if (rawArea == null || String(rawArea).trim() === "" || /^nil$/i.test(String(rawArea).trim())) { skipped++; continue; }
+      if (cBranch >= 0 && bnorm && normHdr(String(r[cBranch] ?? "")) !== bnorm) { skipped++; continue; }
+      // A "nil" in the Date cell marks an area with no transactions sampled — skip it so
+      // it doesn't inflate the sample count.
+      if (cDate >= 0) { const dv = String(r[cDate] ?? "").trim().toLowerCase(); if (dv === "nil" || dv === "n/a" || dv === "none" || dv === "-") { skipped++; continue; } }
+      const area = mapArea(String(rawArea), areas);
+      const checks: Record<string, string> = {};
+      Object.keys(cChecks).forEach((k) => (checks[k] = cChecks[k] >= 0 ? yesNoNa(r[cChecks[k]]) : "yes"));
+      const defects = typeof r[cDef] === "number" ? Math.max(0, Math.round(r[cDef])) : parseInt(String(r[cDef] ?? "0"), 10) || 0;
+      const statusRaw = cStatus >= 0 ? String(r[cStatus] ?? "").toLowerCase() : "";
+      items.push({
+        area, txnType: cTxn >= 0 ? String(r[cTxn] ?? "").trim() : "", checks, defects,
+        defectArea: cDefArea >= 0 ? String(r[cDefArea] ?? "").trim() : "",
+        recurring: cRec >= 0 ? truthy(r[cRec]) : false,
+        status: /resolv|clos|complete/.test(statusRaw) ? "resolved" : "open",
+      });
+    }
+  }
+  return { items, sheets, skipped };
+}
+
 export function buildWorkbook(type: Dataset, payload: any): Buffer {
   let aoa: any[][], sheetName: string;
   if (type === "defects") {
