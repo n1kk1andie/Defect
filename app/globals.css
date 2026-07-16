@@ -148,10 +148,22 @@ table.reg tbody tr.total td { font-weight:800; background:#FAF7F5; border-top:2p
 
 /* ---- report page — document look ---- */
 .report { background:#fff; border-radius:16px; box-shadow:0 1px 3px rgba(28,20,22,.07); padding:26px 24px; }
-.report-title { font-family:Sora; font-size:22px; font-weight:800; letter-spacing:-.01em; }
+.rep-head { border-top:4px solid var(--red); padding-top:16px; margin-bottom:4px; }
+.rep-eyebrow { font-family:Sora; font-size:10.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--red); margin-bottom:8px; }
+.report-title { font-family:Sora; font-size:25px; font-weight:800; letter-spacing:-.02em; line-height:1.05; }
 .report-h { font-family:Sora; font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin-bottom:10px; }
 .report-rule { border:none; border-top:1px solid var(--line); margin:18px 0; }
 .report .tbl-wrap { border-radius:12px; }
+.rep-verdict { display:flex; align-items:baseline; gap:12px; margin:18px 0 2px; flex-wrap:wrap; }
+.rep-verdict .big { font-family:Sora; font-size:42px; font-weight:800; letter-spacing:-.02em; line-height:1; }
+.rep-kpis { display:grid; grid-template-columns:repeat(2,1fr); gap:16px 20px; margin:2px 0 22px; }
+.rep-kpi { border-left:3px solid var(--line); padding-left:12px; }
+.rep-kpi-v { font-family:Sora; font-size:23px; font-weight:800; letter-spacing:-.01em; line-height:1.05; }
+.rep-kpi-l { font-size:11px; color:var(--dim); margin-top:3px; font-weight:600; }
+.rep-nature { display:flex; flex-direction:column; gap:11px; margin-bottom:22px; }
+.rep-nat-row { display:flex; align-items:center; gap:12px; }
+.rep-nat-bar { height:8px; border-radius:99px; background:linear-gradient(90deg,#E4012B,#A60020); margin-top:5px; min-width:8px; }
+@media (min-width:600px) { .rep-kpis { grid-template-columns:repeat(3,1fr); } }
 @media (min-width:768px) { .report { padding:34px 32px; } }
 
 /* ---- print (report page) ---- */
