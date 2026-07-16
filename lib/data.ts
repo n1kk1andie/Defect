@@ -55,3 +55,16 @@ export async function datasetWorkbook(type: Dataset): Promise<Buffer> {
 export function statsFor(type: Dataset, payload: any): { periods: number; branches: number } {
   return { periods: payload.periods.length, branches: payload.branches.length };
 }
+
+/** The live payload for a dataset — the stored upload if present, else a fresh clone of
+ *  the bundled seed (cloned so callers can safely mutate it when merging in new rows). */
+export async function loadDatasetPayload(type: Dataset): Promise<any> {
+  const stored = await readJson(JSON_KEY[type]);
+  return stored || structuredClone(SEED[type]);
+}
+
+/** Persist a merged payload as the live dataset (JSON for the app + a regenerated
+ *  workbook for re-download). Used when publishing an approved submission. */
+export async function persistMergedDataset(type: Dataset, payload: any): Promise<void> {
+  await saveDataset(type, payload, buildWorkbook(type, payload));
+}
