@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     if (!name) return NextResponse.json({ ok: false, error: "Enter your name." }, { status: 400 });
     if (body.role === "inspector" && !branch) return NextResponse.json({ ok: false, error: "Choose your branch." }, { status: 400 });
     if (!(await checkRoleLogin(body.role, body?.password || ""))) {
-      return NextResponse.json({ ok: false, error: "Incorrect password for " + body.role + "." }, { status: 401 });
+      return NextResponse.json({ ok: false, error: "Incorrect password for that role." }, { status: 401 });
     }
     const session = { role: body.role, username: name, branch: branch || null };
     cookies().set(SESSION_COOKIE, createSessionToken(Date.now(), session), sessionCookieOptions);

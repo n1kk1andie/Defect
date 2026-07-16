@@ -102,6 +102,17 @@ export async function setPassword(newPassword: string): Promise<void> {
 const ROLE_PW_BLOB = "role-passwords.json";
 const ROLE_LOGIN_ROLES: Role[] = ["inspector", "supervisor"];
 
+// Built-in shared passwords per staff role, used until an admin sets a custom one
+// (Settings → Role sign-in passwords) or overrides via env. Officer = the inspector
+// role. These make role sign-in work out of the box, like the admin default password.
+const ROLE_DEFAULT_PW: Partial<Record<Role, string>> = { inspector: "0ff1cer", supervisor: "5uperv1sor" };
+const ROLE_ENV_KEY: Partial<Record<Role, string>> = { inspector: "OFFICER_PASSWORD", supervisor: "SUPERVISOR_PASSWORD" };
+function roleDefaultPassword(role: Role): string {
+  const key = ROLE_ENV_KEY[role];
+  const fromEnv = key ? (process.env[key] || "").trim() : "";
+  return fromEnv || ROLE_DEFAULT_PW[role] || envOrDefaultPassword();
+}
+
 async function readRolePasswords(): Promise<Partial<Record<Role, StoredCredential>>> {
   try {
     const buf = await getStorage().read(ROLE_PW_BLOB);
@@ -128,14 +139,14 @@ export async function rolePasswordStatus(): Promise<Record<string, boolean>> {
   return { inspector: !!store.inspector, supervisor: !!store.supervisor };
 }
 
-/** Verify a role's shared password. Falls back to the admin default until an admin
- *  sets a role-specific password, so the role login works with zero configuration. */
+/** Verify a role's shared password. Uses the admin-set password if present, otherwise
+ *  the built-in per-role default (Officer/Supervisor), so role sign-in works out of box. */
 export async function checkRoleLogin(role: Role, password: string): Promise<boolean> {
   if (!ROLE_LOGIN_ROLES.includes(role)) return false;
   const pw = (password || "").trim();
   const cred = (await readRolePasswords())[role];
   if (cred) return safeEqual(hashPassword(pw, cred.salt), cred.hash);
-  return safeEqual(pw, envOrDefaultPassword());
+  return safeEqual(pw, roleDefaultPassword(role));
 }
 
 // Admin password precedence: an in-app password (persisted to storage) takes
