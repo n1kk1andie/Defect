@@ -21,11 +21,26 @@ export interface DatasetsResponse {
   uploaded: { defects: boolean; opstd: boolean };
 }
 
+// Metric labels are presentation, not data. A stored upload freezes whatever labels
+// were current when it was persisted, so a later rename in the seed (e.g. "Average SLA"
+// -> "Average Customer SLA") would never reach production. Overlay the seed's labels
+// onto a stored payload — matched by the stable `key` — so display text always tracks
+// the code while the stored numbers are left untouched.
+function overlaySeedLabels(type: Dataset, payload: any): any {
+  if (!payload || !Array.isArray(payload.metrics)) return payload;
+  const seedMetrics: any[] = SEED[type]?.metrics || [];
+  const labelByKey: Record<string, string> = {};
+  for (const m of seedMetrics) if (m && m.key != null && m.label != null) labelByKey[m.key] = m.label;
+  payload.metrics = payload.metrics.map((m: any) =>
+    m && labelByKey[m.key] != null ? { ...m, label: labelByKey[m.key] } : m);
+  return payload;
+}
+
 export async function loadDatasets(): Promise<DatasetsResponse> {
   const [d, o] = await Promise.all([readJson(JSON_KEY.defects), readJson(JSON_KEY.opstd)]);
   return {
-    defects: d || SEED.defects,
-    opstd: o || SEED.opstd,
+    defects: d ? overlaySeedLabels("defects", d) : SEED.defects,
+    opstd: o ? overlaySeedLabels("opstd", o) : SEED.opstd,
     uploaded: { defects: !!d, opstd: !!o },
   };
 }
@@ -60,7 +75,7 @@ export function statsFor(type: Dataset, payload: any): { periods: number; branch
  *  the bundled seed (cloned so callers can safely mutate it when merging in new rows). */
 export async function loadDatasetPayload(type: Dataset): Promise<any> {
   const stored = await readJson(JSON_KEY[type]);
-  return stored || structuredClone(SEED[type]);
+  return stored ? overlaySeedLabels(type, stored) : structuredClone(SEED[type]);
 }
 
 /** Persist a merged payload as the live dataset (JSON for the app + a regenerated
