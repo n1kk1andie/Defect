@@ -38,7 +38,7 @@ export default function TrackerApp({ datasets, initialSession }: { datasets: any
           <span id="auth-slot" />
         </div>
 
-        <div style={{ padding: "2px 16px 8px" }}>
+        <div style={{ padding: "2px 16px 8px" }} id="mode-toggle-wrap">
           <div className="toggle" id="mode-toggle">
             <button data-mode="defects" className="on">Branch Defects</button>
             <button data-mode="opstd">Operational Standard</button>
