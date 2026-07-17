@@ -62,7 +62,10 @@ function opStdRating(overall: number | null): number | null { if (overall == nul
 /** Compute the operational-standard tree from the raw measures + audit points. */
 export function computeOpStd(values: Record<string, number | null>, auditPoints: number | null) {
   const n = (k: string) => (values[k] == null ? null : Number(values[k]));
-  const majorProcedure = meanOf(OPSTD_SOP.map((k) => n(k)));
+  // Major Procedure is rounded to a whole number before it feeds the overall — matching
+  // the Metric Computation worksheet.
+  const mpRaw = meanOf(OPSTD_SOP.map((k) => n(k)));
+  const majorProcedure = mpRaw == null ? null : Math.round(mpRaw);
   const riskMetrics = meanOf([n("onboardingSla"), auditPoints, n("auditResolution")]);
   const overall = meanOf([n("complaints"), n("procurement"), riskMetrics, n("queueSla"), majorProcedure]);
   const avgCustomerSla = meanOf([n("queueSla"), n("onboardingSla")]);
