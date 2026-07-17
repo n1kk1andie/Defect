@@ -48,6 +48,26 @@ export interface Submission {
 
 // The six defect counts, in the dataset's row order after [period, branch, area].
 export const DEFECT_FIELDS = ["reviewed", "instances", "defects", "resolvable", "resolved", "recurring"] as const;
+
+// ---- Operational Standard: the computed metric tree ----
+// Officers key the raw measures; the app computes Major Procedure (mean of the 8 SOP
+// standards), Risk Metrics (mean of onboarding SLA + audit points + audit resolution),
+// the Overall % (mean of the five categories) and a 1–5 rating — matching the bank's
+// Metric Computation worksheet.
+export const OPSTD_SOP = ["screening", "wires", "sourceOfFunds", "csl", "fees", "declaration", "salesService", "acknowledgement"] as const;
+export const OPSTD_TOP = ["complaints", "procurement", "queueSla", "onboardingSla", "auditResolution"] as const;
+export const AUDIT_POINTS: Record<string, number> = { A: 100, "B+": 80, B: 60, C: 40, D: 20 };
+function meanOf(xs: (number | null)[]): number | null { const v = xs.filter((x): x is number => x != null && Number.isFinite(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; }
+function opStdRating(overall: number | null): number | null { if (overall == null) return null; return overall >= 95 ? 5 : overall >= 80 ? 4 : overall >= 70 ? 3 : overall >= 60 ? 2 : 1; }
+/** Compute the operational-standard tree from the raw measures + audit points. */
+export function computeOpStd(values: Record<string, number | null>, auditPoints: number | null) {
+  const n = (k: string) => (values[k] == null ? null : Number(values[k]));
+  const majorProcedure = meanOf(OPSTD_SOP.map((k) => n(k)));
+  const riskMetrics = meanOf([n("onboardingSla"), auditPoints, n("auditResolution")]);
+  const overall = meanOf([n("complaints"), n("procurement"), riskMetrics, n("queueSla"), majorProcedure]);
+  const avgCustomerSla = meanOf([n("queueSla"), n("onboardingSla")]);
+  return { majorProcedure, riskMetrics, overall, avgCustomerSla, rating: opStdRating(overall) };
+}
 // The control checks captured per transaction, used for per-control compliance.
 export const DEFECT_CHECKS = ["memberVerified", "cardKeyedCMS", "cmsSigMatch", "idCapture", "formCompleted"] as const;
 
@@ -181,20 +201,22 @@ function normalise(input: RawInput, session: Session): { ok: true; parsed: Parse
     }
     return { ok: true, parsed: { dataset, branch, period, area: null, items, values: {}, audit: null } };
   }
-  // opstd — nine 0–100 component scores by index, plus an optional raw audit score.
+  // opstd — the raw measures the officer keys (8 SOP standards + complaints, procurement,
+  // queue SLA, onboarding SLA, audit resolution — all 0–100) plus an audit letter grade.
   const values: Record<string, number | null> = {};
-  for (let i = 0; i < 9; i++) {
-    const raw = input.values?.[i];
-    if (raw === "" || raw == null) { values[i] = null; continue; }
+  for (const k of [...OPSTD_SOP, ...OPSTD_TOP]) {
+    const raw = input.values?.[k];
+    if (raw === "" || raw == null) { values[k] = null; continue; }
     const n = Number(raw);
     if (!Number.isFinite(n) || n < 0 || n > 100) return { ok: false, error: "Scores must be between 0 and 100." };
-    values[i] = n;
+    values[k] = n;
   }
+  // Audit grade comes in as a letter; store its points (drives Risk Metrics + the grade).
   let audit: number | null = null;
-  if (input.audit !== "" && input.audit != null) {
-    const a = Number(input.audit);
-    if (!Number.isFinite(a) || a < 0) return { ok: false, error: "Audit score must be a number." };
-    audit = a;
+  const letter = String(input.audit ?? "").trim();
+  if (letter) {
+    if (AUDIT_POINTS[letter] == null) return { ok: false, error: "Audit grade must be A, B+, B, C or D." };
+    audit = AUDIT_POINTS[letter];
   }
   return { ok: true, parsed: { dataset, branch, period, area: null, items: [], values, audit } };
 }
@@ -302,8 +324,12 @@ async function publishToDataset(sub: Submission): Promise<{ ok: true } | { ok: f
       if (at >= 0) payload.rows[at] = row; else payload.rows.push(row);
     }
   } else {
-    const vals = [];
-    for (let i = 0; i < payload.metrics.length; i++) vals.push(sub.values[i] ?? null);
+    // Compute the tree, then map onto the dataset's metric columns (order below).
+    const c = computeOpStd(sub.values, sub.audit);
+    const g = (k: string) => (sub.values[k] == null ? null : sub.values[k]);
+    // [Op Standard Score, Average Customer SLA, Queue SLA, Onboarding SLA, Procurement,
+    //  Compliance to Major Procedure, Avg Procedure Compliance, Complaints, Audit Resolution]
+    const vals = [c.overall, c.avgCustomerSla, g("queueSla"), g("onboardingSla"), g("procurement"), c.majorProcedure, c.majorProcedure, g("complaints"), g("auditResolution")];
     const row = [pi, bi, ...vals];
     const at = payload.rows.findIndex((r: any[]) => r[0] === pi && r[1] === bi);
     if (at >= 0) { payload.rows[at] = row; payload.auditRaw[at] = sub.audit ?? null; }
