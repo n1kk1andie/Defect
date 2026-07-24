@@ -66,6 +66,11 @@ Set these in Vercel (see `.env.example`):
 The admin password can be changed in-app (Settings → Admin password); the new
 scrypt hash is persisted to Blob and takes precedence over `ADMIN_PASSWORD`.
 
+**Locked out?** If the in-app password is lost, change `ADMIN_PASSWORD` in Vercel to
+a new value and redeploy: sign-in accepts the new env password again (recovery), which
+supersedes the stored one. Rotating the env var is operator-only, so this can't be
+abused — and knowing a previous, already-rotated `ADMIN_PASSWORD` grants nothing.
+
 ## Develop
 
 ```bash

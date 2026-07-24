@@ -9,7 +9,17 @@ export const SESSION_COOKIE = "vmbs_session";
 const MAX_AGE = 60 * 60 * 12; // 12h
 const CRED_BLOB = "admin-credentials.json";
 
-interface StoredCredential { alg: "scrypt"; salt: string; hash: string; updatedAt: string; }
+interface StoredCredential {
+  alg: "scrypt";
+  salt: string;
+  hash: string;
+  updatedAt: string;
+  // Hash (same salt) of the ADMIN_PASSWORD env value that was in effect when this
+  // in-app password was set. Lets checkPassword detect a later env-var rotation and
+  // treat it as an operator-initiated recovery (see checkPassword). Optional so
+  // credentials written before this field existed still load.
+  envHash?: string;
+}
 
 function secret(): string {
   return process.env.SESSION_SECRET || "vmbs-dev-secret-change-me";
@@ -50,7 +60,15 @@ async function readStoredCredential(): Promise<StoredCredential | null> {
 
 export async function setPassword(newPassword: string): Promise<void> {
   const salt = randomBytes(16).toString("hex");
-  const cred: StoredCredential = { alg: "scrypt", salt, hash: hashPassword(newPassword.trim(), salt), updatedAt: new Date().toISOString() };
+  const env = (process.env.ADMIN_PASSWORD || "").trim();
+  const cred: StoredCredential = {
+    alg: "scrypt",
+    salt,
+    hash: hashPassword(newPassword.trim(), salt),
+    updatedAt: new Date().toISOString(),
+    // Pin the current env password so a later rotation is recognisable as a recovery.
+    envHash: env ? hashPassword(env, salt) : undefined,
+  };
   await getStorage().write(CRED_BLOB, Buffer.from(JSON.stringify(cred), "utf8"), "application/json");
 }
 
@@ -61,9 +79,22 @@ export async function checkPassword(submitted: string): Promise<boolean> {
   // Trim surrounding whitespace on both sides — env values pasted into Vercel often
   // carry a trailing space/newline, which would otherwise reject a correct password.
   const pw = (submitted || "").trim();
-  const stored = await readStoredCredential();
-  if (stored) return safeEqual(hashPassword(pw, stored.salt), stored.hash);
   const expected = (process.env.ADMIN_PASSWORD || "").trim();
+  const stored = await readStoredCredential();
+  if (stored) {
+    // The in-app password takes precedence.
+    if (safeEqual(hashPassword(pw, stored.salt), stored.hash)) return true;
+    // Recovery path: if the operator has since rotated ADMIN_PASSWORD to a value
+    // different from the one captured when the in-app password was set, honour the
+    // NEW env password too. Rotating the env var is something only a deployment
+    // operator can do, so it's a safe out-of-band way to regain access after the
+    // in-app password is lost. Knowing an *old* (already-rotated-away) env password
+    // grants nothing, because we compare against the current env value.
+    if (expected && stored.envHash && !safeEqual(hashPassword(expected, stored.salt), stored.envHash)) {
+      return safeEqual(pw, expected);
+    }
+    return false;
+  }
   if (!expected) return false; // auth disabled until ADMIN_PASSWORD is configured
   return safeEqual(pw, expected);
 }
