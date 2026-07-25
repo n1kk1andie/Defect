@@ -5,7 +5,7 @@ import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 import { cookies } from "next/headers";
 import { getStorage } from "@/lib/storage";
 
-export const SESSION_COOKIE = "vmbs_session";
+export const SESSION_COOKIE = "pq_session";
 const MAX_AGE = 60 * 60 * 12; // 12h
 const CRED_BLOB = "admin-credentials.json";
 
@@ -22,7 +22,7 @@ interface StoredCredential {
 }
 
 function secret(): string {
-  return process.env.SESSION_SECRET || "vmbs-dev-secret-change-me";
+  return process.env.SESSION_SECRET || "pulse-quality-dev-secret-change-me";
 }
 function b64url(s: string): string { return Buffer.from(s).toString("base64url"); }
 function sign(payload: string): string { return createHmac("sha256", secret()).update(payload).digest("base64url"); }

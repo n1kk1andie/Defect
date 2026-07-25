@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "VM Building Society — Branch Defects & Operational Standard",
-  description: "VMBS branch audit defects and operational standard tracker.",
+  title: "Pulse Quality — Branch Defects & Operational Standard",
+  description: "Pulse Quality branch audit defects and operational standard tracker.",
 };
 
 export const viewport: Viewport = {

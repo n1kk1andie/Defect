@@ -1,6 +1,4 @@
-/* VM Building Society — Branch Defects Tracker.
-   Design system ported from the VMBS Operational Risk & Audit app (My-Risk)
-   so the two apps are visually consistent. */
+/* Pulse Quality — Branch Defects Tracker. */
 
 :root { --red:#E4012B; --ink:#1C1416; --paper:#F6F3F1; --dim:#8A7E7A; --line:#EEE7E3; }
 * { box-sizing: border-box; }

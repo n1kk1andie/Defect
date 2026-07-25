@@ -1,7 +1,6 @@
-# VM Building Society — Branch Defects & Operational Standard Tracker
+# Pulse Quality — Branch Defects & Operational Standard Tracker
 
-A Next.js app for VMBS branch audit data, styled to match the VMBS Operational
-Risk & Audit app (`n1kk1andie/My-Risk`): Sora + IBM Plex Sans, VM red
+A Next.js app for branch audit data: Sora + IBM Plex Sans, red
 (`#E4012B`), card/hero language, RAG (red/amber/green) status, heatmaps and
 bottom-tab navigation. A top toggle switches between two datasets that share the
 same **Pulse / Heatmap / Register** screens.

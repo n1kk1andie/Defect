@@ -20,11 +20,9 @@ export default function TrackerApp({ datasets, initialAdmin }: { datasets: any; 
     <div className="shell">
       <div className="app">
         <div className="appbar">
-          <svg height={26} viewBox="0 0 500 340" fill="none" style={{ display: "block", flexShrink: 0 }}>
-            <path d="M14 130 L48 74 L112 280 L213 76 L272 204 L341 76 L446 280 L486 216" stroke="#E4012B" strokeWidth={42} strokeLinejoin="miter" strokeMiterlimit={3} />
-          </svg>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="Pulse Quality" height={40} style={{ display: "block", flexShrink: 0, width: "auto" }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="brand">VM Building Society</div>
             <div className="sub" style={{ fontWeight: 500 }} id="appbar-sub">Branch Defects</div>
           </div>
           <span className="srcbadge live" id="src-badge">Loading…</span>
