@@ -11,7 +11,7 @@ body { margin:0; background:var(--paper); color:var(--ink); font-family:'IBM Ple
 .content { flex:1; padding:4px 16px 96px; }
 .appbar { position:sticky; top:0; z-index:10; background:rgba(246,243,241,.93); backdrop-filter:blur(10px);
   padding:14px 16px 10px; display:flex; align-items:center; gap:11px; }
-.brand { font-family:Sora,sans-serif; font-weight:800; font-size:16.5px; letter-spacing:-.01em; white-space:nowrap; }
+.brand { font-family:Sora,sans-serif; font-weight:700; font-size:18px; letter-spacing:-.01em; white-space:nowrap; }
 .srcbadge { font-size:9.5px; font-weight:700; letter-spacing:.04em; color:#8A7E7A; background:#fff; border:1px solid var(--line);
   border-radius:99px; padding:4px 8px; white-space:nowrap; }
 .srcbadge.live { color:#0E8A4D; border-color:#BFE3CF; background:#E5F4EC; }
