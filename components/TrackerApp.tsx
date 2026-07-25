@@ -22,8 +22,9 @@ export default function TrackerApp({ datasets, initialSession }: { datasets: any
     <div className="shell">
       <div className="app">
         <div className="appbar">
-          <img src="/pulsus-quality.png" alt="Pulsus Quality" style={{ height: 26, width: "auto", display: "block", flexShrink: 0 }} />
+          <img src="/pulsus-quality-icon.png" alt="Pulsus Quality" style={{ height: 28, width: "auto", display: "block", flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 600 }}>Pulsus Quality</div>
             <div className="sub" style={{ fontWeight: 500 }} id="appbar-sub">Branch Defects</div>
           </div>
           <span className="srcbadge live" id="src-badge">Loading…</span>
