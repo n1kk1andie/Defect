@@ -2,6 +2,10 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  applicationName: "Pulsus Quality",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Pulsus Quality" },
+  icons: { icon: "/pulsus-quality-icon.png", shortcut: "/pulsus-quality-icon.png", apple: "/pulsus-quality-icon.png" },
   title: "Pulsus Quality — Branch Defects & Operational Standard",
   description: "Pulsus Quality branch audit defects and operational standard tracker.",
 };
