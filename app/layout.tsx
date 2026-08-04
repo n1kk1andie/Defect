@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { BackToCommandCenter } from "@/components/BackToCommandCenter";
 
 export const metadata: Metadata = {
   applicationName: "Pulsus Quality",
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
+        <BackToCommandCenter />
         {children}
         <footer style={{ textAlign: "center", fontSize: "10.5px", lineHeight: 1.5, color: "#B7ADA8", padding: "18px 16px calc(96px + env(safe-area-inset-bottom))" }}>
           Developed by Tumblehill Labs, the product studio of Tumblehill Holdings Limited. © 2026 Tumblehill Holdings Limited · Proprietary Software · All Rights Reserved
