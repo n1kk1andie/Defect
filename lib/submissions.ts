@@ -28,12 +28,17 @@ export interface DefectItem {
   recurring: boolean;                 // a repeat of a prior defect type
   status: string;                     // "open" | "resolved"
 }
+// A file attached to a submission (the audit sample findings). The bytes live in
+// storage under `attachments/<id>`; only this metadata rides on the submission.
+export interface Attachment { id: string; name: string; size: number; type: string; }
+
 export interface Submission {
   id: string;
   dataset: SubDataset;
   branch: string;
   period: string;            // ISO yyyy-mm-01
   entryDate: string;         // ISO yyyy-mm-dd — the date the inspector recorded this entry
+  attachments: Attachment[]; // audit sample-findings files (may be empty)
   area: string | null;       // single process area (opstd n/a; defects register spans all)
   items: DefectItem[];       // defects register rows (empty for opstd)
   values: Record<string, number | null>;
@@ -143,6 +148,14 @@ export async function listForSession(s: Session): Promise<Submission[]> {
   return all.filter((sub) => canSee(s, sub)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
+/** Whether this session may access an attachment: true if it rides on any submission
+ *  the session is allowed to see. (The uploader case is checked separately from the
+ *  blob metadata, so a freshly-uploaded, not-yet-saved attachment stays reachable.) */
+export async function attachmentOwnerOrVisible(s: Session, attachmentId: string): Promise<boolean> {
+  const all = await readAll();
+  return all.some((sub) => (sub.attachments || []).some((a) => a.id === attachmentId) && canSee(s, sub));
+}
+
 // ---- validation ----
 
 function toIntMap(input: any, keys: readonly string[]): { ok: true; values: Record<string, number | null> } | { ok: false; error: string } {
@@ -168,8 +181,24 @@ function defectRuleError(v: Record<string, number | null>): string | null {
 
 // ---- normalisation from a client payload ----
 
-interface RawInput { dataset?: string; branch?: string; period?: string; entryDate?: string; area?: string | null; values?: any; audit?: any; items?: any; }
-interface Parsed { dataset: SubDataset; branch: string; period: string; entryDate: string; area: string | null; items: DefectItem[]; values: Record<string, number | null>; audit: number | null; }
+interface RawInput { dataset?: string; branch?: string; period?: string; entryDate?: string; attachments?: any; area?: string | null; values?: any; audit?: any; items?: any; }
+interface Parsed { dataset: SubDataset; branch: string; period: string; entryDate: string; attachments: Attachment[]; area: string | null; items: DefectItem[]; values: Record<string, number | null>; audit: number | null; }
+
+// Sanitise the attachment metadata a client sends. The bytes are already in storage
+// (uploaded via /api/attachment); here we just keep well-formed references, capped in count.
+function normaliseAttachments(raw: unknown): Attachment[] {
+  if (!Array.isArray(raw)) return [];
+  const out: Attachment[] = [];
+  for (const a of raw.slice(0, 20)) {
+    const id = String((a as any)?.id ?? "").trim();
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(id)) continue;
+    const name = String((a as any)?.name ?? "file").trim().slice(0, 200) || "file";
+    const size = Math.max(0, Math.round(Number((a as any)?.size) || 0));
+    const type = String((a as any)?.type ?? "").trim().slice(0, 120);
+    out.push({ id, name, size, type });
+  }
+  return out;
+}
 
 // The date the inspector says they recorded the entry (yyyy-mm-dd). Defaults to today
 // (server date) when absent or malformed — it's descriptive metadata, not a metric key.
@@ -199,6 +228,7 @@ function normalise(input: RawInput, session: Session): { ok: true; parsed: Parse
   const period = (input.period || "").trim();
   if (!/^\d{4}-\d{2}-01$/.test(period)) return { ok: false, error: "Choose a valid month." };
   const entryDate = normaliseEntryDate(input.entryDate);
+  const attachments = normaliseAttachments(input.attachments);
 
   if (dataset === "defects") {
     // A monthly Process Critical Review — one row per sampled transaction across areas.
@@ -211,7 +241,7 @@ function normalise(input: RawInput, session: Session): { ok: true; parsed: Parse
       if (it.defects > 0 && !it.defectArea) return { ok: false, error: "Name the defect area for each transaction with a defect." };
       items.push(it);
     }
-    return { ok: true, parsed: { dataset, branch, period, entryDate, area: null, items, values: {}, audit: null } };
+    return { ok: true, parsed: { dataset, branch, period, entryDate, attachments, area: null, items, values: {}, audit: null } };
   }
   // opstd — the raw measures the officer keys (8 SOP standards + complaints, procurement,
   // queue SLA, onboarding SLA, audit resolution — all 0–100) plus an audit letter grade.
@@ -230,7 +260,7 @@ function normalise(input: RawInput, session: Session): { ok: true; parsed: Parse
     if (AUDIT_POINTS[letter] == null) return { ok: false, error: "Audit grade must be A, B+, B, C or D." };
     audit = AUDIT_POINTS[letter];
   }
-  return { ok: true, parsed: { dataset, branch, period, entryDate, area: null, items: [], values, audit } };
+  return { ok: true, parsed: { dataset, branch, period, entryDate, attachments, area: null, items: [], values, audit } };
 }
 
 // ---- create / update / submit / delete ----
@@ -252,13 +282,13 @@ export async function saveSubmission(session: Session, input: RawInput & { id?: 
     if (sub.status === "submitted" || sub.status === "published") return { ok: false, error: "This submission is locked — it’s already " + sub.status + ".", status: 409 };
   } else {
     sub = {
-      id: randomUUID(), dataset: norm.parsed.dataset, branch: norm.parsed.branch, period: norm.parsed.period, entryDate: norm.parsed.entryDate,
+      id: randomUUID(), dataset: norm.parsed.dataset, branch: norm.parsed.branch, period: norm.parsed.period, entryDate: norm.parsed.entryDate, attachments: [],
       area: norm.parsed.area, items: [], values: {}, audit: null, status: "draft", inspector: session.username,
       supervisor: null, note: "", history: [{ status: "draft", by: session.username, at: now }], createdAt: now, updatedAt: now,
     };
     list.push(sub);
   }
-  sub.dataset = norm.parsed.dataset; sub.branch = norm.parsed.branch; sub.period = norm.parsed.period; sub.entryDate = norm.parsed.entryDate;
+  sub.dataset = norm.parsed.dataset; sub.branch = norm.parsed.branch; sub.period = norm.parsed.period; sub.entryDate = norm.parsed.entryDate; sub.attachments = norm.parsed.attachments;
   sub.area = norm.parsed.area; sub.items = norm.parsed.items; sub.values = norm.parsed.values; sub.audit = norm.parsed.audit; sub.updatedAt = now;
 
   if (input.submit) {
@@ -276,6 +306,11 @@ export async function deleteSubmission(session: Session, id: string): Promise<{ 
   if (sub.inspector !== session.username && session.role !== "admin") return { ok: false, error: "You can only delete your own submissions.", status: 403 };
   if (sub.status === "published") return { ok: false, error: "Published submissions can’t be deleted.", status: 409 };
   await writeAll(list.filter((s) => s.id !== id));
+  // Best-effort cleanup of the attachment blobs (bytes + metadata sidecar).
+  for (const a of sub.attachments || []) {
+    await getStorage().remove(`attachment-${a.id}`).catch(() => {});
+    await getStorage().remove(`attachment-${a.id}.json`).catch(() => {});
+  }
   return { ok: true };
 }
 
