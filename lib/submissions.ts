@@ -340,6 +340,45 @@ export async function reviewSubmission(session: Session, id: string, decision: "
   return { ok: true, submission: sub };
 }
 
+// ---- resolution: mark individual defects resolved / reopened ----
+
+export interface DefectRef { id: string; index: number; }
+
+/** Set the resolution status of individual defect line items (by submission id + item
+ *  index) and re-aggregate the affected published reviews into the live dataset, so the
+ *  resolution rate reflects the change. Supervisors (their branch) and admins only. */
+export async function resolveDefects(session: Session, refs: DefectRef[], resolved: boolean): Promise<{ ok: true; submissions: Submission[]; changed: number } | { ok: false; error: string; status?: number }> {
+  if (session.role !== "supervisor" && session.role !== "admin") return { ok: false, error: "Only supervisors and admins can change resolution status.", status: 403 };
+  const list = await readAll();
+  const byId = new Map<string, number[]>();
+  for (const r of refs || []) { const i = Math.trunc(Number(r?.index)); const id = String(r?.id || ""); if (!id || !Number.isFinite(i) || i < 0) continue; (byId.get(id) || byId.set(id, []).get(id)!).push(i); }
+
+  const affected: Submission[] = [];
+  let changed = 0;
+  const now = new Date().toISOString();
+  for (const [id, idxs] of byId) {
+    const sub = findById(list, id);
+    if (!sub) continue;
+    if (!canReview(session, sub)) return { ok: false, error: "You can’t change resolution for this submission.", status: 403 };
+    if (sub.dataset !== "defects") continue;
+    if (sub.status !== "published") return { ok: false, error: "Only published defects can be marked resolved.", status: 409 };
+    let subChanged = 0;
+    for (const i of idxs) {
+      const it = sub.items[i];
+      if (it && (it.defects || 0) > 0) { const ns = resolved ? "resolved" : "open"; if (it.status !== ns) { it.status = ns; subChanged += 1; } }
+    }
+    if (subChanged) {
+      changed += subChanged;
+      sub.updatedAt = now;
+      sub.history.push({ status: "published", by: session.username, at: now, note: (resolved ? "Marked " : "Reopened ") + subChanged + " defect" + (subChanged === 1 ? "" : "s") + (resolved ? " resolved" : "") });
+      affected.push(sub);
+    }
+  }
+  for (const sub of affected) { const r = await publishToDataset(sub); if (!r.ok) return { ok: false, error: r.error, status: 400 }; }
+  if (affected.length) await writeAll(list);
+  return { ok: true, submissions: await listForSession(session), changed };
+}
+
 /** Ensure `iso` exists in the period list, inserting it in chronological order and
  *  re-indexing existing rows so period indices stay correct. Returns its index. */
 function ensurePeriod(payload: any, iso: string): number {

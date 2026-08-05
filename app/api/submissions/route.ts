@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { deleteSubmission, listForSession, reviewSubmission, saveSubmission } from "@/lib/submissions";
+import { deleteSubmission, listForSession, resolveDefects, reviewSubmission, saveSubmission } from "@/lib/submissions";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +31,12 @@ export async function POST(req: NextRequest) {
     const res = await deleteSubmission(s, body?.id || "");
     if (!res.ok) return NextResponse.json({ ok: false, error: res.error }, { status: res.status || 400 });
     return NextResponse.json({ ok: true, submissions: await listForSession(s) });
+  }
+
+  if (action === "resolve") {
+    const res = await resolveDefects(s, Array.isArray(body?.refs) ? body.refs : [], body?.resolved !== false);
+    if (!res.ok) return NextResponse.json({ ok: false, error: res.error }, { status: res.status || 400 });
+    return NextResponse.json({ ok: true, submissions: res.submissions, changed: res.changed });
   }
 
   if (action === "review") {
