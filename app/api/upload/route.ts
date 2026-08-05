@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAdmin } from "@/lib/auth";
 import { parseWorkbook, buildWorkbook } from "@/lib/xlsx";
 import { saveDataset, statsFor, resetDataset } from "@/lib/data";
+import { storageIsDurable } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+const NO_STORAGE = "Couldn’t save: the app’s storage isn’t connected. An admin needs to connect a Vercel Blob store to this project and redeploy.";
 
 // Reset a dataset back to the bundled seed: POST /api/upload?reset=defects|opstd
 async function handleReset(req: NextRequest) {
@@ -17,6 +20,7 @@ async function handleReset(req: NextRequest) {
 // Upload an .xlsx (raw body). Auto-detects Branch Defects vs Operational Standard.
 export async function POST(req: NextRequest) {
   if (!isAdmin(Date.now())) return NextResponse.json({ ok: false, error: "Not signed in." }, { status: 401 });
+  if (!storageIsDurable()) return NextResponse.json({ ok: false, error: NO_STORAGE }, { status: 503 });
   if (req.nextUrl.searchParams.has("reset")) return handleReset(req);
 
   const buf = Buffer.from(await req.arrayBuffer());

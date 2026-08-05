@@ -221,10 +221,8 @@ function normalise(input: RawInput, session: Session): { ok: true; parsed: Parse
   const dataset = input.dataset === "opstd" ? "opstd" : "defects";
   const branch = (input.branch || "").trim();
   if (!branch) return { ok: false, error: "Choose a branch." };
-  // An inspector may only key for their assigned branch (if their account has one).
-  if (session.role === "inspector" && session.branch && branch !== session.branch) {
-    return { ok: false, error: "You can only submit for your branch (" + session.branch + ")." };
-  }
+  // Branch is chosen on the form (a dropdown), so officers may key for any branch —
+  // the assigned branch is only the default selection, not a restriction.
   const period = (input.period || "").trim();
   if (!/^\d{4}-\d{2}-01$/.test(period)) return { ok: false, error: "Choose a valid month." };
   const entryDate = normaliseEntryDate(input.entryDate);
