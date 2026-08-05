@@ -1,7 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { BackToCommandCenter } from "@/components/BackToCommandCenter";
 
 export const metadata: Metadata = {
+  applicationName: "Pulsus Quality",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Pulsus Quality" },
+  icons: { icon: "/pulsus-quality-icon.png", shortcut: "/pulsus-quality-icon.png", apple: "/pulsus-quality-icon.png" },
   title: "Pulsus Quality — Branch Defects & Operational Standard",
   description: "Pulsus Quality branch audit defects and operational standard tracker.",
 };
@@ -24,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
+        <BackToCommandCenter />
         {children}
         <footer style={{ textAlign: "center", fontSize: "10.5px", lineHeight: 1.5, color: "#B7ADA8", padding: "18px 16px calc(96px + env(safe-area-inset-bottom))" }}>
           Developed by Tumblehill Labs, the product studio of Tumblehill Holdings Limited. © 2026 Tumblehill Holdings Limited · Proprietary Software · All Rights Reserved
