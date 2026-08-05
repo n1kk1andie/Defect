@@ -1,15 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { adminConfigured, checkLogin, checkRoleLogin, createSessionToken, getSession, isRole, SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth";
+import { adminConfigured, checkLogin, checkRoleLogin, createSessionToken, getSession, isRole, Role, SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth";
+import { resolveRole } from "@/lib/msauth";
+import { PLATFORM_COOKIE, verifyPlatformJwt } from "@/lib/server/platform";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 // Session status. `configured` is always true — a built-in default password
 // means sign-in works without any host/env configuration. `admin` is kept for
 // backwards compatibility; `role`/`username` describe the signed-in account.
 export async function GET() {
-  const s = getSession(Date.now());
-  return NextResponse.json({
+  const now = Date.now();
+  let s = getSession(now);
+
+  // Platform single sign-on: if there's no Defect session yet but the visitor
+  // holds a valid Command Center session (shared exec_auth cookie on
+  // .pulsus.tech, an RS256 JWT verified against the platform JWKS), sign them in
+  // here — resolving their role from Defect's OWN existing email→role rules
+  // (never broadening access; NEVER admin) — and mint the SAME signed session
+  // cookie the normal sign-in issues. Seamless: no second sign-in. Additive: the
+  // existing role/admin/Microsoft logins are untouched.
+  let bootstrap: { role: Role; username: string; branch: string | null } | null = null;
+  if (!s) {
+    const platformCookie = cookies().get(PLATFORM_COOKIE)?.value;
+    const email = await verifyPlatformJwt(platformCookie);
+    const role = email ? resolveRole(email) : null;
+    if (email && role) {
+      const username = email.split("@")[0];
+      bootstrap = { role, username, branch: null };
+      s = { role, username, branch: null, exp: now };
+    }
+  }
+
+  const res = NextResponse.json({
     signedIn: !!s,
     role: s?.role ?? null,
     username: s?.username ?? null,
@@ -17,6 +41,10 @@ export async function GET() {
     admin: s?.role === "admin",
     configured: await adminConfigured(),
   });
+  if (bootstrap) {
+    res.cookies.set(SESSION_COOKIE, createSessionToken(now, bootstrap), sessionCookieOptions);
+  }
+  return res;
 }
 
 // Two sign-in paths:
