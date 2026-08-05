@@ -33,6 +33,7 @@ export interface Submission {
   dataset: SubDataset;
   branch: string;
   period: string;            // ISO yyyy-mm-01
+  entryDate: string;         // ISO yyyy-mm-dd — the date the inspector recorded this entry
   area: string | null;       // single process area (opstd n/a; defects register spans all)
   items: DefectItem[];       // defects register rows (empty for opstd)
   values: Record<string, number | null>;
@@ -167,8 +168,15 @@ function defectRuleError(v: Record<string, number | null>): string | null {
 
 // ---- normalisation from a client payload ----
 
-interface RawInput { dataset?: string; branch?: string; period?: string; area?: string | null; values?: any; audit?: any; items?: any; }
-interface Parsed { dataset: SubDataset; branch: string; period: string; area: string | null; items: DefectItem[]; values: Record<string, number | null>; audit: number | null; }
+interface RawInput { dataset?: string; branch?: string; period?: string; entryDate?: string; area?: string | null; values?: any; audit?: any; items?: any; }
+interface Parsed { dataset: SubDataset; branch: string; period: string; entryDate: string; area: string | null; items: DefectItem[]; values: Record<string, number | null>; audit: number | null; }
+
+// The date the inspector says they recorded the entry (yyyy-mm-dd). Defaults to today
+// (server date) when absent or malformed — it's descriptive metadata, not a metric key.
+function normaliseEntryDate(raw: unknown): string {
+  const s = String(raw ?? "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : new Date().toISOString().slice(0, 10);
+}
 
 function normaliseItem(raw: any): DefectItem | { error: string } {
   const area = (raw?.area || "").trim();
@@ -190,6 +198,7 @@ function normalise(input: RawInput, session: Session): { ok: true; parsed: Parse
   }
   const period = (input.period || "").trim();
   if (!/^\d{4}-\d{2}-01$/.test(period)) return { ok: false, error: "Choose a valid month." };
+  const entryDate = normaliseEntryDate(input.entryDate);
 
   if (dataset === "defects") {
     // A monthly Process Critical Review — one row per sampled transaction across areas.
@@ -202,7 +211,7 @@ function normalise(input: RawInput, session: Session): { ok: true; parsed: Parse
       if (it.defects > 0 && !it.defectArea) return { ok: false, error: "Name the defect area for each transaction with a defect." };
       items.push(it);
     }
-    return { ok: true, parsed: { dataset, branch, period, area: null, items, values: {}, audit: null } };
+    return { ok: true, parsed: { dataset, branch, period, entryDate, area: null, items, values: {}, audit: null } };
   }
   // opstd — the raw measures the officer keys (8 SOP standards + complaints, procurement,
   // queue SLA, onboarding SLA, audit resolution — all 0–100) plus an audit letter grade.
@@ -221,7 +230,7 @@ function normalise(input: RawInput, session: Session): { ok: true; parsed: Parse
     if (AUDIT_POINTS[letter] == null) return { ok: false, error: "Audit grade must be A, B+, B, C or D." };
     audit = AUDIT_POINTS[letter];
   }
-  return { ok: true, parsed: { dataset, branch, period, area: null, items: [], values, audit } };
+  return { ok: true, parsed: { dataset, branch, period, entryDate, area: null, items: [], values, audit } };
 }
 
 // ---- create / update / submit / delete ----
@@ -243,13 +252,13 @@ export async function saveSubmission(session: Session, input: RawInput & { id?: 
     if (sub.status === "submitted" || sub.status === "published") return { ok: false, error: "This submission is locked — it’s already " + sub.status + ".", status: 409 };
   } else {
     sub = {
-      id: randomUUID(), dataset: norm.parsed.dataset, branch: norm.parsed.branch, period: norm.parsed.period,
+      id: randomUUID(), dataset: norm.parsed.dataset, branch: norm.parsed.branch, period: norm.parsed.period, entryDate: norm.parsed.entryDate,
       area: norm.parsed.area, items: [], values: {}, audit: null, status: "draft", inspector: session.username,
       supervisor: null, note: "", history: [{ status: "draft", by: session.username, at: now }], createdAt: now, updatedAt: now,
     };
     list.push(sub);
   }
-  sub.dataset = norm.parsed.dataset; sub.branch = norm.parsed.branch; sub.period = norm.parsed.period;
+  sub.dataset = norm.parsed.dataset; sub.branch = norm.parsed.branch; sub.period = norm.parsed.period; sub.entryDate = norm.parsed.entryDate;
   sub.area = norm.parsed.area; sub.items = norm.parsed.items; sub.values = norm.parsed.values; sub.audit = norm.parsed.audit; sub.updatedAt = now;
 
   if (input.submit) {
