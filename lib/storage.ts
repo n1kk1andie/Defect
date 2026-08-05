@@ -76,3 +76,10 @@ const localDriver: StorageDriver = {
 export function getStorage(): StorageDriver {
   return vercelBlobToken() ? vercelDriver : localDriver;
 }
+
+/** Whether writes will actually persist. Local dev writes to disk fine; on Vercel the
+ *  serverless filesystem is read-only, so a connected Blob store (its token) is required.
+ *  Used to fail writes with a clear message instead of a raw read-only-filesystem 500. */
+export function storageIsDurable(): boolean {
+  return !!vercelBlobToken() || !process.env.VERCEL;
+}

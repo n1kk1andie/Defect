@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { storageIsDurable } from "@/lib/storage";
 import { deleteSubmission, listForSession, resolveDefects, reviewSubmission, saveSubmission } from "@/lib/submissions";
 
 export const dynamic = "force-dynamic";
+
+// Shown when the server can't persist a write — almost always because no Vercel Blob
+// store is connected to the project (so there's no writable storage on the serverless FS).
+const NO_STORAGE = "Couldn’t save: the app’s storage isn’t connected. An admin needs to connect a Vercel Blob store to this project and redeploy.";
 
 // Inspector submissions + supervisor review. Every action requires a signed-in session;
 // the submissions layer enforces who may see, edit and review each record.
@@ -19,6 +24,12 @@ export async function POST(req: NextRequest) {
   let body: any = {};
   try { body = await req.json(); } catch { /* empty */ }
   const action = body?.action;
+
+  // Every action below writes. Fail fast with a clear message if storage can't persist,
+  // rather than letting a read-only-filesystem error surface as an opaque 500.
+  if (["save", "submit", "delete", "resolve", "review"].includes(action) && !storageIsDurable()) {
+    return NextResponse.json({ ok: false, error: NO_STORAGE }, { status: 503 });
+  }
 
   if (action === "save" || action === "submit") {
     if (s.role === "supervisor") return NextResponse.json({ ok: false, error: "Supervisors review submissions; they don’t key them." }, { status: 403 });
