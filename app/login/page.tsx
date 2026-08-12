@@ -45,7 +45,7 @@ export default function LoginPage({ searchParams }: { searchParams: { next?: str
         <img src="/pulsus-quality.png" alt="Pulsus Quality" style={{ width: "82%", maxWidth: 300, height: "auto", display: "block", margin: "0 auto 16px" }} />
         <h1 style={{ margin: "0 0 6px", fontFamily: "'Sora', system-ui, sans-serif", fontSize: 22, fontWeight: 800, color: "#111827" }}>Sign in</h1>
         <p style={{ margin: "0 0 22px", fontSize: 14, color: "#6b7280", lineHeight: 1.5 }}>
-          This dashboard requires you to sign in with your company Microsoft account.
+          This module requires you to sign in with your company Microsoft account.
         </p>
 
         {err && (
