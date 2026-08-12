@@ -116,8 +116,14 @@ export async function middleware(req: NextRequest) {
   const authz = req.headers.get("authorization") || "";
   if (authz.startsWith("Bearer ") && (await validPlatformJwt(authz.slice(7)))) return NextResponse.next();
 
-  // Own Quality session, or a Command Center browser session (exec_auth).
-  if (await validSession(req.cookies.get(SESSION_COOKIE)?.value)) return NextResponse.next();
+  // Command Center platform session only — an RS256 JWT verified against the
+  // Command Center's public JWKS (asymmetric; unforgeable). The HMAC own-session
+  // (vmbs_session) door is intentionally disabled at the GATE: it is only as strong
+  // as a shared secret, so the sole browser way past the front door is the hard
+  // platform path (plus the machine feed / Bearer above). The in-app role login
+  // still uses vmbs_session at the handler level — Command Center viewers arrive
+  // with exec_auth on every request. Re-enable the validSession check here when
+  // Microsoft SSO is turned on AND a real SESSION_SECRET is set.
   if (await validPlatformJwt(req.cookies.get(PLATFORM_COOKIE)?.value)) return NextResponse.next();
 
   const { pathname, search } = req.nextUrl;
