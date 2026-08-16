@@ -18,11 +18,12 @@ import { NextRequest, NextResponse } from "next/server";
 const SESSION_COOKIE = "vmbs_session";
 const PLATFORM_COOKIE = "exec_auth";
 
+// Matches lib/auth.ts secret(). Fails CLOSED — no baked-in constant.
 function secret(): string {
-  // Matches lib/auth.ts secret() (incl. its built-in default), so a valid session
-  // verifies here even before SESSION_SECRET is set — and the built-in admin
-  // password still lets someone sign in, so the app is never locked out.
-  return process.env.SESSION_SECRET || "vmbs-dev-secret-change-me";
+  const s = process.env.SESSION_SECRET;
+  if (s) return s;
+  if (process.env.NODE_ENV === "production") throw new Error("SESSION_SECRET must be set in production");
+  return "dev-only-insecure-secret-not-for-production";
 }
 
 // ── base64url + HMAC (must match Node's base64url digest in lib/auth.ts) ──────
@@ -108,7 +109,7 @@ async function validPlatformJwt(token: string | undefined): Promise<boolean> {
   } catch { return false; }
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   // Command Center server-to-server read of /api/data: the shared feed token, or
   // the Bearer platform JWT it sends. Either keeps the synthesis feed alive.
   const feed = (process.env.PULSE_FEED_TOKEN || "").trim();

@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 // A blank Process Critical Review template (.xlsx) for officers who prefer to key in
 // Excel and upload. Any signed-in user may download it.
 export async function GET() {
-  if (!getSession(Date.now())) return NextResponse.json({ ok: false, error: "Sign in required." }, { status: 401 });
+  if (!await getSession(Date.now())) return NextResponse.json({ ok: false, error: "Sign in required." }, { status: 401 });
   const payload = await loadDatasetPayload("defects");
   const buf = buildReviewTemplate(payload.areas || []);
   return new NextResponse(buf, {

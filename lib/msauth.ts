@@ -96,7 +96,12 @@ export function decodeIdToken(idToken: string): Record<string, unknown> | null {
 export function claimsValid(claims: Record<string, unknown>, nonce: string): boolean {
   const { clientId, tenant } = msConfig();
   if (claims.aud !== clientId) return false;
-  if (tenant && tenant !== "common" && tenant !== "organizations" && claims.tid !== tenant) return false;
+  // Issuer must be Microsoft and match the token's own tenant id — binds the token
+  // to a real Entra tenant even under the multi-tenant "common"/"organizations" default.
+  const tid = typeof claims.tid === "string" ? claims.tid : "";
+  const iss = typeof claims.iss === "string" ? claims.iss : "";
+  if (!tid || iss !== `https://login.microsoftonline.com/${tid}/v2.0`) return false;
+  if (tenant && tenant !== "common" && tenant !== "organizations" && tid !== tenant) return false;
   if (nonce && claims.nonce !== nonce) return false;
   if (typeof claims.exp === "number" && Date.now() / 1000 > claims.exp + 60) return false;
   return true;

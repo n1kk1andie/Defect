@@ -19,7 +19,7 @@ async function handleReset(req: NextRequest) {
 
 // Upload an .xlsx (raw body). Auto-detects Branch Defects vs Operational Standard.
 export async function POST(req: NextRequest) {
-  if (!isAdmin(Date.now())) return NextResponse.json({ ok: false, error: "Not signed in." }, { status: 401 });
+  if (!await isAdmin(Date.now())) return NextResponse.json({ ok: false, error: "Not signed in." }, { status: 401 });
   if (!storageIsDurable()) return NextResponse.json({ ok: false, error: NO_STORAGE }, { status: 503 });
   if (req.nextUrl.searchParams.has("reset")) return handleReset(req);
 
