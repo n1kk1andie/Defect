@@ -10,7 +10,7 @@ export const maxDuration = 30;
 // to the client to load into the Entry screen. Nothing is persisted here — the officer
 // reviews the parsed rows and submits them through the normal supervisor gate.
 export async function POST(req: NextRequest) {
-  const s = getSession(Date.now());
+  const s = await getSession(Date.now());
   if (!s) return NextResponse.json({ ok: false, error: "Sign in required." }, { status: 401 });
   if (s.role === "supervisor") return NextResponse.json({ ok: false, error: "Supervisors review submissions; they don’t key them." }, { status: 403 });
 

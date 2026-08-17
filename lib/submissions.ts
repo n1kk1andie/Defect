@@ -129,17 +129,14 @@ async function writeAll(list: Submission[]): Promise<void> {
 // ---- visibility ----
 
 /** Whether a session may see a submission. Inspectors see only their own; supervisors
- *  see their branch (all branches if their account has no branch); admins see all. */
+ *  and admins see every submission (across all branches). */
 export function canSee(s: Session, sub: Submission): boolean {
-  if (s.role === "admin") return true;
-  if (s.role === "supervisor") return !s.branch || sub.branch === s.branch;
+  if (s.role === "admin" || s.role === "supervisor") return true;
   return sub.inspector === s.username; // inspector
 }
-/** Whether a session may review (approve/return) — supervisors for their branch, admins. */
+/** Whether a session may review (approve/return) — every supervisor and admin, any branch. */
 export function canReview(s: Session, sub: Submission): boolean {
-  if (s.role === "admin") return true;
-  if (s.role === "supervisor") return !s.branch || sub.branch === s.branch;
-  return false;
+  return s.role === "admin" || s.role === "supervisor";
 }
 
 /** Submissions visible to this session, newest activity first. */

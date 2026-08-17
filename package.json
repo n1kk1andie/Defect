@@ -11,10 +11,10 @@
   },
   "dependencies": {
     "@vercel/blob": "^2.4.1",
-    "next": "^14.2.35",
+    "next": "^16.3.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "xlsx": "0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@types/node": "20.14.12",

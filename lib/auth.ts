@@ -17,12 +17,6 @@ const MAX_AGE = 60 * 60 * 12; // 12h
 const CRED_BLOB = "admin-credentials.json"; // legacy admin password (scrypt)
 const ACCOUNTS_BLOB = "accounts.json"; // inspector / supervisor / extra admin accounts
 
-// Built-in default admin password. This makes sign-in work out of the box with
-// NO Vercel setup required (no ADMIN_PASSWORD env var, no Blob store). It can be
-// overridden by setting ADMIN_PASSWORD, or by changing the password in-app
-// (Settings → Admin password), which persists a scrypt hash to storage.
-const DEFAULT_ADMIN_PASSWORD = "pa55w0rd";
-
 export type Role = "inspector" | "supervisor" | "admin";
 export const ROLES: Role[] = ["inspector", "supervisor", "admin"];
 export function isRole(x: unknown): x is Role { return typeof x === "string" && (ROLES as string[]).includes(x); }
@@ -30,10 +24,10 @@ export function isRole(x: unknown): x is Role { return typeof x === "string" && 
 /** A decoded, verified session — who is signed in and what they may do. */
 export interface Session { role: Role; username: string; branch: string | null; exp: number; }
 
-/** The effective admin password from env, falling back to the built-in default. */
-function envOrDefaultPassword(): string {
-  const fromEnv = (process.env.ADMIN_PASSWORD || "").trim();
-  return fromEnv || DEFAULT_ADMIN_PASSWORD;
+/** The admin password from env, or null when none is configured. No built-in
+ *  default — a public default would let anyone sign in as admin. */
+function envAdminPassword(): string | null {
+  return (process.env.ADMIN_PASSWORD || "").trim() || null;
 }
 
 interface StoredCredential { alg: "scrypt"; salt: string; hash: string; updatedAt: string; }
@@ -43,8 +37,13 @@ export interface Account { username: string; role: Role; alg: "scrypt"; salt: st
 /** Account without secrets — safe to send to the client. */
 export interface PublicAccount { username: string; role: Role; branch: string | null; createdAt: string; }
 
+// Fails CLOSED: no baked-in constant. This secret signs the session token (any
+// role, incl. admin) — a default would let anyone forge an admin session.
 function secret(): string {
-  return process.env.SESSION_SECRET || "vmbs-dev-secret-change-me";
+  const s = process.env.SESSION_SECRET;
+  if (s) return s;
+  if (process.env.NODE_ENV === "production") throw new Error("SESSION_SECRET must be set in production");
+  return "dev-only-insecure-secret-not-for-production";
 }
 function b64url(s: string): string { return Buffer.from(s).toString("base64url"); }
 function sign(payload: string): string { return createHmac("sha256", secret()).update(payload).digest("base64url"); }
@@ -102,15 +101,13 @@ export async function setPassword(newPassword: string): Promise<void> {
 const ROLE_PW_BLOB = "role-passwords.json";
 const ROLE_LOGIN_ROLES: Role[] = ["inspector", "supervisor"];
 
-// Built-in shared passwords per staff role, used until an admin sets a custom one
-// (Settings → Role sign-in passwords) or overrides via env. Officer = the inspector
-// role. These make role sign-in work out of the box, like the admin default password.
-const ROLE_DEFAULT_PW: Partial<Record<Role, string>> = { inspector: "0ff1cer", supervisor: "5uperv1sor" };
+// Shared role passwords come from an admin (persisted, scrypt) or the per-role env
+// var (OFFICER_PASSWORD / SUPERVISOR_PASSWORD). NO built-in default — a public
+// default would let anyone sign in as an inspector/supervisor.
 const ROLE_ENV_KEY: Partial<Record<Role, string>> = { inspector: "OFFICER_PASSWORD", supervisor: "SUPERVISOR_PASSWORD" };
-function roleDefaultPassword(role: Role): string {
+function roleEnvPassword(role: Role): string | null {
   const key = ROLE_ENV_KEY[role];
-  const fromEnv = key ? (process.env[key] || "").trim() : "";
-  return fromEnv || ROLE_DEFAULT_PW[role] || envOrDefaultPassword();
+  return (key ? (process.env[key] || "").trim() : "") || null;
 }
 
 async function readRolePasswords(): Promise<Partial<Record<Role, StoredCredential>>> {
@@ -144,9 +141,11 @@ export async function rolePasswordStatus(): Promise<Record<string, boolean>> {
 export async function checkRoleLogin(role: Role, password: string): Promise<boolean> {
   if (!ROLE_LOGIN_ROLES.includes(role)) return false;
   const pw = (password || "").trim();
+  if (!pw) return false;
   const cred = (await readRolePasswords())[role];
   if (cred) return safeEqual(hashPassword(pw, cred.salt), cred.hash);
-  return safeEqual(pw, roleDefaultPassword(role));
+  const env = roleEnvPassword(role);
+  return env ? safeEqual(pw, env) : false; // no password configured → role login disabled
 }
 
 // Admin password precedence: an in-app password (persisted to storage) takes
@@ -156,9 +155,11 @@ export async function checkPassword(submitted: string): Promise<boolean> {
   // Trim surrounding whitespace on both sides — env values pasted into a host often
   // carry a trailing space/newline, which would otherwise reject a correct password.
   const pw = (submitted || "").trim();
+  if (!pw) return false;
   const stored = await readStoredCredential();
   if (stored) return safeEqual(hashPassword(pw, stored.salt), stored.hash);
-  return safeEqual(pw, envOrDefaultPassword());
+  const env = envAdminPassword();
+  return env ? safeEqual(pw, env) : false; // no admin password configured → login disabled
 }
 
 // ---- Account registry (inspector / supervisor / extra admins) ----
@@ -192,7 +193,7 @@ export async function upsertAccount(input: { username: string; password: string;
   if (!/^[a-z0-9._-]{2,32}$/.test(username)) return { ok: false, error: "Username must be 2–32 chars: letters, numbers, . _ -" };
   if (username === "admin") return { ok: false, error: "“admin” is reserved for the built-in admin login." };
   if (!isRole(input.role)) return { ok: false, error: "Unknown role." };
-  if ((input.password || "").trim().length < 4) return { ok: false, error: "Password must be at least 4 characters." };
+  if ((input.password || "").trim().length < 12) return { ok: false, error: "Password must be at least 12 characters." };
   const list = await readAccounts();
   const { salt, hash } = makeHash(input.password);
   const existing = list.find((a) => a.username === username);
@@ -232,19 +233,20 @@ export async function checkLogin(username: string, password: string): Promise<{ 
   return null;
 }
 
-/** Whether admin auth is usable. Always true — a built-in default password
- *  guarantees sign-in works even with no env var or storage configured. */
+/** Whether admin auth is usable — true once an ADMIN_PASSWORD env var or an in-app
+ *  password has been set. No public default, so a fresh deploy is NOT auto-admin. */
 export async function adminConfigured(): Promise<boolean> {
-  return true;
+  if (envAdminPassword()) return true;
+  return (await readStoredCredential()) !== null;
 }
 
-/** The current verified session, or null if signed out. */
-export function getSession(now: number): Session | null {
-  return readSessionToken(cookies().get(SESSION_COOKIE)?.value, now);
+/** The current verified session, or null if signed out. `cookies()` is async in Next 15+. */
+export async function getSession(now: number): Promise<Session | null> {
+  return readSessionToken((await cookies()).get(SESSION_COOKIE)?.value, now);
 }
 
-export function isAdmin(now: number): boolean {
-  return getSession(now)?.role === "admin";
+export async function isAdmin(now: number): Promise<boolean> {
+  return (await getSession(now))?.role === "admin";
 }
 
 export const sessionCookieOptions = {

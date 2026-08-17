@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 // backwards compatibility; `role`/`username` describe the signed-in account.
 export async function GET() {
   const now = Date.now();
-  let s = getSession(now);
+  let s = await getSession(now);
 
   // Platform single sign-on: if there's no Defect session yet but the visitor
   // holds a valid Command Center session (shared exec_auth cookie on
@@ -23,7 +23,7 @@ export async function GET() {
   // existing role/admin/Microsoft logins are untouched.
   let bootstrap: { role: Role; username: string; branch: string | null } | null = null;
   if (!s) {
-    const platformCookie = cookies().get(PLATFORM_COOKIE)?.value;
+    const platformCookie = (await cookies()).get(PLATFORM_COOKIE)?.value;
     const email = await verifyPlatformJwt(platformCookie);
     const role = email ? resolveRole(email) : null;
     if (email && role) {
@@ -67,13 +67,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Incorrect password for that role." }, { status: 401 });
     }
     const session = { role: body.role, username: name, branch: branch || null };
-    cookies().set(SESSION_COOKIE, createSessionToken(Date.now(), session), sessionCookieOptions);
+    (await cookies()).set(SESSION_COOKIE, createSessionToken(Date.now(), session), sessionCookieOptions);
     return NextResponse.json({ ok: true, ...session });
   }
 
   // Admin login (username optional; blank/"admin" + admin password).
   const result = await checkLogin(body?.username || "", body?.password || "");
   if (!result) return NextResponse.json({ ok: false, error: "Incorrect password." }, { status: 401 });
-  cookies().set(SESSION_COOKIE, createSessionToken(Date.now(), result), sessionCookieOptions);
+  (await cookies()).set(SESSION_COOKIE, createSessionToken(Date.now(), result), sessionCookieOptions);
   return NextResponse.json({ ok: true, role: result.role, username: result.username, branch: result.branch });
 }

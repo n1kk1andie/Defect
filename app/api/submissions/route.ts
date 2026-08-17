@@ -13,13 +13,13 @@ const NO_STORAGE = "Couldn’t save: the app’s storage isn’t connected. An a
 // the submissions layer enforces who may see, edit and review each record.
 
 export async function GET() {
-  const s = getSession(Date.now());
+  const s = await getSession(Date.now());
   if (!s) return NextResponse.json({ ok: false, error: "Sign in required." }, { status: 401 });
   return NextResponse.json({ ok: true, submissions: await listForSession(s), me: { role: s.role, username: s.username, branch: s.branch } });
 }
 
 export async function POST(req: NextRequest) {
-  const s = getSession(Date.now());
+  const s = await getSession(Date.now());
   if (!s) return NextResponse.json({ ok: false, error: "Sign in required." }, { status: 401 });
   let body: any = {};
   try { body = await req.json(); } catch { /* empty */ }
