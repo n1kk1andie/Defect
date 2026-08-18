@@ -5,10 +5,20 @@ import { getStorage } from "@/lib/storage";
 import { buildWorkbook, type Dataset } from "@/lib/xlsx";
 import seedDefects from "@/lib/seed-defects.json";
 import seedOpstd from "@/lib/seed-opstd.json";
+import { isDemo, buildDemoDataset } from "@/lib/demo";
 
 const JSON_KEY: Record<Dataset, string> = { defects: "defects.json", opstd: "opstd.json" };
 const XLSX_KEY: Record<Dataset, string> = { defects: "defects.xlsx", opstd: "opstd.xlsx" };
-const SEED: Record<Dataset, any> = { defects: seedDefects, opstd: seedOpstd };
+const BUNDLED_SEED: Record<Dataset, any> = { defects: seedDefects, opstd: seedOpstd };
+
+// The seed a fresh/empty store falls back to. In a demo deployment (DEMO_MODE=1)
+// this is a FULLY FICTIONAL dataset (Meridian Building Society) built on the fly,
+// so the real VMBS branch roster and figures in the bundled JSON are never
+// served. Production is unchanged — it returns the bundled seed. Built per call
+// (cheap, deterministic) so demo mode never mutates a shared object.
+function seedFor(type: Dataset): any {
+  return isDemo() ? buildDemoDataset(type) : BUNDLED_SEED[type];
+}
 
 async function readJson(key: string): Promise<any | null> {
   const buf = await getStorage().read(key);
@@ -28,7 +38,7 @@ export interface DatasetsResponse {
 // the code while the stored numbers are left untouched.
 function overlaySeedLabels(type: Dataset, payload: any): any {
   if (!payload || !Array.isArray(payload.metrics)) return payload;
-  const seedMetrics: any[] = SEED[type]?.metrics || [];
+  const seedMetrics: any[] = seedFor(type)?.metrics || [];
   const labelByKey: Record<string, string> = {};
   for (const m of seedMetrics) if (m && m.key != null && m.label != null) labelByKey[m.key] = m.label;
   payload.metrics = payload.metrics.map((m: any) =>
@@ -39,8 +49,8 @@ function overlaySeedLabels(type: Dataset, payload: any): any {
 export async function loadDatasets(): Promise<DatasetsResponse> {
   const [d, o] = await Promise.all([readJson(JSON_KEY.defects), readJson(JSON_KEY.opstd)]);
   return {
-    defects: d ? overlaySeedLabels("defects", d) : SEED.defects,
-    opstd: o ? overlaySeedLabels("opstd", o) : SEED.opstd,
+    defects: d ? overlaySeedLabels("defects", d) : seedFor("defects"),
+    opstd: o ? overlaySeedLabels("opstd", o) : seedFor("opstd"),
     uploaded: { defects: !!d, opstd: !!o },
   };
 }
@@ -64,7 +74,7 @@ export async function resetDataset(type: Dataset): Promise<void> {
 export async function datasetWorkbook(type: Dataset): Promise<Buffer> {
   const stored = await getStorage().read(XLSX_KEY[type]);
   if (stored) return stored;
-  return buildWorkbook(type, SEED[type]);
+  return buildWorkbook(type, seedFor(type));
 }
 
 export function statsFor(type: Dataset, payload: any): { periods: number; branches: number } {
@@ -75,7 +85,7 @@ export function statsFor(type: Dataset, payload: any): { periods: number; branch
  *  the bundled seed (cloned so callers can safely mutate it when merging in new rows). */
 export async function loadDatasetPayload(type: Dataset): Promise<any> {
   const stored = await readJson(JSON_KEY[type]);
-  return stored ? overlaySeedLabels(type, stored) : structuredClone(SEED[type]);
+  return stored ? overlaySeedLabels(type, stored) : structuredClone(seedFor(type));
 }
 
 /** Persist a merged payload as the live dataset (JSON for the app + a regenerated

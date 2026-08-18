@@ -17,6 +17,7 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import type { Role } from "./auth";
+import { isDemo, DEMO_DOMAIN, DEMO_SUPERVISOR_EMAILS } from "./demo";
 
 export interface MsConfig {
   clientId: string;
@@ -126,14 +127,20 @@ function emailList(name: string): string[] {
     .filter((e) => e.includes("@"));
 }
 
-// The supervisor(s). Overridable via SUPERVISOR_EMAILS; defaults to Sanchia Henry.
+// The supervisor(s). Overridable via SUPERVISOR_EMAILS; in a demo deployment the
+// default is the fictional demo supervisor, otherwise the real roster default.
 function supervisorEmails(): string[] {
   const configured = emailList("SUPERVISOR_EMAILS");
-  return configured.length ? configured : ["sanchia.henry@myvmgroup.com"];
+  if (configured.length) return configured;
+  return isDemo() ? DEMO_SUPERVISOR_EMAILS : ["sanchia.henry@myvmgroup.com"];
 }
 
+// The company email domain that resolves to "inspector" via SSO. Overridable via
+// ALLOWED_EMAIL_DOMAIN; defaults to the fictional demo domain in demo mode so no
+// real company domain is referenced, otherwise the real one.
 function companyDomain(): string {
-  return (process.env.ALLOWED_EMAIL_DOMAIN ?? "myvmgroup.com").trim().toLowerCase().replace(/^@/, "");
+  const fallback = isDemo() ? DEMO_DOMAIN : "myvmgroup.com";
+  return (process.env.ALLOWED_EMAIL_DOMAIN ?? fallback).trim().toLowerCase().replace(/^@/, "");
 }
 
 // Map a verified email to a role. Returns null if the person isn't a company

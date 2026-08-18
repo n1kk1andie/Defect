@@ -110,6 +110,16 @@ async function validPlatformJwt(token: string | undefined): Promise<boolean> {
 }
 
 export async function proxy(req: NextRequest) {
+  // Demo bootstrap. A demo deployment (DEMO_MODE=1) must be able to seed its own
+  // isolated store before any user exists — so open ONLY the /api/demo/* routes,
+  // and ONLY in demo mode. Those routes are themselves gated (assertDemoSafe).
+  // Inert in production, where DEMO_MODE is unset. The demo is otherwise reached
+  // exactly like production — via the (demo) Command Center's platform session,
+  // verified against PLATFORM_JWKS_URL below.
+  if ((process.env.DEMO_MODE || "").trim() === "1" && req.nextUrl.pathname.startsWith("/api/demo/")) {
+    return NextResponse.next();
+  }
+
   // Command Center server-to-server read of /api/data: the shared feed token, or
   // the Bearer platform JWT it sends. Either keeps the synthesis feed alive.
   const feed = (process.env.PULSE_FEED_TOKEN || "").trim();

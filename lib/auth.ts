@@ -11,6 +11,7 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { getStorage } from "@/lib/storage";
+import { assertDemoSafe, demoPassword, demoUsers } from "@/lib/demo";
 
 export const SESSION_COOKIE = "vmbs_session";
 const MAX_AGE = 60 * 60 * 12; // 12h
@@ -247,6 +248,48 @@ export async function getSession(now: number): Promise<Session | null> {
 
 export async function isAdmin(now: number): Promise<boolean> {
   return (await getSession(now))?.role === "admin";
+}
+
+// ---- Demo login seeding (DEMO_MODE only) ----
+
+/** DEMO ONLY. Plant the pre-activated demo logins so the isolated demo store is
+ *  ready to sign into without any per-role env configuration. Writes each blob
+ *  ONCE (never a per-record loop): the admin password, the shared inspector +
+ *  supervisor role passwords, and the named role accounts — all set to the demo
+ *  password. Double-gated by assertDemoSafe(): inert (throws) outside DEMO_MODE. */
+export async function seedDemoLogins(): Promise<{ username: string; role: Role; branch: string | null; password: string }[]> {
+  assertDemoSafe();
+  const pw = demoPassword();
+  const store = getStorage();
+  const now = new Date().toISOString();
+
+  // 1) Admin password (built-in "admin" login) — one write.
+  const admin = makeHash(pw);
+  const adminCred: StoredCredential = { alg: "scrypt", salt: admin.salt, hash: admin.hash, updatedAt: now };
+
+  // 2) Shared role passwords for inspector + supervisor — one write, both roles.
+  const rolePw: Partial<Record<Role, StoredCredential>> = {};
+  for (const role of ROLE_LOGIN_ROLES) {
+    const { salt, hash } = makeHash(pw);
+    rolePw[role] = { alg: "scrypt", salt, hash, updatedAt: now };
+  }
+
+  // 3) Named role accounts — one write for the whole array.
+  const accounts: Account[] = demoUsers().map((u) => {
+    const { salt, hash } = makeHash(u.password);
+    return { username: u.username, role: u.role, alg: "scrypt", salt, hash, branch: u.branch, createdAt: now };
+  });
+
+  await Promise.all([
+    store.write(CRED_BLOB, Buffer.from(JSON.stringify(adminCred), "utf8"), "application/json"),
+    store.write(ROLE_PW_BLOB, Buffer.from(JSON.stringify(rolePw), "utf8"), "application/json"),
+    writeAccounts(accounts),
+  ]);
+
+  return [
+    { username: "admin", role: "admin", branch: null, password: pw },
+    ...demoUsers().map((u) => ({ username: u.username, role: u.role, branch: u.branch, password: u.password })),
+  ];
 }
 
 export const sessionCookieOptions = {
