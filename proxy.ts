@@ -72,7 +72,13 @@ async function validSession(token: string | undefined): Promise<boolean> {
 }
 
 // ── Command Center platform JWT (RS256, verified via JWKS) ────────────────────
-const JWKS_URL = (process.env.PLATFORM_JWKS_URL || "").trim() || "https://executive.pulsus.tech/api/jwks";
+// A DEMO deployment must not verify against PRODUCTION's keys. The demo Command
+// Center holds its OWN signing key (its own blob store), so a token it mints can
+// never validate against executive.pulsus.tech's JWKS — the launcher hand-off
+// silently fails and every app shows its signed-out gate. Default to the demo
+// hub's JWKS when DEMO_MODE=1; PLATFORM_JWKS_URL still overrides both.
+const JWKS_URL = (process.env.PLATFORM_JWKS_URL || "").trim() ||
+  ((process.env.DEMO_MODE || "").trim() === "1" ? "https://demo-executive.pulsus.tech/api/jwks" : "https://executive.pulsus.tech/api/jwks");
 const PLATFORM_JWT_ISSUER = "pulsus-command-center";
 let jwksCache: Array<Record<string, string>> | null = null;
 let jwksAt = 0;
