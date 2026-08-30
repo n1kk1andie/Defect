@@ -85,7 +85,15 @@ export const DEMO_DOMAIN = "demo.pulsus.tech";
 
 /** The shared demo password. Overridable via env for a private demo. */
 export function demoPassword(): string {
-  return (process.env.DEMO_PASSWORD || "PulsusDemo!2026").trim();
+  // .trim() alone is not enough. A value pasted into a Vercel environment
+  // variable often arrives WRAPPED IN QUOTES, and a quoted password is a
+  // different string from the one a person types — so the variable looks
+  // correct on the dashboard while every sign-in is rejected. Three apps in
+  // the suite already stripped quotes here (ASU, Talent, Communique); the
+  // rest did not, which is why a demo password could work in one app and
+  // fail in another with the same variable set.
+  return (process.env.DEMO_PASSWORD || "").trim().replace(/^["']+|["']+$/g, "").trim()
+    || "PulsusDemo!2026";
 }
 
 /** Fictional branches — replace the real VMBS roster in demo mode. */
