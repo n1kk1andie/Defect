@@ -82,6 +82,19 @@ export const DEMO_BRANCHES = ["Harbour", "Riverside", "Parkway", "Summit", "Cros
 /** The fictional demo supervisor(s) for SSO role resolution (see lib/msauth.ts). */
 export const DEMO_SUPERVISOR_EMAILS = [`supervisor@${DEMO_DOMAIN}`];
 
+/**
+ * The universal demo administrator — the one address that is admin in every
+ * Pulsus demo app, so a walkthrough never changes credentials mid-flow.
+ *
+ * This app signs in by USERNAME, not email, and already has a built-in "admin"
+ * login. Rather than invent a parallel account, checkLogin() accepts this
+ * address as a synonym for "admin" in demo mode (see lib/auth.ts), so the same
+ * string a visitor types into every other Pulsus demo also works here.
+ */
+export function demoAdminEmail(): string {
+  return `admin@${DEMO_DOMAIN}`;
+}
+
 export interface DemoUserDef {
   username: string;
   name: string;

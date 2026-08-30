@@ -11,7 +11,7 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { getStorage } from "@/lib/storage";
-import { assertDemoSafe, demoPassword, demoUsers } from "@/lib/demo";
+import { assertDemoSafe, demoPassword, demoUsers, isDemo, demoAdminEmail } from "@/lib/demo";
 
 export const SESSION_COOKIE = "vmbs_session";
 const MAX_AGE = 60 * 60 * 12; // 12h
@@ -222,8 +222,15 @@ export async function checkLogin(username: string, password: string): Promise<{ 
   const uname = normUser(username);
   const pw = (password || "").trim();
 
+  // Blank and "admin" both mean the built-in admin login. In a demo, so does the
+  // universal Pulsus administrator address — this app signs in by username, so
+  // without this the one credential that works everywhere else is rejected here
+  // as an unknown account.
+  const wantsBuiltInAdmin =
+    !uname || uname === "admin" || (isDemo() && uname === normUser(demoAdminEmail()));
+
   // Named account (may itself be an admin account created in-app).
-  if (uname && uname !== "admin") {
+  if (!wantsBuiltInAdmin) {
     const acct = (await readAccounts()).find((a) => a.username === uname);
     if (!acct) return null;
     return safeEqual(hashPassword(pw, acct.salt), acct.hash) ? { role: acct.role, username: acct.username, branch: acct.branch } : null;
