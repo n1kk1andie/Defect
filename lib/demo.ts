@@ -40,6 +40,19 @@ export function assertDemoSafe(): void {
   if (!isDemo()) {
     throw new Error("Refusing: DEMO_MODE is not enabled (this is not a demo deployment).");
   }
+  // A Vercel deployment that INHERITS another project's environment must never
+  // seed. A branch preview of the production project carries production's
+  // BLOB_READ_WRITE_TOKEN, and this app's demo writes to the same storage keys
+  // production reads — so DEMO_MODE=1 on such a preview would overwrite live
+  // data. VERCEL_ENV is "production" on a dedicated demo project's own
+  // deployment and "preview" on a branch build, which is exactly the line.
+  if ((process.env.VERCEL_ENV || "").trim() === "preview") {
+    throw new Error(
+      "Refusing: this is a PREVIEW deployment, which inherits its project's " +
+      "environment — including the blob token of whatever project it belongs to. " +
+      "Seed only from a dedicated demo project's own deployment.",
+    );
+  }
 }
 
 /** The fictional institution the demo tenant represents. */
