@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { initTracker } from "@/lib/engine";
+import DemoBadge from "@/components/DemoBadge";
 
 type Session = { role: "inspector" | "supervisor" | "admin"; username: string; branch: string | null } | null;
 
@@ -27,6 +28,7 @@ export default function TrackerApp({ datasets, initialSession, ssoEnabled }: { d
             <div className="brand" style={{ fontSize: 18, fontWeight: 700 }}>Pulsus <span style={{ color: "var(--red)" }}>Quality</span></div>
             <div className="sub" style={{ fontWeight: 500 }} id="appbar-sub">Branch Defects</div>
           </div>
+          <DemoBadge />
           <span className="srcbadge live" id="src-badge">Loading…</span>
           <button className="lockbtn" id="export-btn" title="Download data (CSV, Excel, PDF)" aria-label="Download data">
             <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">

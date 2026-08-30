@@ -197,3 +197,7 @@ table.reg tbody tr.total td { font-weight:800; background:#FAF7F5; border-top:2p
   .app { max-width:1020px; }
   .grid-cats { grid-template-columns:1fr 1fr 1fr; }
 }
+
+/* Demo deployments mark themselves so a fictional dataset is never mistaken for
+   the real one. Rendered by <DemoBadge/>; inert in production. */
+.srcbadge.demo { color: #fff; background: #0B7; border-color: #0B7; }

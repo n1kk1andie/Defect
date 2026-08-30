@@ -21,8 +21,15 @@ const securityHeaders = [
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
 ];
 
+// Mirror the server-only DEMO_MODE into a build-inlined public flag so client
+// components can tell they are running in a demo — the header badge reads it.
+// One env var (DEMO_MODE=1 on the demo Vercel project) drives everything;
+// production never sets it, so this is always "" there.
+const DEMO_MODE = (process.env.DEMO_MODE || "").trim() === "1" ? "1" : "";
+
 const nextConfig = {
   reactStrictMode: true,
+  env: { NEXT_PUBLIC_DEMO_MODE: DEMO_MODE },
   // xlsx is CommonJS; keep it external to the server bundle so it loads cleanly.
   serverExternalPackages: ["xlsx"],
   async headers() {
