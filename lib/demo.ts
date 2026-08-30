@@ -153,6 +153,12 @@ function rng(seed: number): () => number {
 const between = (r: () => number, lo: number, hi: number) => lo + r() * (hi - lo);
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/** Summit's index in DEMO_BRANCHES, and the period its decline begins — see the
+ *  note in buildDemoDefects. Resolved from the data so a reordering cannot leave
+ *  the story pointing at the wrong branch. */
+const SUMMIT = DEMO_BRANCHES.indexOf("Summit");
+const APR_2026 = ((seedDefects as any).periods as string[]).indexOf("2026-04-01");
+
 function buildDemoDefects() {
   const periods: string[] = (seedDefects as any).periods;
   const areas: string[] = (seedDefects as any).areas;
@@ -166,11 +172,22 @@ function buildDemoDefects() {
         const reviewed = Math.round(between(r, 12, 40));
         const instances = reviewed * Math.round(between(r, 14, 24));
         // Mostly low defect rates, with the occasional elevated month for variety.
-        const rate = r() < 0.15 ? between(r, 0.05, 0.11) : between(r, 0.004, 0.05);
+        //
+        // Except at Summit from April 2026. The branch lost power on 8 April
+        // (Pulsus Tech records the UPS failure) and fell back to manual
+        // processing across every area; the fallbacks were never withdrawn. So
+        // its defect rate steps up and its resolution rate drops from that month
+        // on — the same branch Cash shows an unreconciled till at, and Risk has
+        // two overdue findings against. A demo should show one story from several
+        // angles, not six unrelated sets of noise.
+        const degraded = bi === SUMMIT && pi >= APR_2026;
+        const rate = degraded
+          ? between(r, 0.07, 0.14)
+          : r() < 0.15 ? between(r, 0.05, 0.11) : between(r, 0.004, 0.05);
         const defects = Math.round(instances * rate);
         const resolvable = defects;
-        const resolved = Math.round(defects * between(r, 0.7, 1));
-        const recurring = Math.round(defects * between(r, 0, 0.2));
+        const resolved = Math.round(defects * (degraded ? between(r, 0.45, 0.7) : between(r, 0.7, 1)));
+        const recurring = Math.round(defects * (degraded ? between(r, 0.15, 0.35) : between(r, 0, 0.2)));
         rows.push([pi, bi, ai, reviewed, instances, defects, resolvable, resolved, recurring]);
       }
     }
