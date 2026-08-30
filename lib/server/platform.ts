@@ -59,9 +59,29 @@ let jwksAt = 0;
 async function jwksKeys(): Promise<Array<Record<string, string>>> {
   const now = Date.now();
   if (jwksCache && now - jwksAt < 5 * 60 * 1000) return jwksCache;
-  const r = await fetch(JWKS_URL, { cache: "no-store" });
-  if (!r.ok) throw new Error("jwks " + r.status);
-  jwksCache = ((await r.json()).keys as Array<Record<string, string>>) || [];
+  // A demo must not be lockable-out by a stale PLATFORM_JWKS_URL. That variable
+  // exists to tell this app where the Command Center is, and when it named a host
+  // serving no JWKS the launcher hand-off failed silently: the session cookie was
+  // valid, nothing could verify it, and every tile showed "Licence Required" with
+  // no way to tell why from the outside.
+  //
+  // So in demo mode collect keys from the configured endpoint AND from the known
+  // demo hub, and accept a token that verifies against either. A wrong variable
+  // then costs an extra fetch instead of the whole suite. Production is untouched:
+  // one endpoint, exactly as configured, no widening of trust.
+  const urls = [JWKS_URL];
+  const hub = "https://demo-executive.pulsus.tech/api/jwks";
+  if ((process.env.DEMO_MODE || "").trim() === "1" && !urls.includes(hub)) urls.push(hub);
+  const keys: Array<Record<string, string>> = [];
+  for (const u of urls) {
+    try {
+      const r = await fetch(u, { cache: "no-store" });
+      if (!r.ok) continue;
+      for (const k of (((await r.json()).keys as Array<Record<string, string>>) || [])) keys.push(k);
+    } catch { /* try the next endpoint */ }
+  }
+  if (!keys.length) throw new Error("jwks unavailable");
+  jwksCache = keys;
   jwksAt = now;
   return jwksCache;
 }
