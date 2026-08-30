@@ -20,6 +20,7 @@
 // step with cash/lib/server/demo.ts and Ops/lib/demo.ts.
 
 import type { Role } from "./auth";
+import { demoNamespacingActive } from "./storage";
 import seedDefects from "./seed-defects.json";
 import seedOpstd from "./seed-opstd.json";
 import type { Dataset } from "./xlsx";
@@ -30,11 +31,16 @@ export function isDemo(): boolean {
 }
 
 /**
- * Hard guard for any demo seeding operation. Throws unless DEMO_MODE=1. This app
- * addresses Blob by fixed keys (no single STORAGE_BLOB name to namespace), so
- * isolation is provided by the demo being a distinct Vercel project + Blob store
- * + SESSION_SECRET rather than by a key prefix — the isDemo() gate is what keeps
- * seeding out of production.
+ * Hard guard for any demo seeding operation. Throws unless DEMO_MODE=1 AND demo
+ * key namespacing is in force.
+ *
+ * The note that used to sit here said this app "addresses Blob by fixed keys (no
+ * single STORAGE_BLOB name to namespace)", and concluded that being a distinct
+ * project + store + secret was isolation enough. Fixed keys were the reason to
+ * namespace, not a reason not to: they are production's keys exactly, so a demo
+ * project handed a production Blob token wrote straight onto live data, and the
+ * only thing standing in the way was that the token had been set correctly by
+ * hand. lib/storage.ts now prefixes every key with "demo/" instead.
  */
 export function assertDemoSafe(): void {
   if (!isDemo()) {
@@ -51,6 +57,12 @@ export function assertDemoSafe(): void {
       "Refusing: this is a PREVIEW deployment, which inherits its project's " +
       "environment — including the blob token of whatever project it belongs to. " +
       "Seed only from a dedicated demo project's own deployment.",
+    );
+  }
+  if (!demoNamespacingActive()) {
+    throw new Error(
+      "Refusing: demo key namespacing is not in effect, so a write could land on " +
+        "a production key. Check storageKey() in lib/storage.ts.",
     );
   }
 }

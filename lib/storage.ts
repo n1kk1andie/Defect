@@ -25,6 +25,47 @@ export function vercelBlobToken(): string | undefined {
   return undefined;
 }
 
+// ── Demo namespacing ─────────────────────────────────────────────────────────
+// A demo deployment writes every object under a reserved "demo/" prefix. This
+// lives in the storage layer so it covers every call site — the seeder, the
+// uploaded datasets and the admin credential alike — and so a caller added
+// later inherits it without having to know it exists.
+//
+// It exists because DEMO_MODE alone is not isolation. The demo projects share
+// their repos with production, and a demo project handed a production Blob
+// token would otherwise write onto production's exact keys. The VERCEL_ENV
+// preview guard does not catch that: a dedicated demo project reports
+// "production". This does.
+//
+// isDemo() is inlined rather than imported so the storage layer keeps no
+// dependencies of its own.
+const DEMO_PREFIX = "demo/";
+
+function demoDeployment(): boolean {
+  return (process.env.DEMO_MODE || "").trim() === "1";
+}
+
+/** The key a given logical key resolves to on this deployment. */
+export function storageKey(key: string): string {
+  if (!demoDeployment()) return key;
+  return key.startsWith(DEMO_PREFIX) ? key : DEMO_PREFIX + key;
+}
+
+/** True when demo namespacing is actually in force. */
+export function demoNamespacingActive(): boolean {
+  return !demoDeployment() || storageKey("probe") === DEMO_PREFIX + "probe";
+}
+
+function withDemoNamespace(driver: StorageDriver): StorageDriver {
+  if (!demoDeployment()) return driver;
+  return {
+    name: driver.name,
+    read: (key) => driver.read(storageKey(key)),
+    write: (key, buf, contentType) => driver.write(storageKey(key), buf, contentType),
+    remove: (key) => driver.remove(storageKey(key)),
+  };
+}
+
 const vercelDriver: StorageDriver = {
   name: "vercel-blob",
   async read(key) {
@@ -63,8 +104,11 @@ const localDriver: StorageDriver = {
   async write(key, buf) {
     const fs = await import("node:fs/promises");
     const path = await import("node:path");
-    await fs.mkdir(localDir(), { recursive: true });
-    await fs.writeFile(path.join(localDir(), key), buf);
+    const file = path.join(localDir(), key);
+    // dirname(), not localDir(): a namespaced key ("demo/x.json") is a
+    // subdirectory, and writeFile does not create one.
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(file, buf);
   },
   async remove(key) {
     const fs = await import("node:fs/promises");
@@ -74,7 +118,7 @@ const localDriver: StorageDriver = {
 };
 
 export function getStorage(): StorageDriver {
-  return vercelBlobToken() ? vercelDriver : localDriver;
+  return withDemoNamespace(vercelBlobToken() ? vercelDriver : localDriver);
 }
 
 /** Whether writes will actually persist. Local dev writes to disk fine; on Vercel the
