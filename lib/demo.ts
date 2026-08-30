@@ -19,6 +19,18 @@
 // is unchanged; only the *customer* identity and data are fictional. Kept in
 // step with cash/lib/server/demo.ts and Ops/lib/demo.ts.
 
+// THE SHARED DEMO WORLD — every Pulsus demo is the same fictional institution,
+// Meridian Building Society, because a visitor moves between apps from the
+// Command Center. Take names from the canon rather than inventing new ones:
+//
+//   Branches  Harbour · Riverside · Parkway · Summit · Crossroads · Gateway
+//   People    Alex Morgan (admin, everywhere) · Taylor Reid · Jordan Blake
+//             Sam Foster · Robin Ellis · Sam Quinn · Riley Chen · Drew Salazar
+//   Domain    demo.pulsus.tech        Refs  MBS-…
+//
+// The full reference, including the three org axes and what NOT to reuse, is
+// DEMO-WORLD.md in the Command Center repo (Ops).
+
 import type { Role } from "./auth";
 import { demoNamespacingActive } from "./storage";
 import seedDefects from "./seed-defects.json";
