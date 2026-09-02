@@ -34,12 +34,13 @@ export interface AdminPerson {
 /**
  * Platform super-admins (Command Center SSO everywhere), as supplied by the COO.
  * Emails follow first.last@myvmgroup.com except where the directory differs
- * (Odelia Miller-Downer signs in as odelia.miller@).
+ * (Odelia Miller-Downer signs in as odelia.downer-miller@ — note the halves are
+ * the other way round from her display name).
  */
 export const ADMINS: AdminPerson[] = [
   { email: "nexus@tumblehillholdings.com", name: "Nexus", role: "Owner" },
   { email: "nicola.anderson@myvmgroup.com", name: "Nicola Anderson", role: "Owner (COO)" },
-  { email: "odelia.miller@myvmgroup.com", name: "Odelia Miller-Downer", role: "Executive" },
+  { email: "odelia.downer-miller@myvmgroup.com", name: "Odelia Miller-Downer", role: "Executive" },
   { email: "lesa.robinson@myvmgroup.com", name: "Lesa Robinson", role: "Executive" },
   // Supplied as addresses only — names derived from the address, role unstated.
   { email: "carlton.brown@myvmgroup.com", name: "Carlton Brown" },
