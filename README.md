@@ -61,12 +61,26 @@ Set these in Vercel (see `.env.example`):
 |---|---|
 | `SESSION_SECRET` | **Required.** Signs the session cookie. `openssl rand -base64 32`. |
 | `ADMIN_PASSWORD` | **Optional.** Password for the Settings page. Overrides the built-in default (`pa55w0rd`) when set. |
+| `ADMIN_EMAILS` | **Optional.** Extra addresses that may unlock admin as themselves, unioned with the roster in `config/admins.ts`. |
 | `BLOB_READ_WRITE_TOKEN` | Injected automatically when you connect a Vercel Blob store. |
 
 Sign-in works out of the box with the built-in default password `pa55w0rd` — no
 env var or Vercel setup required. Override it with `ADMIN_PASSWORD`, or change it
 in-app (Settings → Admin password); the new scrypt hash is persisted to storage
 and takes precedence over both the env var and the default.
+
+### Named administrators
+
+`config/admins.ts` lists the people who may unlock admin with the account they
+are already signed in as, instead of typing the shared password — the admin
+sign-in offers them "Continue as <name>". The same roster, word for word, lives
+in the sibling Pulsus apps (`My-Risk/config/admins.ts`, `VM/config/admins.js`),
+so the same people are administrators everywhere. Edit the file and redeploy.
+
+Being on the roster is permission to *ask*, not admin: nothing is granted until
+the person presses the button, the address is read from their verified session
+rather than anything the browser sends, and `resolveRole()` still never returns
+`admin`, so signing in with Microsoft does not by itself make anyone one.
 
 ## Develop
 

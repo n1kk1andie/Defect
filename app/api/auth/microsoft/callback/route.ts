@@ -60,7 +60,10 @@ export async function GET(req: NextRequest) {
   const res = NextResponse.redirect(url);
   res.cookies.set(
     SESSION_COOKIE,
-    createSessionToken(Date.now(), { role, username, branch: null }),
+    // Carry the verified address on the session: it is what lets a named
+    // administrator later continue as themselves (lib/auth.ts canElevate). The
+    // role here is still whatever resolveRole says, which is never "admin".
+    createSessionToken(Date.now(), { role, username, branch: null, email }),
     sessionCookieOptions,
   );
   res.cookies.set(OAUTH_COOKIE, "", { path: "/", maxAge: 0 });

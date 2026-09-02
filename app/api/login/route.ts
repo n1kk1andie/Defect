@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { adminConfigured, checkLogin, checkRoleLogin, createSessionToken, getSession, isRole, Role, SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth";
+import { adminConfigured, canElevate, checkLogin, checkRoleLogin, createSessionToken, getSession, isRole, Role, SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth";
 import { resolveRole } from "@/lib/msauth";
 import { PLATFORM_COOKIE, verifyPlatformJwt } from "@/lib/server/platform";
 
@@ -21,17 +21,22 @@ export async function GET() {
   // (never broadening access; NEVER admin) — and mint the SAME signed session
   // cookie the normal sign-in issues. Seamless: no second sign-in. Additive: the
   // existing role/admin/Microsoft logins are untouched.
-  let bootstrap: { role: Role; username: string; branch: string | null } | null = null;
+  let bootstrap: { role: Role; username: string; branch: string | null; email: string | null } | null = null;
   if (!s) {
     const platformCookie = cookies().get(PLATFORM_COOKIE)?.value;
     const email = await verifyPlatformJwt(platformCookie);
     const role = email ? resolveRole(email) : null;
     if (email && role) {
       const username = email.split("@")[0];
-      bootstrap = { role, username, branch: null };
-      s = { role, username, branch: null, exp: now };
+      bootstrap = { role, username, branch: null, email };
+      s = { role, username, branch: null, email, exp: now };
     }
   }
+
+  // Whether this person may unlock admin as themselves (config/admins.ts). Note
+  // this is reported, never applied: the bootstrap above still resolves a role
+  // through resolveRole, which never returns "admin".
+  const elevate = await canElevate(now);
 
   const res = NextResponse.json({
     signedIn: !!s,
@@ -40,6 +45,8 @@ export async function GET() {
     branch: s?.branch ?? null,
     admin: s?.role === "admin",
     configured: await adminConfigured(),
+    canElevate: elevate.ok,
+    elevateAs: elevate.ok ? elevate.name || elevate.email : null,
   });
   if (bootstrap) {
     res.cookies.set(SESSION_COOKIE, createSessionToken(now, bootstrap), sessionCookieOptions);
@@ -56,6 +63,20 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   let body: any = {};
   try { body = await req.json(); } catch { /* empty */ }
+
+  // Continue as yourself: a named administrator (config/admins.ts) unlocks the
+  // admin screens with the identity their session already proves, no password.
+  // The address is read from the verified session/platform cookie — never from
+  // this body — so it cannot be claimed on someone else's behalf.
+  if (body?.via === "account") {
+    const elevate = await canElevate(Date.now());
+    if (!elevate.ok) {
+      return NextResponse.json({ ok: false, error: "This account can't unlock admin." }, { status: 403 });
+    }
+    const session = { role: "admin" as Role, username: elevate.name || elevate.email || "admin", branch: null, email: elevate.email };
+    cookies().set(SESSION_COOKIE, createSessionToken(Date.now(), session), sessionCookieOptions);
+    return NextResponse.json({ ok: true, role: session.role, username: session.username, branch: session.branch });
+  }
 
   // Role login.
   if (isRole(body?.role) && body.role !== "admin") {

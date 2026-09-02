@@ -11,6 +11,8 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { getStorage } from "@/lib/storage";
+import { adminEmails, findAdmin } from "@/config/admins";
+import { PLATFORM_COOKIE, verifyPlatformJwt } from "@/lib/server/platform";
 
 export const SESSION_COOKIE = "vmbs_session";
 const MAX_AGE = 60 * 60 * 12; // 12h
@@ -27,8 +29,12 @@ export type Role = "inspector" | "supervisor" | "admin";
 export const ROLES: Role[] = ["inspector", "supervisor", "admin"];
 export function isRole(x: unknown): x is Role { return typeof x === "string" && (ROLES as string[]).includes(x); }
 
-/** A decoded, verified session — who is signed in and what they may do. */
-export interface Session { role: Role; username: string; branch: string | null; exp: number; }
+/** A decoded, verified session — who is signed in and what they may do.
+ *  `email` is the proven address when one is known (Microsoft sign-in, or the
+ *  Command Center bootstrap); null for a role/password sign-in, which proves a
+ *  password and a typed name but no address. It is carried so a named
+ *  administrator can later continue as themselves — see canElevate below. */
+export interface Session { role: Role; username: string; branch: string | null; email: string | null; exp: number; }
 
 /** The effective admin password from env, falling back to the built-in default. */
 function envOrDefaultPassword(): string {
@@ -49,9 +55,16 @@ function secret(): string {
 function b64url(s: string): string { return Buffer.from(s).toString("base64url"); }
 function sign(payload: string): string { return createHmac("sha256", secret()).update(payload).digest("base64url"); }
 
-/** Mint a signed session token carrying the account's role, username and branch. */
-export function createSessionToken(now: number, session: { role: Role; username: string; branch: string | null }): string {
-  const body = b64url(JSON.stringify({ role: session.role, user: session.username, branch: session.branch ?? null, exp: now + MAX_AGE * 1000 }));
+/** Mint a signed session token carrying the account's role, username, branch and
+ *  — when the sign-in proved one — the person's email. */
+export function createSessionToken(now: number, session: { role: Role; username: string; branch: string | null; email?: string | null }): string {
+  const body = b64url(JSON.stringify({
+    role: session.role,
+    user: session.username,
+    branch: session.branch ?? null,
+    email: session.email ? String(session.email).trim().toLowerCase() : null,
+    exp: now + MAX_AGE * 1000,
+  }));
   return `${body}.${sign(body)}`;
 }
 function safeEqual(a: string, b: string): boolean {
@@ -70,7 +83,13 @@ export function readSessionToken(token: string | undefined, now: number): Sessio
   try {
     const p = JSON.parse(Buffer.from(body, "base64url").toString());
     if (!isRole(p.role) || typeof p.exp !== "number" || p.exp <= now) return null;
-    return { role: p.role, username: typeof p.user === "string" ? p.user : p.role, branch: typeof p.branch === "string" ? p.branch : null, exp: p.exp };
+    return {
+      role: p.role,
+      username: typeof p.user === "string" ? p.user : p.role,
+      branch: typeof p.branch === "string" ? p.branch : null,
+      email: typeof p.email === "string" ? p.email : null,
+      exp: p.exp,
+    };
   } catch { return null; }
 }
 
@@ -245,6 +264,37 @@ export function getSession(now: number): Session | null {
 
 export function isAdmin(now: number): boolean {
   return getSession(now)?.role === "admin";
+}
+
+// ── Continuing as yourself ───────────────────────────────────────────────────
+// A named administrator (config/admins.ts, plus the ADMIN_EMAILS env list) can
+// unlock the admin screens with the identity already proven for their session,
+// rather than typing the shared admin password. This is the SAME door Pulsus Risk
+// and Pulsus Ops offer, so the roster the COO supplied means the same thing in
+// all three apps.
+//
+// resolveRole() in lib/msauth.ts is untouched and still never returns "admin":
+// signing in with Microsoft does not make anyone an administrator. Elevation is a
+// separate, deliberate act, and it is refused for everyone off the roster.
+
+/** The caller's proven email: the Command Center platform session first (it is
+ *  the launcher people actually arrive through), else an email recorded on this
+ *  app's own session by a Microsoft sign-in. Null for a role/password sign-in. */
+export async function signedInEmail(now: number): Promise<string | null> {
+  const fromPlatform = await verifyPlatformJwt(cookies().get(PLATFORM_COOKIE)?.value);
+  if (fromPlatform) return fromPlatform;
+  return getSession(now)?.email ?? null;
+}
+
+/** May the caller unlock admin as themselves, without the shared password? */
+export async function canElevate(now: number): Promise<{ ok: boolean; email: string | null; name: string | null }> {
+  const email = await signedInEmail(now);
+  if (!email) return { ok: false, email: null, name: null };
+  const person = findAdmin(email);
+  if (person) return { ok: true, email, name: person.name };
+  // ADMIN_EMAILS is deployment config, so it carries no display name.
+  if (adminEmails().includes(email)) return { ok: true, email, name: null };
+  return { ok: false, email, name: null };
 }
 
 export const sessionCookieOptions = {
