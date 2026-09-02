@@ -5,13 +5,13 @@ import { initTracker } from "@/lib/engine";
 
 type Session = { role: "inspector" | "supervisor" | "admin"; username: string; branch: string | null } | null;
 
-export default function TrackerApp({ datasets, initialSession, ssoEnabled, elevateAs }: { datasets: any; initialSession: Session; ssoEnabled?: boolean; elevateAs?: string | null }) {
+export default function TrackerApp({ datasets, initialSession, ssoEnabled, elevateAs, signedInAs }: { datasets: any; initialSession: Session; ssoEnabled?: boolean; elevateAs?: string | null; signedInAs?: string | null }) {
   const started = useRef(false);
   const [helpOpen, setHelpOpen] = useState(false);
   useEffect(() => {
     if (started.current) return; // guard StrictMode / re-mounts
     started.current = true;
-    const teardown = initTracker({ datasets, initialSession, ssoEnabled, elevateAs });
+    const teardown = initTracker({ datasets, initialSession, ssoEnabled, elevateAs, signedInAs });
     return () => { started.current = false; teardown && teardown(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

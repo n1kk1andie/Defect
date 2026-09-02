@@ -20,6 +20,7 @@ export default async function Page() {
       initialSession={initialSession}
       ssoEnabled={ssoEnabled()}
       elevateAs={elevate.ok ? elevate.name || elevate.email : null}
+      signedInAs={elevate.email}
     />
   );
 }
