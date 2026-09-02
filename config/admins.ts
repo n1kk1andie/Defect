@@ -33,14 +33,21 @@ export interface AdminPerson {
 
 /**
  * Platform super-admins (Command Center SSO everywhere), as supplied by the COO.
- * Emails follow first.last@myvmgroup.com except where the directory differs
- * (Odelia Miller-Downer signs in as odelia.downer-miller@ — note the halves are
- * the other way round from her display name).
+ * Emails follow first.last@myvmgroup.com, hyphenated surnames included, so
+ * Odelia Miller-Downer is odelia.miller-downer@. Nexus is the one entry off that
+ * pattern, on the tumblehillholdings.com domain.
+ *
+ * These addresses must match what the Command Center asserts in its session token,
+ * which is the only identity this roster is ever compared against. Odelia's was
+ * carried here wrong twice — first odelia.miller@, then the halves reversed — and
+ * each time the only visible symptom was a password prompt, because a roster miss
+ * and a wrong password looked identical. Verify a new entry against
+ * /api/whoami rather than the directory or a display name.
  */
 export const ADMINS: AdminPerson[] = [
   { email: "nexus@tumblehillholdings.com", name: "Nexus", role: "Owner" },
   { email: "nicola.anderson@myvmgroup.com", name: "Nicola Anderson", role: "Owner (COO)" },
-  { email: "odelia.downer-miller@myvmgroup.com", name: "Odelia Miller-Downer", role: "Executive" },
+  { email: "odelia.miller-downer@myvmgroup.com", name: "Odelia Miller-Downer", role: "Executive" },
   { email: "lesa.robinson@myvmgroup.com", name: "Lesa Robinson", role: "Executive" },
   // Supplied as addresses only — names derived from the address, role unstated.
   { email: "carlton.brown@myvmgroup.com", name: "Carlton Brown" },
