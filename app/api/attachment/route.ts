@@ -3,11 +3,12 @@ import { randomUUID } from "node:crypto";
 import { getSession } from "@/lib/auth";
 import { getStorage, storageIsDurable } from "@/lib/storage";
 import { attachmentOwnerOrVisible } from "@/lib/submissions";
+import { actionAttachmentVisible } from "@/lib/actions";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// Audit sample-findings attachments for submissions.
+// Audit sample-findings attachments for submissions, and closure evidence for actions.
 //  • POST (multipart, field "file"): store the bytes privately, return { id, name, size, type }.
 //    The reference is later saved onto the submission via /api/submissions.
 //  • GET ?id=<id>: stream the file back to anyone allowed to see it (the uploader, or a
@@ -60,8 +61,9 @@ export async function GET(req: NextRequest) {
   let meta: AttachMeta;
   try { meta = JSON.parse(metaBuf.toString("utf8")); } catch { return NextResponse.json({ ok: false, error: "Not found." }, { status: 404 }); }
 
-  // Access: the uploader always; otherwise anyone who can see a submission carrying this id.
-  const allowed = meta.owner === s.username || (await attachmentOwnerOrVisible(s, id));
+  // Access: the uploader always; otherwise anyone who can see a submission or an
+  // action (closure evidence) carrying this id.
+  const allowed = meta.owner === s.username || (await attachmentOwnerOrVisible(s, id)) || (await actionAttachmentVisible(s, id));
   if (!allowed) return NextResponse.json({ ok: false, error: "You can’t access this attachment." }, { status: 403 });
 
   const buf = await store.read(blobKey(id));

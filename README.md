@@ -25,6 +25,14 @@ authentication.
   1–5 scale and the 2025+ A–D scale).
 - **Heatmap** — Branch × Month, switchable across each dataset's metrics.
 - **Register** — per-branch (or per-process-area) table, sortable, with totals.
+- **Actions** (officers, supervisors, admins) — the corrective-action register.
+  A supervisor raises an action against a branch (optionally one process area)
+  with a priority, owner and due date — from **+ New action**, or **Raise action**
+  on any defect list. The branch's officers mark it in progress, then submit it
+  with a closure note and evidence files. A *different* supervisor verifies and
+  closes it, or sends it back with a note; a closed action can be reopened.
+  Overdue actions are flagged, officers see only their own branch, and every step
+  is kept in the action's audit trail.
 - **Settings** (admin) — download/upload the dataset workbook and change the
   admin password.
 
@@ -49,6 +57,11 @@ May 2025, and empty future placeholder months are excluded from trends.
   / sign out. A valid password is exchanged for an httpOnly, signed session cookie.
 - **`POST /api/password`** (admin) — change the admin password (scrypt-hashed and
   persisted to Blob; takes precedence over the fallback).
+- **`GET /api/actions` · `POST /api/actions`** — list the corrective actions the
+  session may see; `op` = `create` / `edit` (supervisor, admin), `start` /
+  `submit` (the branch's officers or a supervisor), `verify` / `return` /
+  `reopen` (supervisor, admin — never the submitter), `delete` (admin). Persisted
+  to Blob as `actions.json`; rules live in `lib/actions.ts`.
 
 Storage adapter (`lib/storage.ts`): **Vercel Blob** when `BLOB_READ_WRITE_TOKEN`
 is present (production), otherwise a local `./.data` folder for `next dev`.
@@ -107,11 +120,12 @@ python3 scripts/convert_opstd.py Operational_Standards_Consolidated.xlsx > lib/s
 ```
 app/
   layout.tsx · page.tsx · globals.css     # shell, fonts, server-loaded initial data
-  api/{data,file,upload,login,logout,password}/route.ts
+  api/{data,file,upload,login,logout,password,actions}/route.ts
 components/TrackerApp.tsx                  # client shell; mounts the render engine
 lib/
   engine.js                               # UI rendering (Pulse/Heatmap/Register/Settings)
   storage.ts · auth.ts · data.ts · xlsx.ts
+  actions.ts                              # corrective actions: lifecycle + permissions
   seed-defects.json · seed-opstd.json
 scripts/convert.py · convert_opstd.py      # xlsx → seed JSON
 ```
