@@ -14,6 +14,7 @@
 // Edge-safe: the session cookie is checked with Web Crypto using the same secret
 // and payload as lib/auth.ts.
 import { NextRequest, NextResponse } from "next/server";
+import { licenseWallActive, licenseWallResponse } from "./lib/licenseWall";
 
 const SESSION_COOKIE = "vmbs_session";
 const PLATFORM_COOKIE = "exec_auth";
@@ -108,7 +109,15 @@ async function validPlatformJwt(token: string | undefined): Promise<boolean> {
   } catch { return false; }
 }
 
+// What stays public while the licence holds: the sign-in page and endpoints.
+const PUBLIC_PATH = /^\/(?:login|api\/login|api\/logout|api\/auth)(?:\/|$)/;
+
 export async function middleware(req: NextRequest) {
+  // The licence wall for this deployment's own tenant. Quality is not yet open to
+  // customer companies, so while the wall is up every request gets the notice —
+  // its own sign-in included.
+  if (licenseWallActive()) return licenseWallResponse(req.nextUrl.pathname);
+  if (PUBLIC_PATH.test(req.nextUrl.pathname)) return NextResponse.next();
   // Command Center server-to-server read of /api/data: the shared feed token, or
   // the Bearer platform JWT it sends. Either keeps the synthesis feed alive.
   const feed = (process.env.PULSE_FEED_TOKEN || "").trim();
@@ -139,5 +148,5 @@ export async function middleware(req: NextRequest) {
 // Protect everything except the sign-in page, the sign-in/SSO endpoints, Next
 // internals, and static files (any path with a dot — images, favicon, etc.).
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|login|api/login|api/logout|api/auth|.*\\.).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.).*)"],
 };
