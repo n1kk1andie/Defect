@@ -7,7 +7,7 @@ import { storageIsDurable } from "@/lib/storage";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const NO_STORAGE = "Couldn’t save: the app’s storage isn’t connected. An admin needs to connect a Vercel Blob store to this project and redeploy.";
+const NO_STORAGE = "Couldn’t save: the app’s storage isn’t connected. An admin needs to connect storage to this app and redeploy.";
 
 // Reset a dataset back to the bundled seed: POST /api/upload?reset=defects|opstd
 async function handleReset(req: NextRequest) {
