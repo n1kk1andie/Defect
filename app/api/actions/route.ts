@@ -5,7 +5,7 @@ import { createAction, deleteAction, editAction, listActionsForSession, stepActi
 
 export const dynamic = "force-dynamic";
 
-const NO_STORAGE = "Couldn’t save: the app’s storage isn’t connected. An admin needs to connect a Vercel Blob store to this project and redeploy.";
+const NO_STORAGE = "Couldn’t save: the app’s storage isn’t connected. An admin needs to connect storage to this app and redeploy.";
 const STEPS: ActionStep[] = ["start", "submit", "verify", "return", "reopen"];
 
 // Corrective actions. Every call needs a signed-in session; lib/actions enforces who may

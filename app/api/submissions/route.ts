@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 // Shown when the server can't persist a write — almost always because no Vercel Blob
 // store is connected to the project (so there's no writable storage on the serverless FS).
-const NO_STORAGE = "Couldn’t save: the app’s storage isn’t connected. An admin needs to connect a Vercel Blob store to this project and redeploy.";
+const NO_STORAGE = "Couldn’t save: the app’s storage isn’t connected. An admin needs to connect storage to this app and redeploy.";
 
 // Inspector submissions + supervisor review. Every action requires a signed-in session;
 // the submissions layer enforces who may see, edit and review each record.
