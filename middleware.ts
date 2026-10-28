@@ -241,5 +241,7 @@ export async function middleware(req: NextRequest) {
 // Protect everything except the sign-in page, the sign-in/SSO endpoints, Next
 // internals, and static files (any path with a dot — images, favicon, etc.).
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.).*)"],
+  // /api/:path* is listed on its own so the gate (which strips forged x-pulsus-*
+  // headers) also runs on API paths that contain a dot.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.).*)", "/api/:path*"],
 };
