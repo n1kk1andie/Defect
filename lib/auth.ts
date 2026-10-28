@@ -13,6 +13,8 @@ import { cookies } from "next/headers";
 import { getStorage } from "@/lib/storage";
 import { adminEmails, findAdmin } from "@/config/admins";
 import { PLATFORM_COOKIE, verifyPlatformJwt } from "@/lib/server/platform";
+import { currentCompany } from "@/lib/company";
+import { companyRole, loadProgram } from "@/lib/program";
 
 export const SESSION_COOKIE = "vmbs_session";
 const MAX_AGE = 60 * 60 * 12; // 12h
@@ -264,6 +266,19 @@ export function getSession(now: number): Session | null {
 
 export function isAdmin(now: number): boolean {
   return getSession(now)?.role === "admin";
+}
+
+/** The session a request works under. A Pulsus company member's comes from their
+ *  verified company session and the company's program (never from this app's own
+ *  sign-in cookie or passwords); everyone else's is this app's own sign-in. Null
+ *  means signed out — or, for a company viewer, read-only. */
+export async function requestSession(now: number): Promise<Session | null> {
+  const c = currentCompany();
+  if (!c) return getSession(now);
+  if (!c.email) return null;
+  const r = companyRole(c, await loadProgram());
+  if (!r) return null;
+  return { role: r.role, username: c.email, branch: r.unit, email: c.email, exp: now + MAX_AGE * 1000 };
 }
 
 // ── Continuing as yourself ───────────────────────────────────────────────────

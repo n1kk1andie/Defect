@@ -7,6 +7,11 @@
 // Vercel's filesystem is read-only/ephemeral, so uploads must go to object storage
 // (Vercel Blob) to survive cold starts. Blobs are PRIVATE; reads use a short-lived
 // presigned GET URL.
+//
+// A Pulsus company's objects live under its own folder (companies/<id>/), so no
+// request made with a company session can read or write another's — or this
+// deployment's own — data.
+import { currentScope } from "@/lib/company";
 
 export interface StorageDriver {
   name: "vercel-blob" | "local-fs";
@@ -63,7 +68,7 @@ const localDriver: StorageDriver = {
   async write(key, buf) {
     const fs = await import("node:fs/promises");
     const path = await import("node:path");
-    await fs.mkdir(localDir(), { recursive: true });
+    await fs.mkdir(path.dirname(path.join(localDir(), key)), { recursive: true });
     await fs.writeFile(path.join(localDir(), key), buf);
   },
   async remove(key) {
@@ -74,7 +79,15 @@ const localDriver: StorageDriver = {
 };
 
 export function getStorage(): StorageDriver {
-  return vercelBlobToken() ? vercelDriver : localDriver;
+  const base = vercelBlobToken() ? vercelDriver : localDriver;
+  const scope = currentScope();
+  if (!scope) return base;
+  return {
+    name: base.name,
+    read: (key) => base.read(scope + key),
+    write: (key, buf, contentType) => base.write(scope + key, buf, contentType),
+    remove: (key) => base.remove(scope + key),
+  };
 }
 
 /** Whether writes will actually persist. Local dev writes to disk fine; on Vercel the

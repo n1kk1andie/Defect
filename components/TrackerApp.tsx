@@ -5,13 +5,15 @@ import { initTracker } from "@/lib/engine";
 
 type Session = { role: "inspector" | "supervisor" | "admin"; username: string; branch: string | null } | null;
 
-export default function TrackerApp({ datasets, initialSession, ssoEnabled, elevateAs, signedInAs }: { datasets: any; initialSession: Session; ssoEnabled?: boolean; elevateAs?: string | null; signedInAs?: string | null }) {
+type Company = { name: string; email: string; role: string; manager: boolean };
+
+export default function TrackerApp({ datasets, initialSession, ssoEnabled, elevateAs, signedInAs, company, program }: { datasets: any; initialSession: Session; ssoEnabled?: boolean; elevateAs?: string | null; signedInAs?: string | null; company?: Company; program?: any }) {
   const started = useRef(false);
   const [helpOpen, setHelpOpen] = useState(false);
   useEffect(() => {
     if (started.current) return; // guard StrictMode / re-mounts
     started.current = true;
-    const teardown = initTracker({ datasets, initialSession, ssoEnabled, elevateAs, signedInAs });
+    const teardown = initTracker({ datasets, initialSession, ssoEnabled, elevateAs, signedInAs, company, program });
     return () => { started.current = false; teardown && teardown(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -61,7 +63,7 @@ export default function TrackerApp({ datasets, initialSession, ssoEnabled, eleva
         <div className="tabbar" id="tabbar" />
       </div>
     </div>
-    {helpOpen && <AboutHowTo onClose={() => setHelpOpen(false)} />}
+    {helpOpen && <AboutHowTo company={!!company} onClose={() => setHelpOpen(false)} />}
     <div id="modal-root" />
     </>
   );
@@ -69,7 +71,7 @@ export default function TrackerApp({ datasets, initialSession, ssoEnabled, eleva
 
 /** About & How-To-Use panel. Self-contained (inline-styled) so it renders
  *  consistently regardless of the app's stylesheet. */
-function AboutHowTo({ onClose }: { onClose: () => void }) {
+function AboutHowTo({ onClose, company = false }: { onClose: () => void; company?: boolean }) {
   const accent = "var(--red, #c8102e)";
   return (
     <div
@@ -95,17 +97,35 @@ function AboutHowTo({ onClose }: { onClose: () => void }) {
 
         <div style={{ padding: "18px 20px", overflowY: "auto" }}>
           <h3 style={{ margin: "0 0 6px", fontSize: 15, color: accent }}>About Pulsus Quality</h3>
+          {company ? (
+          <p style={{ margin: "0 0 10px", lineHeight: 1.55, fontSize: 14 }}>
+            Pulsus Quality runs your quality-assurance reviews. Reviewers sample items in each of your units and test them
+            against your own checklists; every failed check is a defect. Supervisors approve reviews before they count, and
+            corrective actions are tracked to closure — so adherence to your policies and procedures is measured, not assumed.
+          </p>
+          ) : (
           <p style={{ margin: "0 0 10px", lineHeight: 1.55, fontSize: 14 }}>
             Pulsus Quality is the branch-defects and operational-standard monitor for the network. It gives inspectors,
             supervisors and management one live view of outstanding branch defects and operational-standard checks —
             what&rsquo;s open, where, and for how long — so issues are tracked to closure rather than lost in email.
           </p>
+          )}
           <p style={{ margin: "0 0 16px", lineHeight: 1.55, fontSize: 13, color: "#475569" }}>
             Pulsus Quality is part of the Pulsus platform, licensed by Tumblehill Holdings Limited. For support or
             licensing, contact <a href="mailto:support@pulsus.tech" style={{ color: accent }}>support@pulsus.tech</a>.
           </p>
 
           <h3 style={{ margin: "0 0 8px", fontSize: 15, color: accent }}>How to use</h3>
+          {company ? (
+          <ol style={{ margin: 0, paddingLeft: 20, lineHeight: 1.55, fontSize: 14, display: "grid", gap: 8 }}>
+            <li><strong>Access.</strong> Open Pulsus Quality from Pulsus. Your company role sets what you can do: owners and admins run everything, editors key reviews (or approve them, if listed as a supervisor), viewers read the dashboards.</li>
+            <li><strong>Set up (owners &amp; admins).</strong> Under Settings, list your units and process areas, and each area&rsquo;s checklist with a severity per check.</li>
+            <li><strong>Review (reviewers).</strong> On Entry, pick the unit and date, then add each sampled item and mark every check Pass, Fail or N/A. Submit when done.</li>
+            <li><strong>Approve (supervisors).</strong> On Review, check the work and approve it — or return it with a note.</li>
+            <li><strong>Act.</strong> Raise corrective actions from any defect; the unit works them, and a different supervisor verifies and closes them.</li>
+            <li><strong>Read &amp; export.</strong> Pulse, Register, History, Insights and Report show defect rates, resolution and repeat findings; the download icon exports CSV, Excel or PDF.</li>
+          </ol>
+          ) : (
           <ol style={{ margin: 0, paddingLeft: 20, lineHeight: 1.55, fontSize: 14, display: "grid", gap: 8 }}>
             <li><strong>Access.</strong> Open Pulsus Quality from the Pulsus Command Center (your Enterprise Launcher). Your role — inspector, supervisor or admin — sets what you can do.</li>
             <li><strong>Choose a view.</strong> Use the toggle under the header to switch between <em>Branch Defects</em> (issues raised against individual branches) and <em>Operational Standard</em> (the operational-standard checks).</li>
@@ -114,6 +134,7 @@ function AboutHowTo({ onClose }: { onClose: () => void }) {
             <li><strong>Review &amp; sign off (Supervisors).</strong> Check what inspectors raise and confirm closures.</li>
             <li><strong>Export.</strong> Use the download icon in the header to export the current data as CSV, Excel or PDF.</li>
           </ol>
+          )}
         </div>
 
         <div style={{ padding: "12px 20px", borderTop: "1px solid #e5e7eb", textAlign: "right" }}>
