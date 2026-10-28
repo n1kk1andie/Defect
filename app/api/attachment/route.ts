@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { getSession } from "@/lib/auth";
+import { requestSession } from "@/lib/auth";
 import { getStorage, storageIsDurable } from "@/lib/storage";
 import { attachmentOwnerOrVisible } from "@/lib/submissions";
 import { actionAttachmentVisible } from "@/lib/actions";
@@ -23,7 +23,7 @@ const metaKey = (id: string) => `attachment-${id}.json`;
 interface AttachMeta { name: string; type: string; size: number; owner: string; }
 
 export async function POST(req: NextRequest) {
-  const s = getSession(Date.now());
+  const s = await requestSession(Date.now());
   if (!s) return NextResponse.json({ ok: false, error: "Sign in required." }, { status: 401 });
   if (s.role === "supervisor") return NextResponse.json({ ok: false, error: "Supervisors review submissions; they don’t key them." }, { status: 403 });
   if (!storageIsDurable()) return NextResponse.json({ ok: false, error: "Couldn’t upload: the app’s storage isn’t connected. An admin needs to connect a Vercel Blob store to this project and redeploy." }, { status: 503 });
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const s = getSession(Date.now());
+  const s = await requestSession(Date.now());
   if (!s) return NextResponse.json({ ok: false, error: "Sign in required." }, { status: 401 });
 
   const id = req.nextUrl.searchParams.get("id") || "";

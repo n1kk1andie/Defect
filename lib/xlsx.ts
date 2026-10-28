@@ -213,17 +213,17 @@ export function parseReviewWorkbook(buf: Buffer, areas: string[], branch?: strin
   return { items, sheets, skipped };
 }
 
-export function buildWorkbook(type: Dataset, payload: any): Buffer {
+export function buildWorkbook(type: Dataset, payload: any, labels?: { unit: string; sheet: string }): Buffer {
   let aoa: any[][], sheetName: string;
   if (type === "defects") {
     const D = payload as DefectsPayload;
-    aoa = [["Year", "Period", "Month", "Branch", "Process Area", "# of Items Reviewed", "# of Possible Instances", "# of Defects", "% Defects", "# of Resolvable Defects", "# of Defects Resolved", "% Defects Resolved", "# of Recurring Defects", "% of Recurring Defects"]];
+    aoa = [["Year", "Period", "Month", labels?.unit || "Branch", "Process Area", "# of Items Reviewed", "# of Possible Instances", "# of Defects", "% Defects", "# of Resolvable Defects", "# of Defects Resolved", "% Defects Resolved", "# of Recurring Defects", "% of Recurring Defects"]];
     D.rows.forEach((r) => {
       const iso = D.periods[r[0]], y = iso.slice(0, 4), mi = parseInt(iso.slice(5, 7), 10) - 1;
       const [, , , rev, inst, def, resv, res, rec] = r;
       aoa.push([y, iso, MON_FULL[mi], D.branches[r[1]], D.areas[r[2]], rev, inst, def, inst ? def / inst : 0, resv, res, resv ? res / resv : 0, rec, def ? rec / def : 0]);
     });
-    sheetName = "Branch Defects 2024-2026";
+    sheetName = labels?.sheet || "Branch Defects 2024-2026";
   } else {
     const O = payload as OpstdPayload;
     aoa = [["Year", "Month", "Branch", ...O.metrics.map((m) => m.key), "Audit Score"]];

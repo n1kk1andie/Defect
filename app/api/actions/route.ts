@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { requestSession } from "@/lib/auth";
 import { storageIsDurable } from "@/lib/storage";
 import { createAction, deleteAction, editAction, listActionsForSession, stepAction, type ActionStep } from "@/lib/actions";
 
@@ -12,13 +12,13 @@ const STEPS: ActionStep[] = ["start", "submit", "verify", "return", "reopen"];
 // see, raise, work and verify each action.
 
 export async function GET() {
-  const s = getSession(Date.now());
+  const s = await requestSession(Date.now());
   if (!s) return NextResponse.json({ ok: false, error: "Sign in required." }, { status: 401 });
   return NextResponse.json({ ok: true, actions: await listActionsForSession(s) });
 }
 
 export async function POST(req: NextRequest) {
-  const s = getSession(Date.now());
+  const s = await requestSession(Date.now());
   if (!s) return NextResponse.json({ ok: false, error: "Sign in required." }, { status: 401 });
   if (!storageIsDurable()) return NextResponse.json({ ok: false, error: NO_STORAGE }, { status: 503 });
   let body: any = {};

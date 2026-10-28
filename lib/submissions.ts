@@ -8,6 +8,8 @@ import { randomUUID } from "node:crypto";
 import { getStorage } from "@/lib/storage";
 import type { Role, Session } from "@/lib/auth";
 import { loadDatasetPayload, persistMergedDataset } from "@/lib/data";
+import { currentCompany } from "@/lib/company";
+import { loadProgram, type CheckWeights, type Program } from "@/lib/program";
 
 const SUBMISSIONS_BLOB = "submissions.json";
 
@@ -82,32 +84,47 @@ export const DEFECT_CHECKS = ["memberVerified", "cardKeyedCMS", "cmsSigMatch", "
 
 // Aggregate register rows for one area into the dataset's count fields.
 function blankAgg() { return { reviewed: 0, instances: 0, defects: 0, resolvable: 0, resolved: 0, recurring: 0 }; }
-function addItem(a: ReturnType<typeof blankAgg>, it: DefectItem) {
+// A checklist item (a company's) offers one opportunity per check performed; this
+// deployment's register counts each transaction as one possible instance.
+function addItem(a: ReturnType<typeof blankAgg>, it: DefectItem, perCheck = false) {
   const d = Math.max(0, Math.round(it.defects || 0));
-  a.reviewed += 1; a.instances += 1; a.defects += d; a.resolvable += d;
+  const inst = perCheck ? Object.values(it.checks || {}).filter((v) => v === "yes" || v === "no").length : 1;
+  a.reviewed += 1; a.instances += inst; a.defects += d; a.resolvable += d;
   if (it.status === "resolved") a.resolved += d;
   if (it.recurring) a.recurring += d;
 }
-/** Per-area aggregates + overall totals + a compliance score, computed from the rows. */
-export function summariseItems(items: DefectItem[]) {
+/** Per-area aggregates + overall totals + a compliance score, computed from the rows.
+ *  Without weights (this deployment's checklist) compliance is the mean pass rate of
+ *  each control; a company's program weighs each check by its severity instead. */
+export function summariseItems(items: DefectItem[], weights?: CheckWeights) {
   const byArea: Record<string, ReturnType<typeof blankAgg>> = {};
   const totals = blankAgg();
   let defectRows = 0;
   const controlPass: Record<string, { yes: number; applicable: number }> = {};
-  DEFECT_CHECKS.forEach((c) => (controlPass[c] = { yes: 0, applicable: 0 }));
+  const keys: string[] = weights ? [] : [...DEFECT_CHECKS];
+  keys.forEach((c) => (controlPass[c] = { yes: 0, applicable: 0 }));
+  let wYes = 0, wApplicable = 0;
   (items || []).forEach((it) => {
     const a = (byArea[it.area] = byArea[it.area] || blankAgg());
-    addItem(a, it); addItem(totals, it);
+    addItem(a, it, !!weights); addItem(totals, it, !!weights);
     if ((it.defects || 0) > 0) defectRows += 1;
-    DEFECT_CHECKS.forEach((c) => { const v = it.checks?.[c]; if (v === "yes" || v === "no") { controlPass[c].applicable += 1; if (v === "yes") controlPass[c].yes += 1; } });
+    if (weights) {
+      for (const [c, v] of Object.entries(it.checks || {})) {
+        if (v !== "yes" && v !== "no") continue;
+        const w = weights[it.area]?.[c] ?? 1;
+        wApplicable += w; if (v === "yes") wYes += w;
+      }
+      return;
+    }
+    keys.forEach((c) => { const v = it.checks?.[c]; if (v === "yes" || v === "no") { controlPass[c].applicable += 1; if (v === "yes") controlPass[c].yes += 1; } });
   });
   const sample = totals.reviewed;
   // Accuracy = share of sampled transactions with no defect. Control compliance = mean
   // pass rate across the applicable control checks. Overall score is their average.
   const accuracy = sample ? (sample - defectRows) / sample : null;
-  const controlRates = DEFECT_CHECKS.map((c) => (controlPass[c].applicable ? controlPass[c].yes / controlPass[c].applicable : null));
+  const controlRates = keys.map((c) => (controlPass[c].applicable ? controlPass[c].yes / controlPass[c].applicable : null));
   const measured = controlRates.filter((r): r is number => r != null);
-  const compliance = measured.length ? measured.reduce((s, r) => s + r, 0) / measured.length : null;
+  const compliance = weights ? (wApplicable ? wYes / wApplicable : null) : measured.length ? measured.reduce((s, r) => s + r, 0) / measured.length : null;
   const score = accuracy != null && compliance != null ? Math.round((accuracy + compliance) / 2 * 100) : accuracy != null ? Math.round(accuracy * 100) : null;
   return { byArea, totals, sample, defectRows, accuracy, compliance, controlRates, score };
 }
@@ -204,20 +221,31 @@ function normaliseEntryDate(raw: unknown): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : new Date().toISOString().slice(0, 10);
 }
 
-function normaliseItem(raw: any): DefectItem | { error: string } {
+function normaliseItem(raw: any, program: Program | null): DefectItem | { error: string } {
   const area = (raw?.area || "").trim();
   if (!area) return { error: "Each reviewed transaction needs a process area." };
-  const defects = Math.max(0, Math.round(Number(raw?.defects) || 0));
+  let defects = Math.max(0, Math.round(Number(raw?.defects) || 0));
   const checks: Record<string, string> = {};
-  DEFECT_CHECKS.forEach((c) => { const v = raw?.checks?.[c]; checks[c] = v === "no" ? "no" : v === "na" ? "na" : "yes"; });
+  const mark = (v: unknown) => (v === "no" ? "no" : v === "na" ? "na" : "yes");
+  if (program) {
+    // A company's item is tested against its own area's checklist; each failed check is a defect.
+    const def = program.areas.find((a) => a.name === area);
+    if (!def) return { error: `“${area}” isn't one of your process areas.` };
+    def.checks.forEach((c) => { checks[c.id] = mark(raw?.checks?.[c.id]); });
+    defects = Object.values(checks).filter((v) => v === "no").length;
+  } else {
+    DEFECT_CHECKS.forEach((c) => { checks[c] = mark(raw?.checks?.[c]); });
+  }
   const status = raw?.status === "resolved" ? "resolved" : "open";
   return { area, txnType: (raw?.txnType || "").trim(), checks, defects, defectArea: (raw?.defectArea || "").trim(), recurring: !!raw?.recurring, status };
 }
 
-function normalise(input: RawInput, session: Session): { ok: true; parsed: Parsed } | { ok: false; error: string } {
-  const dataset = input.dataset === "opstd" ? "opstd" : "defects";
+function normalise(input: RawInput, session: Session, program: Program | null): { ok: true; parsed: Parsed } | { ok: false; error: string } {
+  // A company reviews against its own program; the Operational Standard scorecard is this deployment's.
+  const dataset = input.dataset === "opstd" && !program ? "opstd" : "defects";
   const branch = (input.branch || "").trim();
-  if (!branch) return { ok: false, error: "Choose a branch." };
+  if (!branch) return { ok: false, error: program ? `Choose a ${program.unitLabel.toLowerCase()}.` : "Choose a branch." };
+  if (program && !program.units.includes(branch)) return { ok: false, error: `“${branch}” isn't one of your ${program.unitPlural.toLowerCase()}.` };
   // Branch is chosen on the form (a dropdown), so officers may key for any branch —
   // the assigned branch is only the default selection, not a restriction.
   const period = (input.period || "").trim();
@@ -231,7 +259,7 @@ function normalise(input: RawInput, session: Session): { ok: true; parsed: Parse
     if (!rawItems.length) return { ok: false, error: "Add at least one reviewed transaction." };
     const items: DefectItem[] = [];
     for (const r of rawItems) {
-      const it = normaliseItem(r);
+      const it = normaliseItem(r, program);
       if ("error" in it) return { ok: false, error: it.error };
       if (it.defects > 0 && !it.defectArea) return { ok: false, error: "Name the defect area for each transaction with a defect." };
       items.push(it);
@@ -266,7 +294,7 @@ function findById(list: Submission[], id: string): Submission | undefined { retu
  *  (after validation). Only the owning inspector (or an admin) may edit a submission,
  *  and only while it is a draft or returned. */
 export async function saveSubmission(session: Session, input: RawInput & { id?: string; submit?: boolean }): Promise<{ ok: true; submission: Submission } | { ok: false; error: string; status?: number }> {
-  const norm = normalise(input, session);
+  const norm = normalise(input, session, currentCompany() ? await loadProgram() : null);
   if (!norm.ok) return { ok: false, error: norm.error, status: 400 };
   const list = await readAll();
   const now = new Date().toISOString();
@@ -386,8 +414,16 @@ function ensurePeriod(payload: any, iso: string): number {
   return k;
 }
 
-/** Merge one approved submission into its dataset payload and persist it. */
+/** A company's published reviews — its dashboards are computed from these. */
+export async function publishedSubmissions(): Promise<Submission[]> {
+  return (await readAll()).filter((s) => s.status === "published");
+}
+
+/** Merge one approved submission into its dataset payload and persist it. A
+ *  company's dashboards are computed live from its published reviews, so there is
+ *  nothing to merge for one. */
 async function publishToDataset(sub: Submission): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (currentCompany()) return { ok: true };
   const payload = await loadDatasetPayload(sub.dataset);
   const bi = payload.branches.indexOf(sub.branch);
   if (bi < 0) return { ok: false, error: "Unknown branch “" + sub.branch + "” for this dataset." };
