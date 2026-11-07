@@ -167,6 +167,46 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 const SUMMIT = DEMO_BRANCHES.indexOf("Summit");
 const APR_2026 = ((seedDefects as any).periods as string[]).indexOf("2026-04-01");
 
+/**
+ * Bump whenever the fictional dataset changes shape or figures. It is stamped
+ * into each demo payload's meta, and lib/data.ts ignores (in demo mode only) a
+ * stored copy that carries a different stamp — so a demo store holding an older
+ * build's payload serves the current figures instead of freezing the old ones.
+ */
+export const DEMO_SEED_VERSION = 2;
+
+/** The demo's last month of data. The bundled seeds stop at May 2026 (opstd) /
+ *  carry empty months to Dec 2026 (defects); the demo runs through October 2026
+ *  so the Command Center's history has no blank Quality months. */
+const DEMO_LAST_PERIOD = "2026-10-01";
+
+/** Monthly periods from the seed's list, extended (first-of-month ISO strings)
+ *  through DEMO_LAST_PERIOD. Existing periods keep their indices, so every
+ *  pre-existing demo figure is unchanged. */
+function demoPeriods(seedPeriods: string[]): string[] {
+  const out = seedPeriods.slice();
+  let [y, m] = out[out.length - 1].split("-").map(Number);
+  while (out[out.length - 1] < DEMO_LAST_PERIOD) {
+    m += 1; if (m > 12) { m = 1; y += 1; }
+    out.push(`${y}-${String(m).padStart(2, "0")}-01`);
+  }
+  return out;
+}
+
+/**
+ * Operational Standard Score targets (mean across branches) for the months
+ * appended after the bundled seed ends. A gentle autumn drift down from the
+ * mid/high 80s of early 2026 — led by Summit, which never recovered from the
+ * April power failure (see buildDemoDefects).
+ */
+const OPSTD_EXTENSION_TARGETS: Record<string, number> = {
+  "2026-06-01": 86.4,
+  "2026-07-01": 85.1,
+  "2026-08-01": 83.6,
+  "2026-09-01": 82.2,
+  "2026-10-01": 80.7,
+};
+
 function buildDemoDefects() {
   const periods: string[] = (seedDefects as any).periods;
   const areas: string[] = (seedDefects as any).areas;
@@ -176,6 +216,10 @@ function buildDemoDefects() {
   for (let pi = 0; pi < periods.length; pi++) {
     for (let bi = 0; bi < branches.length; bi++) {
       for (let ai = 0; ai < areas.length; ai++) {
+        // The seed's period list runs to Dec 2026; months after the demo's last
+        // month are carried empty (as the bundled seed does) so "latest data"
+        // reads October 2026 rather than a month that has not happened yet.
+        if (periods[pi] > DEMO_LAST_PERIOD) { rows.push([pi, bi, ai, 0, 0, 0, 0, 0, 0]); continue; }
         const r = rng(pi * 100000 + bi * 1000 + ai * 7 + 11);
         const reviewed = Math.round(between(r, 12, 40));
         const instances = reviewed * Math.round(between(r, 14, 24));
@@ -203,6 +247,7 @@ function buildDemoDefects() {
   return {
     meta: {
       source: "demo-branch-defects.xlsx",
+      demoSeedVersion: DEMO_SEED_VERSION,
       columns,
       note: "Fully fictional demo dataset for Meridian Building Society. Percentages are recomputed from raw counts in-app.",
     },
@@ -214,7 +259,8 @@ function buildDemoDefects() {
 }
 
 function buildDemoOpstd() {
-  const periods: string[] = (seedOpstd as any).periods;
+  const seedPeriodCount = ((seedOpstd as any).periods as string[]).length;
+  const periods: string[] = demoPeriods((seedOpstd as any).periods);
   const metrics = (seedOpstd as any).metrics;
   const columns: string[] = (seedOpstd as any).meta.columns;
   const branches = DEMO_BRANCHES;
@@ -238,10 +284,24 @@ function buildDemoOpstd() {
       if (year <= 2024) auditRaw.push([4, 5, 5, 4, 3][Math.floor(r() * 5)]);
       else auditRaw.push([100, 80, 100, 60, 80][Math.floor(r() * 5)]);
     }
+    // Months appended beyond the bundled seed: reshape this month's scores so
+    // the branch mean lands on its target, with Summit trailing the network.
+    if (pi >= seedPeriodCount) {
+      const target = OPSTD_EXTENSION_TARGETS[periods[pi]];
+      const month = rows.slice(rows.length - branches.length);
+      const spread = rng(pi * 7919 + 3);
+      const raw = month.map((row, bi) => bi === SUMMIT ? -9 - spread() * 3 : (spread() - 0.5) * 9);
+      const mean = raw.reduce((a, b) => a + b, 0) / raw.length;
+      month.forEach((row, bi) => {
+        row[2] = round2(Math.min(99, Math.max(55, target + raw[bi] - mean)));
+        if (bi === SUMMIT) row[10] = round2(Math.min(row[10] as number, 62 + spread() * 8));
+      });
+    }
   }
   return {
     meta: {
       source: "demo-operational-standards.xlsx",
+      demoSeedVersion: DEMO_SEED_VERSION,
       columns,
       note: "Fully fictional demo dataset for Meridian Building Society. 0–100 performance scores; higher is better.",
       auditGradeMap: (seedOpstd as any).meta.auditGradeMap,
