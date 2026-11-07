@@ -5,7 +5,7 @@ import { getStorage } from "@/lib/storage";
 import { buildWorkbook, type Dataset } from "@/lib/xlsx";
 import seedDefects from "@/lib/seed-defects.json";
 import seedOpstd from "@/lib/seed-opstd.json";
-import { isDemo, buildDemoDataset } from "@/lib/demo";
+import { isDemo, buildDemoDataset, DEMO_SEED_VERSION } from "@/lib/demo";
 
 const JSON_KEY: Record<Dataset, string> = { defects: "defects.json", opstd: "opstd.json" };
 const XLSX_KEY: Record<Dataset, string> = { defects: "defects.xlsx", opstd: "opstd.xlsx" };
@@ -23,7 +23,13 @@ function seedFor(type: Dataset): any {
 async function readJson(key: string): Promise<any | null> {
   const buf = await getStorage().read(key);
   if (!buf) return null;
-  try { return JSON.parse(buf.toString("utf8")); } catch { return null; }
+  let parsed: any;
+  try { parsed = JSON.parse(buf.toString("utf8")); } catch { return null; }
+  // Demo only: a stored payload built from an older fictional seed (no stamp, or
+  // a different DEMO_SEED_VERSION) is stale — serve the current demo seed instead.
+  // Production never takes this branch.
+  if (isDemo() && parsed && parsed.meta?.demoSeedVersion !== DEMO_SEED_VERSION) return null;
+  return parsed;
 }
 
 export interface DatasetsResponse {
@@ -58,6 +64,9 @@ export async function loadDatasets(): Promise<DatasetsResponse> {
 /** Persist an uploaded dataset (JSON for the app + xlsx for re-download). */
 export async function saveDataset(type: Dataset, payload: any, workbook: Buffer): Promise<void> {
   const store = getStorage();
+  // Demo only: stamp the current fictional-seed version so readJson() keeps
+  // serving this write (an unstamped/older one is treated as stale).
+  if (isDemo() && payload) payload.meta = { ...(payload.meta || {}), demoSeedVersion: DEMO_SEED_VERSION };
   await Promise.all([
     store.write(JSON_KEY[type], Buffer.from(JSON.stringify(payload), "utf8"), "application/json"),
     store.write(XLSX_KEY[type], workbook, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
@@ -72,6 +81,8 @@ export async function resetDataset(type: Dataset): Promise<void> {
 
 /** The workbook for download: the stored upload if present, else generated from the seed. */
 export async function datasetWorkbook(type: Dataset): Promise<Buffer> {
+  // Demo: the stored workbook is only current while its JSON is (see readJson).
+  if (isDemo() && !(await readJson(JSON_KEY[type]))) return buildWorkbook(type, seedFor(type));
   const stored = await getStorage().read(XLSX_KEY[type]);
   if (stored) return stored;
   return buildWorkbook(type, seedFor(type));
