@@ -15,18 +15,18 @@
 //     bundled VMBS seed workbooks) is swapped for a fully fictional variant when
 //     isDemo() — see buildDemoDataset() below, lib/data.ts and lib/msauth.ts.
 //
-// The fictional tenant is "Meridian Building Society". Pulsus product branding
+// The fictional tenant is "Meridian Society". Pulsus product branding
 // is unchanged; only the *customer* identity and data are fictional. Kept in
 // step with cash/lib/server/demo.ts and Ops/lib/demo.ts.
 
 // THE SHARED DEMO WORLD — every Pulsus demo is the same fictional institution,
-// Meridian Building Society, because a visitor moves between apps from the
+// Meridian Society, because a visitor moves between apps from the
 // Command Center. Take names from the canon rather than inventing new ones:
 //
 //   Branches  Harbour · Riverside · Parkway · Summit · Crossroads · Gateway
 //   People    Alex Morgan (admin, everywhere) · Taylor Reid · Jordan Blake
 //             Sam Foster · Robin Ellis · Sam Quinn · Riley Chen · Drew Salazar
-//   Domain    demo.pulsus.tech        Refs  MBS-…
+//   Domain    demo.pulsus.tech        Refs  MS-…
 //
 // The full reference, including the three org axes and what NOT to reuse, is
 // DEMO-WORLD.md in the Command Center repo (Ops).
@@ -80,7 +80,7 @@ export function assertDemoSafe(): void {
 }
 
 /** The fictional institution the demo tenant represents. */
-export const DEMO_INSTITUTION = "Meridian Building Society";
+export const DEMO_INSTITUTION = "Meridian Society";
 export const DEMO_DOMAIN = "demo.pulsus.tech";
 
 /** The shared demo password. Overridable via env for a private demo. */
@@ -249,7 +249,7 @@ function buildDemoDefects() {
       source: "demo-branch-defects.xlsx",
       demoSeedVersion: DEMO_SEED_VERSION,
       columns,
-      note: "Fully fictional demo dataset for Meridian Building Society. Percentages are recomputed from raw counts in-app.",
+      note: "Fully fictional demo dataset for Meridian Society. Percentages are recomputed from raw counts in-app.",
     },
     periods,
     branches,
@@ -303,7 +303,7 @@ function buildDemoOpstd() {
       source: "demo-operational-standards.xlsx",
       demoSeedVersion: DEMO_SEED_VERSION,
       columns,
-      note: "Fully fictional demo dataset for Meridian Building Society. 0–100 performance scores; higher is better.",
+      note: "Fully fictional demo dataset for Meridian Society. 0–100 performance scores; higher is better.",
       auditGradeMap: (seedOpstd as any).meta.auditGradeMap,
     },
     metrics,
