@@ -12,7 +12,7 @@ const XLSX_KEY: Record<Dataset, string> = { defects: "defects.xlsx", opstd: "ops
 const BUNDLED_SEED: Record<Dataset, any> = { defects: seedDefects, opstd: seedOpstd };
 
 // The seed a fresh/empty store falls back to. In a demo deployment (DEMO_MODE=1)
-// this is a FULLY FICTIONAL dataset (Meridian Building Society) built on the fly,
+// this is a FULLY FICTIONAL dataset (Meridian Society) built on the fly,
 // so the real VMBS branch roster and figures in the bundled JSON are never
 // served. Production is unchanged — it returns the bundled seed. Built per call
 // (cheap, deterministic) so demo mode never mutates a shared object.

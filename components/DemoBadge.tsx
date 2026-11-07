@@ -14,7 +14,7 @@
 export default function DemoBadge() {
   if ((process.env.NEXT_PUBLIC_DEMO_MODE || "") !== "1") return null;
   return (
-    <span className="srcbadge demo" title="Fictional demo data — Meridian Building Society">
+    <span className="srcbadge demo" title="Fictional demo data — Meridian Society">
       Demo
     </span>
   );

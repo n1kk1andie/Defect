@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 // Demo-only. Plants the pre-activated demo logins into this deployment's
 // (isolated) store so it can be signed into without any per-role env config.
 // The fictional dataset itself needs no write — an empty store auto-serves the
-// Meridian Building Society demo data (see lib/data.ts). Double-gated by
+// Meridian Society demo data (see lib/data.ts). Double-gated by
 // assertDemoSafe(): DEMO_MODE=1 required. Inert (404) in production.
 //
 // Optional extra gate: if DEMO_SEED_TOKEN is set, the caller must pass
