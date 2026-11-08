@@ -1,7 +1,7 @@
-# VM Building Society — Branch Defects & Operational Standard Tracker
+# Pulsus Quality — Branch Defects & Operational Standard Tracker
 
-A Next.js app for VMBS branch audit data, styled to match the VMBS Operational
-Risk & Audit app (`n1kk1andie/My-Risk`): Sora + IBM Plex Sans, VM red
+A Next.js app for branch audit data, styled to match Pulsus Risk
+(`n1kk1andie/My-Risk`): Sora + IBM Plex Sans, brand red
 (`#E4012B`), card/hero language, RAG (red/amber/green) status, heatmaps and
 bottom-tab navigation. A top toggle switches between two datasets that share the
 same **Pulse / Heatmap / Register** screens.
@@ -14,8 +14,18 @@ authentication.
 
 | Toggle | Headline metric | Shape |
 |---|---|---|
-| **Branch Defects** | Defect rate (lower is better) | 16 branches × 5 process areas × 36 months |
-| **Operational Standard** | Operational Standard Score (higher is better) | 16 branches × 9 scores × 29 months |
+| **Branch Defects** | Defect rate (lower is better) | branches × process areas × months |
+| **Operational Standard** | Operational Standard Score (higher is better) | branches × 9 scores × months |
+
+### The owner's own institution: `institution/`
+
+Everything that names or identifies this deployment's own institution — its
+name, email domain and default supervisor, named administrators, branch-name
+spellings, the bundled history workbooks (`institution/seed-*.json`) and their
+converters (`institution/scripts/`) — lives in `institution/` and nowhere else.
+It is read on the server only, and only for this deployment's own tenant: a
+Pulsus platform company gets neutral defaults, and a demo build does not compile
+the folder at all.
 
 ### Screens (both datasets)
 
@@ -39,7 +49,7 @@ authentication.
 Global filters (year, branch, and — for Branch Defects — process area) apply
 across all tabs. The header ⤓ button exports the current filtered scope to CSV.
 
-Data-quality handling (see `lib/xlsx.ts` / `scripts/`): the mislabeled `Month`
+Data-quality handling (see `lib/xlsx.ts` / `institution/scripts/`): the mislabeled `Month`
 column is dropped (month derived from `Period`), percentages are recomputed from
 raw counts, the overall Operational Standard Score is shown as untracked before
 May 2025, and empty future placeholder months are excluded from trends.
@@ -84,11 +94,10 @@ and takes precedence over both the env var and the default.
 
 ### Named administrators
 
-`config/admins.ts` lists the people who may unlock admin with the account they
+`institution/index.ts` (`ADMINS`) lists the people who may unlock admin with the account they
 are already signed in as, instead of typing the shared password — the admin
 sign-in offers them "Continue as <name>". The same roster, word for word, lives
-in the sibling Pulsus apps (`My-Risk/config/admins.ts`, `VM/config/admins.js`),
-so the same people are administrators everywhere. Edit the file and redeploy.
+in the sibling Pulsus apps, so the same people are administrators everywhere. Edit the file and redeploy.
 
 Being on the roster is permission to *ask*, not admin: nothing is granted until
 the person presses the button, the address is read from their verified session
@@ -111,8 +120,8 @@ Sign in to Settings with the default password `pa55w0rd`, or set `ADMIN_PASSWORD
 
 ```bash
 pip install openpyxl
-python3 scripts/convert.py       Branch_Defects_Consolidated.xlsx        > lib/seed-defects.json
-python3 scripts/convert_opstd.py Operational_Standards_Consolidated.xlsx > lib/seed-opstd.json
+python3 institution/scripts/convert.py       Branch_Defects_Consolidated.xlsx        > institution/seed-defects.json
+python3 institution/scripts/convert_opstd.py Operational_Standards_Consolidated.xlsx > institution/seed-opstd.json
 ```
 
 ## Structure
@@ -126,6 +135,8 @@ lib/
   engine.js                               # UI rendering (Pulse/Heatmap/Register/Settings)
   storage.ts · auth.ts · data.ts · xlsx.ts
   actions.ts                              # corrective actions: lifecycle + permissions
-  seed-defects.json · seed-opstd.json
-scripts/convert.py · convert_opstd.py      # xlsx → seed JSON
+institution/                               # the owner's own institution (server-only, own tenant only)
+  index.ts                                # name, email domain, supervisors, admin roster, key names
+  data.ts · seed-defects.json · seed-opstd.json
+  scripts/convert.py · convert_opstd.py   # xlsx → seed JSON
 ```

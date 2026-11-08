@@ -4,6 +4,7 @@ import { ssoEnabled } from "@/lib/msauth";
 import { currentCompany, companyManager } from "@/lib/company";
 import { loadProgram } from "@/lib/program";
 import TrackerApp from "@/components/TrackerApp";
+import { INSTITUTION } from "@/institution";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ export default async function Page() {
       datasets={datasets}
       initialSession={initialSession}
       ssoEnabled={ssoEnabled()}
+      storagePrefix={INSTITUTION.storagePrefix}
       elevateAs={elevate.ok ? elevate.name || elevate.email : null}
       signedInAs={elevate.email}
     />

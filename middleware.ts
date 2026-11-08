@@ -4,7 +4,7 @@
 // the server-rendered defect data is never sent to an unauthenticated visitor.
 //
 // A request is allowed through if it carries ONE of:
-//   • a valid Quality session cookie (vmbs_session) — the app's own sign-in;
+//   • a valid Quality session cookie (INSTITUTION.sessionCookie) — the app's own sign-in;
 //   • a valid Command Center platform session (exec_auth cookie, an RS256 JWT
 //     verified against the Command Center's public JWKS) — so a viewer already in
 //     the Command Center opens Quality with no second sign-in;
@@ -15,15 +15,16 @@
 // and payload as lib/auth.ts.
 import { NextRequest, NextResponse } from "next/server";
 import { licenseWallActive, licenseWallResponse } from "./lib/licenseWall";
+import { INSTITUTION } from "@/institution";
 
-const SESSION_COOKIE = "vmbs_session";
+const SESSION_COOKIE = INSTITUTION.sessionCookie;
 const PLATFORM_COOKIE = "exec_auth";
 
 function secret(): string {
   // Matches lib/auth.ts secret() (incl. its built-in default), so a valid session
   // verifies here even before SESSION_SECRET is set — and the built-in admin
   // password still lets someone sign in, so the app is never locked out.
-  return process.env.SESSION_SECRET || "vmbs-dev-secret-change-me";
+  return process.env.SESSION_SECRET || INSTITUTION.devSessionSecret;
 }
 
 // ── base64url + HMAC (must match Node's base64url digest in lib/auth.ts) ──────
@@ -220,10 +221,10 @@ export async function middleware(req: NextRequest) {
 
   // Command Center platform session only — an RS256 JWT verified against the
   // Command Center's public JWKS (asymmetric; unforgeable). The HMAC own-session
-  // (vmbs_session) door is intentionally disabled at the GATE: it is only as strong
+  // (the session cookie) door is intentionally disabled at the GATE: it is only as strong
   // as a shared secret, so the sole browser way past the front door is the hard
   // platform path (plus the machine feed / Bearer above). The in-app role login
-  // still uses vmbs_session at the handler level — Command Center viewers arrive
+  // still uses the session cookie at the handler level — Command Center viewers arrive
   // with exec_auth on every request. Re-enable the validSession check here when
   // Microsoft SSO is turned on AND a real SESSION_SECRET is set.
   if (await validPlatformJwt(req.cookies.get(PLATFORM_COOKIE)?.value)) return forward(req);
