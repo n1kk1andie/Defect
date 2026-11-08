@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { getSession } from "@/lib/auth";
+import { requestSession } from "@/lib/auth";
 import { getStorage, storageIsDurable } from "@/lib/storage";
 import { attachmentOwnerOrVisible } from "@/lib/submissions";
+import { actionAttachmentVisible } from "@/lib/actions";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// Audit sample-findings attachments for submissions.
+// Audit sample-findings attachments for submissions, and closure evidence for actions.
 //  • POST (multipart, field "file"): store the bytes privately, return { id, name, size, type }.
 //    The reference is later saved onto the submission via /api/submissions.
 //  • GET ?id=<id>: stream the file back to anyone allowed to see it (the uploader, or a
@@ -22,10 +23,10 @@ const metaKey = (id: string) => `attachment-${id}.json`;
 interface AttachMeta { name: string; type: string; size: number; owner: string; }
 
 export async function POST(req: NextRequest) {
-  const s = await getSession(Date.now());
+  const s = await requestSession(Date.now());
   if (!s) return NextResponse.json({ ok: false, error: "Sign in required." }, { status: 401 });
   if (s.role === "supervisor") return NextResponse.json({ ok: false, error: "Supervisors review submissions; they don’t key them." }, { status: 403 });
-  if (!storageIsDurable()) return NextResponse.json({ ok: false, error: "Couldn’t upload: the app’s storage isn’t connected. An admin needs to connect a Vercel Blob store to this project and redeploy." }, { status: 503 });
+  if (!storageIsDurable()) return NextResponse.json({ ok: false, error: "Couldn’t upload: the app’s storage isn’t connected. An admin needs to connect storage to this app and redeploy." }, { status: 503 });
 
   let form: FormData;
   try { form = await req.formData(); } catch { return NextResponse.json({ ok: false, error: "Expected a file upload." }, { status: 400 }); }
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const s = await getSession(Date.now());
+  const s = await requestSession(Date.now());
   if (!s) return NextResponse.json({ ok: false, error: "Sign in required." }, { status: 401 });
 
   const id = req.nextUrl.searchParams.get("id") || "";
@@ -60,8 +61,9 @@ export async function GET(req: NextRequest) {
   let meta: AttachMeta;
   try { meta = JSON.parse(metaBuf.toString("utf8")); } catch { return NextResponse.json({ ok: false, error: "Not found." }, { status: 404 }); }
 
-  // Access: the uploader always; otherwise anyone who can see a submission carrying this id.
-  const allowed = meta.owner === s.username || (await attachmentOwnerOrVisible(s, id));
+  // Access: the uploader always; otherwise anyone who can see a submission or an
+  // action (closure evidence) carrying this id.
+  const allowed = meta.owner === s.username || (await attachmentOwnerOrVisible(s, id)) || (await actionAttachmentVisible(s, id));
   if (!allowed) return NextResponse.json({ ok: false, error: "You can’t access this attachment." }, { status: 403 });
 
   const buf = await store.read(blobKey(id));

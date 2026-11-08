@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { requestSession } from "@/lib/auth";
 import { storageIsDurable } from "@/lib/storage";
 import { deleteSubmission, listForSession, resolveDefects, reviewSubmission, saveSubmission } from "@/lib/submissions";
 
@@ -7,19 +7,19 @@ export const dynamic = "force-dynamic";
 
 // Shown when the server can't persist a write — almost always because no Vercel Blob
 // store is connected to the project (so there's no writable storage on the serverless FS).
-const NO_STORAGE = "Couldn’t save: the app’s storage isn’t connected. An admin needs to connect a Vercel Blob store to this project and redeploy.";
+const NO_STORAGE = "Couldn’t save: the app’s storage isn’t connected. An admin needs to connect storage to this app and redeploy.";
 
 // Inspector submissions + supervisor review. Every action requires a signed-in session;
 // the submissions layer enforces who may see, edit and review each record.
 
 export async function GET() {
-  const s = await getSession(Date.now());
+  const s = await requestSession(Date.now());
   if (!s) return NextResponse.json({ ok: false, error: "Sign in required." }, { status: 401 });
   return NextResponse.json({ ok: true, submissions: await listForSession(s), me: { role: s.role, username: s.username, branch: s.branch } });
 }
 
 export async function POST(req: NextRequest) {
-  const s = await getSession(Date.now());
+  const s = await requestSession(Date.now());
   if (!s) return NextResponse.json({ ok: false, error: "Sign in required." }, { status: 401 });
   let body: any = {};
   try { body = await req.json(); } catch { /* empty */ }

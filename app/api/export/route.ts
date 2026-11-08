@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadDatasets } from "@/lib/data";
 import { buildWorkbook, type Dataset } from "@/lib/xlsx";
+import { currentCompany } from "@/lib/company";
+import { loadProgram } from "@/lib/program";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -12,6 +14,8 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const type = sp.get("dataset");
   if (type !== "defects" && type !== "opstd") return NextResponse.json({ error: "Unknown dataset." }, { status: 400 });
+  const company = currentCompany();
+  if (company && type !== "defects") return NextResponse.json({ error: "Unknown dataset." }, { status: 400 });
 
   const from = sp.get("from") || "";
   const to = sp.get("to") || "";
@@ -39,9 +43,10 @@ export async function GET(req: NextRequest) {
     filtered = { ...payload, rows, auditRaw };
   }
 
-  const buf = buildWorkbook(type as Dataset, filtered);
+  const labels = company ? { unit: (await loadProgram()).unitLabel, sheet: "Quality reviews" } : undefined;
+  const buf = buildWorkbook(type as Dataset, filtered, labels);
   const tag = (from ? from.slice(0, 7) : "start") + "_to_" + (to ? to.slice(0, 7) : "end");
-  const name = (type === "defects" ? "Branch_Defects_" : "Operational_Standards_") + tag + ".xlsx";
+  const name = (company ? "Quality_reviews_" : type === "defects" ? "Branch_Defects_" : "Operational_Standards_") + tag + ".xlsx";
   return new NextResponse(new Uint8Array(buf), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

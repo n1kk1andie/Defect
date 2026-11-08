@@ -5,6 +5,6 @@ import { SESSION_COOKIE } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 export async function POST() {
-  (await cookies()).delete(SESSION_COOKIE);
+  cookies().delete(SESSION_COOKIE);
   return NextResponse.json({ ok: true });
 }

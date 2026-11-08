@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { datasetWorkbook } from "@/lib/data";
+import { currentCompany } from "@/lib/company";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -8,8 +9,10 @@ export const runtime = "nodejs";
 export async function GET(req: NextRequest) {
   const type = req.nextUrl.searchParams.get("dataset");
   if (type !== "defects" && type !== "opstd") return NextResponse.json({ error: "Unknown dataset." }, { status: 400 });
+  const company = currentCompany();
+  if (company && type !== "defects") return NextResponse.json({ error: "Unknown dataset." }, { status: 400 });
   const buf = await datasetWorkbook(type);
-  const name = type === "defects" ? "Branch_Defects_Consolidated.xlsx" : "Operational_Standards_Consolidated.xlsx";
+  const name = company ? "Quality_reviews.xlsx" : type === "defects" ? "Branch_Defects_Consolidated.xlsx" : "Operational_Standards_Consolidated.xlsx";
   return new NextResponse(new Uint8Array(buf), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

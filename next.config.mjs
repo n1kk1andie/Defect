@@ -44,11 +44,25 @@ const nextConfig = {
   reactStrictMode: true,
   env: { NEXT_PUBLIC_DEMO_MODE: DEMO_MODE },
   // xlsx is CommonJS; keep it external to the server bundle so it loads cleanly.
-  serverExternalPackages: ["xlsx"],
-  turbopack: { resolveAlias: INSTITUTION_ALIASES },
-  webpack(config) {
+  experimental: { serverComponentsExternalPackages: ["xlsx"] },
+  webpack(config, { webpack }) {
     for (const [from, to] of Object.entries(INSTITUTION_ALIASES)) {
       config.resolve.alias[from + "$"] = path.resolve(here, to);
+    }
+    // On webpack the tsconfig "@/*" paths plugin can resolve "@/institution" before
+    // the alias above is consulted, so also swap the RESOLVED files: any module
+    // that resolves into institution/ is replaced with its demo-institution/ twin.
+    if (DEMO_MODE) {
+      const real = path.resolve(here, "institution") + path.sep;
+      const twin = path.resolve(here, "demo-institution") + path.sep;
+      config.plugins.push(new webpack.NormalModuleReplacementPlugin(/[\\/]institution[\\/]/, (res) => {
+        const d = res.createData;
+        if (d && typeof d.resource === "string" && d.resource.startsWith(real)) {
+          d.resource = twin + d.resource.slice(real.length);
+          if (typeof d.userRequest === "string") d.userRequest = d.resource;
+          if (typeof d.request === "string") d.request = d.request.split(real).join(twin);
+        }
+      }));
     }
     return config;
   },
