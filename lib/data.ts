@@ -3,8 +3,7 @@
 // the bundled seed when nothing has been uploaded.
 import { getStorage } from "@/lib/storage";
 import { buildWorkbook, type Dataset } from "@/lib/xlsx";
-import seedDefects from "@/lib/seed-defects.json";
-import seedOpstd from "@/lib/seed-opstd.json";
+import { seedDefects, seedOpstd } from "@/institution/data";
 import { isDemo, buildDemoDataset, DEMO_SEED_VERSION } from "@/lib/demo";
 
 const JSON_KEY: Record<Dataset, string> = { defects: "defects.json", opstd: "opstd.json" };
@@ -13,8 +12,8 @@ const BUNDLED_SEED: Record<Dataset, any> = { defects: seedDefects, opstd: seedOp
 
 // The seed a fresh/empty store falls back to. In a demo deployment (DEMO_MODE=1)
 // this is a FULLY FICTIONAL dataset (Meridian Society) built on the fly,
-// so the real VMBS branch roster and figures in the bundled JSON are never
-// served. Production is unchanged — it returns the bundled seed. Built per call
+// so the own institution's branch roster and figures are never served (a demo
+// build does not even compile them: next.config.mjs aliases institution/ away). Production is unchanged — it returns the bundled seed. Built per call
 // (cheap, deterministic) so demo mode never mutates a shared object.
 function seedFor(type: Dataset): any {
   return isDemo() ? buildDemoDataset(type) : BUNDLED_SEED[type];

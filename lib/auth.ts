@@ -11,9 +11,11 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { getStorage } from "@/lib/storage";
+import { INSTITUTION } from "@/institution";
+import { appNow } from "@/lib/asOf";
 import { assertDemoSafe, demoPassword, demoUsers, isDemo, demoAdminEmail } from "@/lib/demo";
 
-export const SESSION_COOKIE = "vmbs_session";
+export const SESSION_COOKIE = INSTITUTION.sessionCookie;
 const MAX_AGE = 60 * 60 * 12; // 12h
 const CRED_BLOB = "admin-credentials.json"; // legacy admin password (scrypt)
 const ACCOUNTS_BLOB = "accounts.json"; // inspector / supervisor / extra admin accounts
@@ -91,7 +93,7 @@ async function readStoredCredential(): Promise<StoredCredential | null> {
 
 export async function setPassword(newPassword: string): Promise<void> {
   const { salt, hash } = makeHash(newPassword);
-  const cred: StoredCredential = { alg: "scrypt", salt, hash, updatedAt: new Date().toISOString() };
+  const cred: StoredCredential = { alg: "scrypt", salt, hash, updatedAt: appNow().toISOString() };
   await getStorage().write(CRED_BLOB, Buffer.from(JSON.stringify(cred), "utf8"), "application/json");
 }
 
@@ -127,7 +129,7 @@ export async function setRolePassword(role: Role, newPassword: string): Promise<
   if (!ROLE_LOGIN_ROLES.includes(role)) throw new Error("Not a sign-in role.");
   const store = await readRolePasswords();
   const { salt, hash } = makeHash(newPassword);
-  store[role] = { alg: "scrypt", salt, hash, updatedAt: new Date().toISOString() };
+  store[role] = { alg: "scrypt", salt, hash, updatedAt: appNow().toISOString() };
   await getStorage().write(ROLE_PW_BLOB, Buffer.from(JSON.stringify(store), "utf8"), "application/json");
 }
 
@@ -201,7 +203,7 @@ export async function upsertAccount(input: { username: string; password: string;
   const account: Account = {
     username, role: input.role, alg: "scrypt", salt, hash,
     branch: input.branch?.trim() || null,
-    createdAt: existing?.createdAt || new Date().toISOString(),
+    createdAt: existing?.createdAt || appNow().toISOString(),
   };
   const next = list.filter((a) => a.username !== username).concat(account);
   await writeAccounts(next);
@@ -268,7 +270,7 @@ export async function seedDemoLogins(): Promise<{ username: string; role: Role; 
   assertDemoSafe();
   const pw = demoPassword();
   const store = getStorage();
-  const now = new Date().toISOString();
+  const now = appNow().toISOString();
 
   // 1) Admin password (built-in "admin" login) — one write.
   const admin = makeHash(pw);

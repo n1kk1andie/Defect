@@ -1,10 +1,11 @@
-// Server-side spreadsheet parsing & generation (SheetJS). Mirrors scripts/convert*.py:
+// Server-side spreadsheet parsing & generation (SheetJS). Mirrors institution/scripts/convert*.py:
 // the 'Month' column is ignored (mislabeled), percentages/grades are derived in the
 // UI, and only raw counts / scores are stored.
 import * as XLSX from "xlsx";
+import { INSTITUTION } from "@/institution";
 
 const MON_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const BRANCH_NORM: Record<string, string> = { "Duke St": "Duke Street" };
+const BRANCH_NORM: Record<string, string> = INSTITUTION.branchAliases;
 const normBranch = (b: string) => BRANCH_NORM[b] || b;
 
 const OPSTD_METRIC_COLS: [string, string][] = [

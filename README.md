@@ -1,7 +1,7 @@
-# VM Building Society — Branch Defects & Operational Standard Tracker
+# Pulsus Quality — Branch Defects & Operational Standard Tracker
 
-A Next.js app for VMBS branch audit data, styled to match the VMBS Operational
-Risk & Audit app (`n1kk1andie/My-Risk`): Sora + IBM Plex Sans, VM red
+A Next.js app for branch audit data, styled to match Pulsus Risk
+(`n1kk1andie/My-Risk`): Sora + IBM Plex Sans, brand red
 (`#E4012B`), card/hero language, RAG (red/amber/green) status, heatmaps and
 bottom-tab navigation. A top toggle switches between two datasets that share the
 same **Pulse / Heatmap / Register** screens.
@@ -14,8 +14,25 @@ authentication.
 
 | Toggle | Headline metric | Shape |
 |---|---|---|
-| **Branch Defects** | Defect rate (lower is better) | 16 branches × 5 process areas × 36 months |
-| **Operational Standard** | Operational Standard Score (higher is better) | 16 branches × 9 scores × 29 months |
+| **Branch Defects** | Defect rate (lower is better) | branches × process areas × months |
+| **Operational Standard** | Operational Standard Score (higher is better) | branches × 9 scores × months |
+
+### The owner's own institution: `institution/`
+
+Everything that names or identifies the live deployment's own institution — its
+name, email domain and default supervisor, named administrators, branch-name
+spellings, the bundled history workbooks (`institution/seed-*.json`) and their
+converters (`institution/scripts/`) — lives in `institution/` and nowhere else.
+It is read on the server only, for the own tenant only. A demo build
+(`DEMO_MODE=1`) never compiles it: `next.config.mjs` aliases `@/institution` and
+`@/institution/data` to the neutral stand-ins in `demo-institution/`.
+
+### The demo's locked date
+
+A demo deployment is locked to **30 Oct 2026** (`DEMO_AS_OF` overrides): every
+business use of "today" goes through `lib/asOf.ts`, the fictional data runs up to
+that date and nothing after it is listed or can be keyed. Session and cookie
+expiry keep the real clock. Production is unaffected.
 
 ### Screens (both datasets)
 
@@ -31,7 +48,7 @@ authentication.
 Global filters (year, branch, and — for Branch Defects — process area) apply
 across all tabs. The header ⤓ button exports the current filtered scope to CSV.
 
-Data-quality handling (see `lib/xlsx.ts` / `scripts/`): the mislabeled `Month`
+Data-quality handling (see `lib/xlsx.ts` / `institution/scripts/`): the mislabeled `Month`
 column is dropped (month derived from `Period`), percentages are recomputed from
 raw counts, the overall Operational Standard Score is shown as untracked before
 May 2025, and empty future placeholder months are excluded from trends.
@@ -84,8 +101,8 @@ Sign in to Settings with the default password `pa55w0rd`, or set `ADMIN_PASSWORD
 
 ```bash
 pip install openpyxl
-python3 scripts/convert.py       Branch_Defects_Consolidated.xlsx        > lib/seed-defects.json
-python3 scripts/convert_opstd.py Operational_Standards_Consolidated.xlsx > lib/seed-opstd.json
+python3 institution/scripts/convert.py       Branch_Defects_Consolidated.xlsx        > institution/seed-defects.json
+python3 institution/scripts/convert_opstd.py Operational_Standards_Consolidated.xlsx > institution/seed-opstd.json
 ```
 
 ## Structure
@@ -98,6 +115,9 @@ components/TrackerApp.tsx                  # client shell; mounts the render eng
 lib/
   engine.js                               # UI rendering (Pulse/Heatmap/Register/Settings)
   storage.ts · auth.ts · data.ts · xlsx.ts
-  seed-defects.json · seed-opstd.json
-scripts/convert.py · convert_opstd.py      # xlsx → seed JSON
+  asOf.ts                                 # business date (demo: locked to 30 Oct 2026)
+  demo.ts                                 # demo mode: fictional Meridian Society data
+institution/                               # the owner's own institution (server-only, own tenant only)
+  index.ts · data.ts · seed-*.json · scripts/
+demo-institution/                          # neutral stand-ins compiled into a demo build instead
 ```
