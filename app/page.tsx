@@ -2,6 +2,8 @@ import { loadDatasets } from "@/lib/data";
 import { getSession } from "@/lib/auth";
 import { ssoEnabled } from "@/lib/msauth";
 import TrackerApp from "@/components/TrackerApp";
+import { INSTITUTION } from "@/institution";
+import { demoAsOf } from "@/lib/asOf";
 
 export const dynamic = "force-dynamic";
 
@@ -9,5 +11,5 @@ export default async function Page() {
   const datasets = await loadDatasets();
   const s = await getSession(Date.now());
   const initialSession = s ? { role: s.role, username: s.username, branch: s.branch } : null;
-  return <TrackerApp datasets={datasets} initialSession={initialSession} ssoEnabled={ssoEnabled()} />;
+  return <TrackerApp datasets={datasets} initialSession={initialSession} ssoEnabled={ssoEnabled()} storagePrefix={INSTITUTION.storagePrefix} asOf={demoAsOf()} />;
 }

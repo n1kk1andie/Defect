@@ -5,6 +5,7 @@
 // note. Nothing reaches Pulse/Heatmap/Register/Report until it is published — the whole
 // point of the gate. Submissions live in Blob (submissions.json) next to the datasets.
 import { randomUUID } from "node:crypto";
+import { appNow, appTodayISO, demoAsOf } from "@/lib/asOf";
 import { getStorage } from "@/lib/storage";
 import type { Role, Session } from "@/lib/auth";
 import { loadDatasetPayload, persistMergedDataset } from "@/lib/data";
@@ -142,7 +143,10 @@ export function canReview(s: Session, sub: Submission): boolean {
 /** Submissions visible to this session, newest activity first. */
 export async function listForSession(s: Session): Promise<Submission[]> {
   const all = await readAll();
-  return all.filter((sub) => canSee(s, sub)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  // A demo is locked to a date (lib/asOf.ts): anything keyed for after it is hidden.
+  const asOf = demoAsOf();
+  const inTime = (sub: Submission) => !asOf || (sub.period <= asOf && (!sub.entryDate || sub.entryDate <= asOf));
+  return all.filter((sub) => canSee(s, sub) && inTime(sub)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 /** Whether this session may access an attachment: true if it rides on any submission
@@ -198,10 +202,11 @@ function normaliseAttachments(raw: unknown): Attachment[] {
 }
 
 // The date the inspector says they recorded the entry (yyyy-mm-dd). Defaults to today
-// (server date) when absent or malformed — it's descriptive metadata, not a metric key.
+// (the business date, lib/asOf.ts) when absent or malformed — it's descriptive
+// metadata, not a metric key.
 function normaliseEntryDate(raw: unknown): string {
   const s = String(raw ?? "").trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : new Date().toISOString().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : appTodayISO();
 }
 
 function normaliseItem(raw: any): DefectItem | { error: string } {
@@ -223,6 +228,9 @@ function normalise(input: RawInput, session: Session): { ok: true; parsed: Parse
   const period = (input.period || "").trim();
   if (!/^\d{4}-\d{2}-01$/.test(period)) return { ok: false, error: "Choose a valid month." };
   const entryDate = normaliseEntryDate(input.entryDate);
+  // A demo is locked to a date (lib/asOf.ts): nothing can be keyed after it.
+  const asOf = demoAsOf();
+  if (asOf && (period > asOf || entryDate > asOf)) return { ok: false, error: "Choose a date on or before " + asOf + "." };
   const attachments = normaliseAttachments(input.attachments);
 
   if (dataset === "defects") {
@@ -269,7 +277,7 @@ export async function saveSubmission(session: Session, input: RawInput & { id?: 
   const norm = normalise(input, session);
   if (!norm.ok) return { ok: false, error: norm.error, status: 400 };
   const list = await readAll();
-  const now = new Date().toISOString();
+  const now = appNow().toISOString();
 
   let sub = input.id ? findById(list, input.id) : undefined;
   if (sub) {
@@ -317,7 +325,7 @@ export async function reviewSubmission(session: Session, id: string, decision: "
   if (!sub) return { ok: false, error: "Submission not found.", status: 404 };
   if (!canReview(session, sub)) return { ok: false, error: "You can’t review this submission.", status: 403 };
   if (sub.status !== "submitted") return { ok: false, error: "Only submitted work can be reviewed.", status: 409 };
-  const now = new Date().toISOString();
+  const now = appNow().toISOString();
 
   if (decision === "return") {
     sub.status = "returned"; sub.supervisor = session.username; sub.note = (note || "").trim();
@@ -350,7 +358,7 @@ export async function resolveDefects(session: Session, refs: DefectRef[], resolv
 
   const affected: Submission[] = [];
   let changed = 0;
-  const now = new Date().toISOString();
+  const now = appNow().toISOString();
   for (const [id, idxs] of byId) {
     const sub = findById(list, id);
     if (!sub) continue;

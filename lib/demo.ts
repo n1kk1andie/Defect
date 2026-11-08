@@ -12,7 +12,7 @@
 //   • A fresh SESSION_SECRET means a demo cannot mint or read production
 //     sessions even in principle.
 //   • Every real-data path (real branch roster, real company email domain, the
-//     bundled VMBS seed workbooks) is swapped for a fully fictional variant when
+//     bundled history workbooks) is swapped for a fully fictional variant when
 //     isDemo() — see buildDemoDataset() below, lib/data.ts and lib/msauth.ts.
 //
 // The fictional tenant is "Meridian Society". Pulsus product branding
@@ -33,8 +33,9 @@
 
 import type { Role } from "./auth";
 import { demoNamespacingActive } from "./storage";
-import seedDefects from "./seed-defects.json";
-import seedOpstd from "./seed-opstd.json";
+// Shape only (periods, process areas, metric labels, columns). In a demo build
+// "@/institution/data" resolves to demo-institution/data.ts (next.config.mjs).
+import { seedDefects, seedOpstd } from "@/institution/data";
 import type { Dataset } from "./xlsx";
 
 /** True only in a demo deployment (DEMO_MODE=1). Production never sets this. */
@@ -96,7 +97,7 @@ export function demoPassword(): string {
     || "PulsusDemo!2026";
 }
 
-/** Fictional branches — replace the real VMBS roster in demo mode. */
+/** Fictional branches — the demo's roster. */
 export const DEMO_BRANCHES = ["Harbour", "Riverside", "Parkway", "Summit", "Crossroads", "Gateway"];
 
 /** The fictional demo supervisor(s) for SSO role resolution (see lib/msauth.ts). */
@@ -138,9 +139,9 @@ export function demoUsers(): DemoUserDef[] {
 // ─────────────────────────────────────────────────────────────────────────────
 // Fictional dataset builder.
 //
-// The real seed JSON (lib/seed-defects.json / seed-opstd.json) carries the 16
-// REAL VMBS branch names and real defect / operational figures. In demo mode we
-// never serve them: buildDemoDataset() returns the SAME shape (so the engine and
+// The own institution's history (institution/seed-*.json) is never compiled into
+// a demo build; "@/institution/data" there is a shape-only stand-in
+// (demo-institution/). buildDemoDataset() returns the SAME shape (so the engine and
 // export render identically) but with the 6 fictional branches and deterministic,
 // obviously-synthetic numbers. Periods, process-area names and metric labels are
 // generic (not tenant-identifying) and are reused for realism; meta.source is
@@ -173,11 +174,13 @@ const APR_2026 = ((seedDefects as any).periods as string[]).indexOf("2026-04-01"
  * stored copy that carries a different stamp — so a demo store holding an older
  * build's payload serves the current figures instead of freezing the old ones.
  */
-export const DEMO_SEED_VERSION = 2;
+export const DEMO_SEED_VERSION = 3;
 
-/** The demo's last month of data. The bundled seeds stop at May 2026 (opstd) /
- *  carry empty months to Dec 2026 (defects); the demo runs through October 2026
- *  so the Command Center's history has no blank Quality months. */
+/** The demo's last month of data — the month of the demo's locked date
+ *  (lib/asOf.ts, 30 Oct 2026). The seed shapes stop at May 2026 (opstd) / list
+ *  months to Dec 2026 (defects); the demo runs through October 2026 so the
+ *  Command Center's history has no blank Quality months, and lists nothing
+ *  after it, so "Latest data" reads October 2026. */
 const DEMO_LAST_PERIOD = "2026-10-01";
 
 /** Monthly periods from the seed's list, extended (first-of-month ISO strings)
@@ -208,7 +211,11 @@ const OPSTD_EXTENSION_TARGETS: Record<string, number> = {
 };
 
 function buildDemoDefects() {
-  const periods: string[] = (seedDefects as any).periods;
+  // Months after the demo's last month are not listed at all: the demo is
+  // locked to 30 Oct 2026, so November onwards has not happened yet. (The seed
+  // shape lists months to Dec 2026; they sit at the end, so trimming them leaves
+  // every earlier period index — and so every figure — unchanged.)
+  const periods: string[] = ((seedDefects as any).periods as string[]).filter((p) => p <= DEMO_LAST_PERIOD);
   const areas: string[] = (seedDefects as any).areas;
   const columns: string[] = (seedDefects as any).meta.columns;
   const branches = DEMO_BRANCHES;
@@ -216,10 +223,6 @@ function buildDemoDefects() {
   for (let pi = 0; pi < periods.length; pi++) {
     for (let bi = 0; bi < branches.length; bi++) {
       for (let ai = 0; ai < areas.length; ai++) {
-        // The seed's period list runs to Dec 2026; months after the demo's last
-        // month are carried empty (as the bundled seed does) so "latest data"
-        // reads October 2026 rather than a month that has not happened yet.
-        if (periods[pi] > DEMO_LAST_PERIOD) { rows.push([pi, bi, ai, 0, 0, 0, 0, 0, 0]); continue; }
         const r = rng(pi * 100000 + bi * 1000 + ai * 7 + 11);
         const reviewed = Math.round(between(r, 12, 40));
         const instances = reviewed * Math.round(between(r, 14, 24));

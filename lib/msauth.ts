@@ -11,13 +11,14 @@
 // (ssoEnabled() === false) nothing changes — the Microsoft button is not shown.
 //
 // Role mapping (configure in the Vercel project; sensible defaults):
-//   SUPERVISOR_EMAILS    -> "supervisor" (defaults to sanchia.henry@myvmgroup.com)
+//   SUPERVISOR_EMAILS    -> "supervisor" (defaults to INSTITUTION.supervisorEmails)
 //   ALLOWED_EMAIL_DOMAIN -> "inspector"  (any other company account; default
-//                                         myvmgroup.com) — an inspector is anyone.
+//                                         INSTITUTION.emailDomain) — an inspector is anyone.
 
 import { createHash, randomBytes } from "node:crypto";
 import type { Role } from "./auth";
 import { isDemo, DEMO_DOMAIN, DEMO_SUPERVISOR_EMAILS } from "./demo";
+import { INSTITUTION } from "@/institution";
 
 export interface MsConfig {
   clientId: string;
@@ -128,18 +129,18 @@ function emailList(name: string): string[] {
 }
 
 // The supervisor(s). Overridable via SUPERVISOR_EMAILS; in a demo deployment the
-// default is the fictional demo supervisor, otherwise the real roster default.
+// default is the fictional demo supervisor, otherwise the institution's (institution/index.ts).
 function supervisorEmails(): string[] {
   const configured = emailList("SUPERVISOR_EMAILS");
   if (configured.length) return configured;
-  return isDemo() ? DEMO_SUPERVISOR_EMAILS : ["sanchia.henry@myvmgroup.com"];
+  return isDemo() ? DEMO_SUPERVISOR_EMAILS : INSTITUTION.supervisorEmails;
 }
 
 // The company email domain that resolves to "inspector" via SSO. Overridable via
 // ALLOWED_EMAIL_DOMAIN; defaults to the fictional demo domain in demo mode so no
 // real company domain is referenced, otherwise the real one.
 function companyDomain(): string {
-  const fallback = isDemo() ? DEMO_DOMAIN : "myvmgroup.com";
+  const fallback = isDemo() ? DEMO_DOMAIN : INSTITUTION.emailDomain;
   return (process.env.ALLOWED_EMAIL_DOMAIN ?? fallback).trim().toLowerCase().replace(/^@/, "");
 }
 
