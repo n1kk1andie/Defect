@@ -1,0 +1,104 @@
+# Keep the demo in step with the live app.
+#
+# Every change that lands on the live branch is merged into the demo branch
+# (claude/demo-environment), which the demo deployment builds from. The merged
+# result is built and tested first and only pushed if that passes. If the merge
+# conflicts — usually where the demo deliberately differs from live (sign-in,
+# demo data, storage isolation) — or the build or tests fail, nothing is pushed
+# and an issue says what needs resolving by hand.
+name: Keep the demo in step
+
+on:
+  push:
+    branches: [claude/build-tracker-xq65z0]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: sync-demo
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      LIVE: claude/build-tracker-xq65z0
+      DEMO: claude/demo-environment
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/demo-environment
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Merge live into the demo
+        id: merge
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$LIVE"
+          if git merge-base --is-ancestor "origin/$LIVE" HEAD; then
+            echo "result=current" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if git merge --no-edit "origin/$LIVE" -m "Keep the demo in step: merge $LIVE"; then
+            echo "result=merged" >> "$GITHUB_OUTPUT"
+          else
+            echo "files=$(git diff --name-only --diff-filter=U | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
+            git merge --abort
+            echo "result=conflict" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and test the merged demo
+        id: check
+        if: steps.merge.outputs.result == 'merged'
+        env:
+          DEMO_MODE: "1"
+        run: |
+          if [ -f package.json ]; then
+            if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+            if node -e "process.exit(require('./package.json').scripts?.build ? 0 : 1)"; then npm run build; fi
+          fi
+          if ls tests/*.test.mjs >/dev/null 2>&1; then node --experimental-strip-types --test tests/*.test.mjs; fi
+
+      - name: Push the demo
+        if: steps.merge.outputs.result == 'merged' && steps.check.outcome == 'success'
+        run: git push origin "HEAD:$DEMO"
+
+      - name: Say what needs resolving
+        if: always() && (steps.merge.outputs.result == 'conflict' || steps.check.outcome == 'failure')
+        uses: actions/github-script@v7
+        env:
+          RESULT: ${{ steps.merge.outputs.result }}
+          FILES: ${{ steps.merge.outputs.files }}
+          CHECK: ${{ steps.check.outcome }}
+        with:
+          script: |
+            const title = "Demo is behind live — needs a hand merge";
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const why = process.env.RESULT === "conflict"
+              ? `Merging \`${process.env.LIVE}\` into \`${process.env.DEMO}\` conflicts in: ${process.env.FILES || "(see the run)"}. These are usually places where the demo deliberately differs from live (sign-in, demo data, storage isolation) — resolve keeping the demo's behaviour, then merge.`
+              : `\`${process.env.LIVE}\` merged into \`${process.env.DEMO}\` cleanly, but the merged demo didn't build or pass its tests, so nothing was pushed.`;
+            const body = `${why}\n\nRun: ${run}\nCommit: ${context.sha}`;
+            const open = await github.rest.issues.listForRepo({ ...context.repo, state: "open", per_page: 100 });
+            const existing = open.data.find((i) => i.title === title && !i.pull_request);
+            if (existing) await github.rest.issues.createComment({ ...context.repo, issue_number: existing.number, body });
+            else await github.rest.issues.create({ ...context.repo, title, body });
+            core.setFailed(why);
+
+      - name: Close the notice once the demo is current
+        if: steps.merge.outputs.result == 'current' || (steps.merge.outputs.result == 'merged' && steps.check.outcome == 'success')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = "Demo is behind live — needs a hand merge";
+            const open = await github.rest.issues.listForRepo({ ...context.repo, state: "open", per_page: 100 });
+            for (const i of open.data.filter((x) => x.title === title && !x.pull_request)) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: i.number, body: "The demo is in step with live again." });
+              await github.rest.issues.update({ ...context.repo, issue_number: i.number, state: "closed", state_reason: "completed" });
+            }
