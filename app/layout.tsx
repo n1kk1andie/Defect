@@ -32,7 +32,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <BackToCommandCenter />
         {children}
         <footer style={{ textAlign: "center", fontSize: "10.5px", lineHeight: 1.5, color: "#B7ADA8", padding: "18px 16px calc(96px + env(safe-area-inset-bottom))" }}>
-          Developed by Tumblehill Labs, the product studio of Tumblehill Holdings Limited. © 2026 Tumblehill Holdings Limited · Proprietary Software · All Rights Reserved
+          <div style={{ fontWeight: 600, color: "#8A7F7A" }}>Live. <span style={{ color: "#D40109" }}>Signal.</span> Clarity.</div>
+          <div>Pulsus Quality · Tumblehill Labs, a studio of Tumblehill Holdings</div>
+          <div>© 2026 Tumblehill Holdings LLC</div>
         </footer>
       </body>
     </html>
