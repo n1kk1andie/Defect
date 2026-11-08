@@ -111,7 +111,7 @@ function AboutHowTo({ onClose, company = false }: { onClose: () => void; company
           </p>
           )}
           <p style={{ margin: "0 0 16px", lineHeight: 1.55, fontSize: 13, color: "#475569" }}>
-            Pulsus Quality is part of the Pulsus platform, licensed by Tumblehill Holdings Limited. For support or
+            Pulsus Quality is part of the Pulsus platform, licensed by Tumblehill Holdings LLC. For support or
             licensing, contact <a href="mailto:support@pulsus.tech" style={{ color: accent }}>support@pulsus.tech</a>.
           </p>
 
