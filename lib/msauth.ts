@@ -11,12 +11,13 @@
 // (ssoEnabled() === false) nothing changes — the Microsoft button is not shown.
 //
 // Role mapping (configure in the Vercel project; sensible defaults):
-//   SUPERVISOR_EMAILS    -> "supervisor" (defaults to sanchia.henry@myvmgroup.com)
+//   SUPERVISOR_EMAILS    -> "supervisor" (defaults to INSTITUTION.supervisorEmails)
 //   ALLOWED_EMAIL_DOMAIN -> "inspector"  (any other company account; default
-//                                         myvmgroup.com) — an inspector is anyone.
+//                                         INSTITUTION.emailDomain) — an inspector is anyone.
 
 import { createHash, randomBytes } from "node:crypto";
 import type { Role } from "./auth";
+import { INSTITUTION } from "@/institution";
 
 export interface MsConfig {
   clientId: string;
@@ -121,14 +122,14 @@ function emailList(name: string): string[] {
     .filter((e) => e.includes("@"));
 }
 
-// The supervisor(s). Overridable via SUPERVISOR_EMAILS; defaults to Sanchia Henry.
+// The supervisor(s). Overridable via SUPERVISOR_EMAILS; defaults to the institution's (institution/index.ts).
 function supervisorEmails(): string[] {
   const configured = emailList("SUPERVISOR_EMAILS");
-  return configured.length ? configured : ["sanchia.henry@myvmgroup.com"];
+  return configured.length ? configured : INSTITUTION.supervisorEmails;
 }
 
 function companyDomain(): string {
-  return (process.env.ALLOWED_EMAIL_DOMAIN ?? "myvmgroup.com").trim().toLowerCase().replace(/^@/, "");
+  return (process.env.ALLOWED_EMAIL_DOMAIN ?? INSTITUTION.emailDomain).trim().toLowerCase().replace(/^@/, "");
 }
 
 // Map a verified email to a role. Returns null if the person isn't a company

@@ -7,13 +7,13 @@ type Session = { role: "inspector" | "supervisor" | "admin"; username: string; b
 
 type Company = { name: string; email: string; role: string; manager: boolean };
 
-export default function TrackerApp({ datasets, initialSession, ssoEnabled, elevateAs, signedInAs, company, program }: { datasets: any; initialSession: Session; ssoEnabled?: boolean; elevateAs?: string | null; signedInAs?: string | null; company?: Company; program?: any }) {
+export default function TrackerApp({ datasets, initialSession, ssoEnabled, elevateAs, signedInAs, company, program, storagePrefix }: { datasets: any; initialSession: Session; ssoEnabled?: boolean; elevateAs?: string | null; signedInAs?: string | null; company?: Company; program?: any; storagePrefix?: string }) {
   const started = useRef(false);
   const [helpOpen, setHelpOpen] = useState(false);
   useEffect(() => {
     if (started.current) return; // guard StrictMode / re-mounts
     started.current = true;
-    const teardown = initTracker({ datasets, initialSession, ssoEnabled, elevateAs, signedInAs, company, program });
+    const teardown = initTracker({ datasets, initialSession, ssoEnabled, elevateAs, signedInAs, company, program, storagePrefix });
     return () => { started.current = false; teardown && teardown(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

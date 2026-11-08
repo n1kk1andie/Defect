@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { adminConfigured, canElevate, checkLogin, checkRoleLogin, createSessionToken, getSession, isRole, Role, SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth";
 import { resolveRole } from "@/lib/msauth";
 import { PLATFORM_COOKIE, verifyPlatformJwt } from "@/lib/server/platform";
+import { currentCompany } from "@/lib/company";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,7 +23,9 @@ export async function GET() {
   // cookie the normal sign-in issues. Seamless: no second sign-in. Additive: the
   // existing role/admin/Microsoft logins are untouched.
   let bootstrap: { role: Role; username: string; branch: string | null; email: string | null } | null = null;
-  if (!s) {
+  // (Not for a Pulsus company member: their session comes from their company, and
+  // this deployment's own email→role rules are not theirs.)
+  if (!s && !currentCompany()) {
     const platformCookie = cookies().get(PLATFORM_COOKIE)?.value;
     const email = await verifyPlatformJwt(platformCookie);
     const role = email ? resolveRole(email) : null;
@@ -33,7 +36,7 @@ export async function GET() {
     }
   }
 
-  // Whether this person may unlock admin as themselves (config/admins.ts). Note
+  // Whether this person may unlock admin as themselves (institution/index.ts). Note
   // this is reported, never applied: the bootstrap above still resolves a role
   // through resolveRole, which never returns "admin".
   const elevate = await canElevate(now);
@@ -64,7 +67,7 @@ export async function POST(req: NextRequest) {
   let body: any = {};
   try { body = await req.json(); } catch { /* empty */ }
 
-  // Continue as yourself: a named administrator (config/admins.ts) unlocks the
+  // Continue as yourself: a named administrator (institution/index.ts) unlocks the
   // admin screens with the identity their session already proves, no password.
   // The address is read from the verified session/platform cookie — never from
   // this body — so it cannot be claimed on someone else's behalf.

@@ -11,12 +11,12 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { getStorage } from "@/lib/storage";
-import { adminEmails, findAdmin } from "@/config/admins";
+import { adminEmails, findAdmin, INSTITUTION } from "@/institution";
 import { PLATFORM_COOKIE, verifyPlatformJwt } from "@/lib/server/platform";
 import { currentCompany } from "@/lib/company";
 import { companyRole, loadProgram } from "@/lib/program";
 
-export const SESSION_COOKIE = "vmbs_session";
+export const SESSION_COOKIE = INSTITUTION.sessionCookie;
 const MAX_AGE = 60 * 60 * 12; // 12h
 const CRED_BLOB = "admin-credentials.json"; // legacy admin password (scrypt)
 const ACCOUNTS_BLOB = "accounts.json"; // inspector / supervisor / extra admin accounts
@@ -52,7 +52,7 @@ export interface Account { username: string; role: Role; alg: "scrypt"; salt: st
 export interface PublicAccount { username: string; role: Role; branch: string | null; createdAt: string; }
 
 function secret(): string {
-  return process.env.SESSION_SECRET || "vmbs-dev-secret-change-me";
+  return process.env.SESSION_SECRET || INSTITUTION.devSessionSecret;
 }
 function b64url(s: string): string { return Buffer.from(s).toString("base64url"); }
 function sign(payload: string): string { return createHmac("sha256", secret()).update(payload).digest("base64url"); }
@@ -282,7 +282,7 @@ export async function requestSession(now: number): Promise<Session | null> {
 }
 
 // ── Continuing as yourself ───────────────────────────────────────────────────
-// A named administrator (config/admins.ts, plus the ADMIN_EMAILS env list) can
+// A named administrator (institution/index.ts, plus the ADMIN_EMAILS env list) can
 // unlock the admin screens with the identity already proven for their session,
 // rather than typing the shared admin password. This is the SAME door Pulsus Risk
 // and Pulsus Ops offer, so the roster the COO supplied means the same thing in
@@ -303,6 +303,8 @@ export async function signedInEmail(now: number): Promise<string | null> {
 
 /** May the caller unlock admin as themselves, without the shared password? */
 export async function canElevate(now: number): Promise<{ ok: boolean; email: string | null; name: string | null }> {
+  // The roster is this deployment's own people; a company member is never on it.
+  if (currentCompany()) return { ok: false, email: null, name: null };
   const email = await signedInEmail(now);
   if (!email) return { ok: false, email: null, name: null };
   const person = findAdmin(email);

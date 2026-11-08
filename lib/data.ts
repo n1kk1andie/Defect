@@ -3,8 +3,7 @@
 // the bundled seed when nothing has been uploaded.
 import { getStorage } from "@/lib/storage";
 import { buildWorkbook, type Dataset } from "@/lib/xlsx";
-import seedDefects from "@/lib/seed-defects.json";
-import seedOpstd from "@/lib/seed-opstd.json";
+import { seedDefects, seedOpstd } from "@/institution/data";
 import { currentCompany } from "@/lib/company";
 
 const JSON_KEY: Record<Dataset, string> = { defects: "defects.json", opstd: "opstd.json" };
@@ -87,6 +86,11 @@ export function statsFor(type: Dataset, payload: any): { periods: number; branch
 /** The live payload for a dataset — the stored upload if present, else a fresh clone of
  *  the bundled seed (cloned so callers can safely mutate it when merging in new rows). */
 export async function loadDatasetPayload(type: Dataset): Promise<any> {
+  // A company works from its own reviews, never this deployment's bundled history.
+  if (currentCompany()) {
+    const { companyDefects } = await import("@/lib/companyData");
+    return type === "defects" ? await companyDefects() : { meta: {}, metrics: [], periods: [], branches: [], rows: [], auditRaw: [] };
+  }
   const stored = await readJson(JSON_KEY[type]);
   return stored ? overlaySeedLabels(type, stored) : structuredClone(SEED[type]);
 }
