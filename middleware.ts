@@ -4,7 +4,7 @@
 // the server-rendered defect data is never sent to an unauthenticated visitor.
 //
 // A request is allowed through if it carries ONE of:
-//   • a valid Quality session cookie (the session cookie) — the app's own sign-in;
+//   • a valid Quality session cookie (INSTITUTION.sessionCookie) — the app's own sign-in;
 //   • a valid Command Center platform session (exec_auth cookie, an RS256 JWT
 //     verified against the Command Center's public JWKS) — so a viewer already in
 //     the Command Center opens Quality with no second sign-in;
@@ -14,6 +14,7 @@
 // Edge-safe: the session cookie is checked with Web Crypto using the same secret
 // and payload as lib/auth.ts.
 import { NextRequest, NextResponse } from "next/server";
+import { licenseWallActive, licenseWallResponse } from "./lib/licenseWall";
 import { INSTITUTION } from "@/institution";
 
 const SESSION_COOKIE = INSTITUTION.sessionCookie;
@@ -78,27 +79,22 @@ async function validSession(token: string | undefined): Promise<boolean> {
 // never validate against executive.pulsus.tech's JWKS — the launcher hand-off
 // silently fails and every app shows its signed-out gate. Default to the demo
 // hub's JWKS when DEMO_MODE=1; PLATFORM_JWKS_URL still overrides both.
+const DEMO = (process.env.DEMO_MODE || "").trim() === "1";
+const DEMO_HUB_JWKS = "https://demo-executive.pulsus.tech/api/jwks";
 const JWKS_URL = (process.env.PLATFORM_JWKS_URL || "").trim() ||
-  ((process.env.DEMO_MODE || "").trim() === "1" ? "https://demo-executive.pulsus.tech/api/jwks" : "https://executive.pulsus.tech/api/jwks");
+  (DEMO ? DEMO_HUB_JWKS : "https://executive.pulsus.tech/api/jwks");
 const PLATFORM_JWT_ISSUER = "pulsus-command-center";
 let jwksCache: Array<Record<string, string>> | null = null;
 let jwksAt = 0;
 async function jwksKeys(): Promise<Array<Record<string, string>>> {
   const now = Date.now();
   if (jwksCache && now - jwksAt < 5 * 60 * 1000) return jwksCache;
-  // A demo must not be lockable-out by a stale PLATFORM_JWKS_URL. That variable
-  // exists to tell this app where the Command Center is, and when it named a host
-  // serving no JWKS the launcher hand-off failed silently: the session cookie was
-  // valid, nothing could verify it, and every tile showed "Licence Required" with
-  // no way to tell why from the outside.
-  //
-  // So in demo mode collect keys from the configured endpoint AND from the known
-  // demo hub, and accept a token that verifies against either. A wrong variable
-  // then costs an extra fetch instead of the whole suite. Production is untouched:
-  // one endpoint, exactly as configured, no widening of trust.
+  // A demo must not be lockable-out by a stale PLATFORM_JWKS_URL: in demo mode
+  // collect keys from the configured endpoint AND the known demo hub, and accept
+  // a token that verifies against either. Production is untouched: one
+  // endpoint, exactly as configured, no widening of trust.
   const urls = [JWKS_URL];
-  const hub = "https://demo-executive.pulsus.tech/api/jwks";
-  if ((process.env.DEMO_MODE || "").trim() === "1" && !urls.includes(hub)) urls.push(hub);
+  if (DEMO && !urls.includes(DEMO_HUB_JWKS)) urls.push(DEMO_HUB_JWKS);
   const keys: Array<Record<string, string>> = [];
   for (const u of urls) {
     try {
@@ -136,23 +132,121 @@ async function validPlatformJwt(token: string | undefined): Promise<boolean> {
   } catch { return false; }
 }
 
-export async function proxy(req: NextRequest) {
+// What stays public while the licence holds: the sign-in page and endpoints.
+const PUBLIC_PATH = /^\/(?:login|api\/login|api\/logout|api\/auth)(?:\/|$)/;
+
+// ── Pulsus platform companies ────────────────────────────────────────────────
+// A Pulsus company's session (issuer "pulsus-company") carries the company, the
+// member's role and the company's modules. Quality opens only when "quality" is
+// among them, and then passes the company on to the routes in trusted request
+// headers — stripped from EVERY incoming request first, so they can't be forged.
+const COMPANY_JWT_ISSUER = "pulsus-company";
+const MODULE_KEY = "quality";
+const COMPANY_HEADERS = ["x-pulsus-company", "x-pulsus-company-name", "x-pulsus-role", "x-pulsus-email"];
+// What a company member may reach: the app and the routes that work its own
+// reviews, actions, attachments, downloads and program. This deployment's own
+// sign-in, passwords, accounts and workbook upload are not theirs to use.
+const COMPANY_PATH = /^\/(?:$|api\/(?:data|submissions|actions|attachment|export|file|program)(?:\/|$|\?))/;
+
+interface CompanySession { email: string; company: { id: string; name: string; role: string; modules: string[] } }
+
+async function verifyCompanySession(token: string | undefined): Promise<CompanySession | null> {
+  if (!token || token.split(".").length !== 3) return null;
+  const [h, p, sig] = token.split(".");
+  let header: Record<string, string>, payload: Record<string, unknown>;
+  try { header = JSON.parse(b64urlToStr(h)); payload = JSON.parse(b64urlToStr(p)); } catch { return null; }
+  if (header.alg !== "RS256" || payload.iss !== COMPANY_JWT_ISSUER) return null;
+  if (typeof payload.exp !== "number" || Date.now() / 1000 > payload.exp) return null;
+  const companyId = typeof payload.company_id === "string" ? payload.company_id : "";
+  if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(companyId)) return null;
+  let keys: Array<Record<string, string>>;
+  try { keys = await jwksKeys(); } catch { return null; }
+  const jwk = keys.find((k) => k.kid === header.kid) || keys[0];
+  if (!jwk) return null;
+  try {
+    const key = await crypto.subtle.importKey(
+      "jwk", { kty: jwk.kty, n: jwk.n, e: jwk.e, alg: "RS256", ext: true },
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"],
+    );
+    const ok = await crypto.subtle.verify(
+      "RSASSA-PKCS1-v1_5", key,
+      b64urlBytes(sig) as unknown as BufferSource,
+      new TextEncoder().encode(`${h}.${p}`) as unknown as BufferSource,
+    );
+    if (!ok) return null;
+  } catch { return null; }
+  const email = String((payload.email as string) || (payload.sub as string) || "").trim().toLowerCase();
+  if (!email) return null;
+  return {
+    email,
+    company: {
+      id: companyId,
+      name: typeof payload.company_name === "string" ? payload.company_name.slice(0, 80) : companyId,
+      role: typeof payload.role === "string" ? payload.role : "viewer",
+      modules: Array.isArray(payload.modules) ? payload.modules.filter((m): m is string => typeof m === "string") : [],
+    },
+  };
+}
+
+/** Pass the request on with the trusted company headers set from the verified session (or cleared). */
+function forward(req: NextRequest, session: CompanySession | null = null): NextResponse {
+  const headers = new Headers(req.headers);
+  for (const h of COMPANY_HEADERS) headers.delete(h);
+  if (session) {
+    headers.set("x-pulsus-company", session.company.id);
+    headers.set("x-pulsus-company-name", encodeURIComponent(session.company.name));
+    headers.set("x-pulsus-role", session.company.role);
+    headers.set("x-pulsus-email", session.email);
+  }
+  return NextResponse.next({ request: { headers } });
+}
+
+/** A company member asking for something that isn't theirs: an API not open to
+ *  companies (404), or any path when Quality isn't among their modules (403). */
+function companyRefusal(pathname: string, notEnabled: boolean): NextResponse {
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.json({ error: notEnabled ? "module_not_enabled" : "Not found" }, { status: notEnabled ? 403 : 404, headers: { "Cache-Control": "no-store" } });
+  }
+  return new NextResponse(
+    "<!doctype html><meta name=viewport content='width=device-width'><title>Pulsus Quality</title><body style='font-family:system-ui;max-width:520px;margin:15vh auto;padding:0 16px;text-align:center'><h2>Pulsus Quality isn't switched on for your company</h2><p>An owner or admin can add it on the company page in Pulsus.</p></body>",
+    { status: 403, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } },
+  );
+}
+
+export async function middleware(req: NextRequest) {
+  // A Pulsus company's session carries its company on EVERY path, so no route
+  // answers a company member with this deployment's own data; a company without
+  // this module is refused outright. Customer companies are licensed by their own
+  // subscription (checked by the Command Center), so the wall below isn't theirs.
+  const { pathname } = req.nextUrl;
+  const companySession = await verifyCompanySession(req.cookies.get(PLATFORM_COOKIE)?.value);
+  if (companySession) {
+    if (!companySession.company.modules.includes(MODULE_KEY)) return companyRefusal(pathname, true);
+    if (!COMPANY_PATH.test(pathname)) {
+      if (pathname.startsWith("/api/")) return companyRefusal(pathname, false);
+      const url = req.nextUrl.clone(); url.pathname = "/"; url.search = "";
+      return NextResponse.redirect(url);
+    }
+    return forward(req, companySession);
+  }
+
   // Demo bootstrap. A demo deployment (DEMO_MODE=1) must be able to seed its own
   // isolated store before any user exists — so open ONLY the /api/demo/* routes,
   // and ONLY in demo mode. Those routes are themselves gated (assertDemoSafe).
-  // Inert in production, where DEMO_MODE is unset. The demo is otherwise reached
-  // exactly like production — via the (demo) Command Center's platform session,
-  // verified against PLATFORM_JWKS_URL below.
-  if ((process.env.DEMO_MODE || "").trim() === "1" && req.nextUrl.pathname.startsWith("/api/demo/")) {
-    return NextResponse.next();
-  }
+  if (DEMO && pathname.startsWith("/api/demo/")) return forward(req);
 
+  // The licence wall for this deployment's own tenant: while it is up, everyone
+  // who isn't a customer company gets the notice — its own sign-in included.
+  // Never on a demo deployment: the demo is the fictional showcase, open to its
+  // demo logins and guests regardless of the wall.
+  if (!DEMO && licenseWallActive()) return licenseWallResponse(req.nextUrl.pathname);
+  if (PUBLIC_PATH.test(req.nextUrl.pathname)) return forward(req);
   // Command Center server-to-server read of /api/data: the shared feed token, or
   // the Bearer platform JWT it sends. Either keeps the synthesis feed alive.
   const feed = (process.env.PULSE_FEED_TOKEN || "").trim();
-  if (feed && req.headers.get("x-pulse-feed") === feed) return NextResponse.next();
+  if (feed && req.headers.get("x-pulse-feed") === feed) return forward(req);
   const authz = req.headers.get("authorization") || "";
-  if (authz.startsWith("Bearer ") && (await validPlatformJwt(authz.slice(7)))) return NextResponse.next();
+  if (authz.startsWith("Bearer ") && (await validPlatformJwt(authz.slice(7)))) return forward(req);
 
   // Command Center platform session only — an RS256 JWT verified against the
   // Command Center's public JWKS (asymmetric; unforgeable). The HMAC own-session
@@ -162,9 +256,9 @@ export async function proxy(req: NextRequest) {
   // still uses the session cookie at the handler level — Command Center viewers arrive
   // with exec_auth on every request. Re-enable the validSession check here when
   // Microsoft SSO is turned on AND a real SESSION_SECRET is set.
-  if (await validPlatformJwt(req.cookies.get(PLATFORM_COOKIE)?.value)) return NextResponse.next();
+  if (await validPlatformJwt(req.cookies.get(PLATFORM_COOKIE)?.value)) return forward(req);
 
-  const { pathname, search } = req.nextUrl;
+  const { search } = req.nextUrl;
   if (pathname.startsWith("/api/")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
   }
@@ -177,5 +271,7 @@ export async function proxy(req: NextRequest) {
 // Protect everything except the sign-in page, the sign-in/SSO endpoints, Next
 // internals, and static files (any path with a dot — images, favicon, etc.).
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|login|api/login|api/logout|api/auth|.*\\.).*)"],
+  // /api/:path* is listed on its own so the gate (which strips forged x-pulsus-*
+  // headers) also runs on API paths that contain a dot.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.).*)", "/api/:path*"],
 };

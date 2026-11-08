@@ -10,7 +10,7 @@ name: Keep the demo in step
 
 on:
   push:
-    branches: [main]
+    branches: [claude/build-tracker-xq65z0]
   workflow_dispatch:
 
 permissions:
@@ -25,7 +25,7 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     env:
-      LIVE: main
+      LIVE: claude/build-tracker-xq65z0
       DEMO: claude/demo-environment
     steps:
       - uses: actions/checkout@v4

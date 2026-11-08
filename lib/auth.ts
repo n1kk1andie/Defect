@@ -11,7 +11,10 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { getStorage } from "@/lib/storage";
-import { INSTITUTION } from "@/institution";
+import { adminEmails, findAdmin, INSTITUTION } from "@/institution";
+import { PLATFORM_COOKIE, verifyPlatformJwt } from "@/lib/server/platform";
+import { currentCompany } from "@/lib/company";
+import { companyRole, loadProgram } from "@/lib/program";
 import { appNow } from "@/lib/asOf";
 import { assertDemoSafe, demoPassword, demoUsers, isDemo, demoAdminEmail } from "@/lib/demo";
 
@@ -24,8 +27,12 @@ export type Role = "inspector" | "supervisor" | "admin";
 export const ROLES: Role[] = ["inspector", "supervisor", "admin"];
 export function isRole(x: unknown): x is Role { return typeof x === "string" && (ROLES as string[]).includes(x); }
 
-/** A decoded, verified session — who is signed in and what they may do. */
-export interface Session { role: Role; username: string; branch: string | null; exp: number; }
+/** A decoded, verified session — who is signed in and what they may do.
+ *  `email` is the proven address when one is known (Microsoft sign-in, or the
+ *  Command Center bootstrap); null for a role/password sign-in, which proves a
+ *  password and a typed name but no address. It is carried so a named
+ *  administrator can later continue as themselves — see canElevate below. */
+export interface Session { role: Role; username: string; branch: string | null; email: string | null; exp: number; }
 
 /** The admin password from env, or null when none is configured. No built-in
  *  default — a public default would let anyone sign in as admin. */
@@ -51,9 +58,16 @@ function secret(): string {
 function b64url(s: string): string { return Buffer.from(s).toString("base64url"); }
 function sign(payload: string): string { return createHmac("sha256", secret()).update(payload).digest("base64url"); }
 
-/** Mint a signed session token carrying the account's role, username and branch. */
-export function createSessionToken(now: number, session: { role: Role; username: string; branch: string | null }): string {
-  const body = b64url(JSON.stringify({ role: session.role, user: session.username, branch: session.branch ?? null, exp: now + MAX_AGE * 1000 }));
+/** Mint a signed session token carrying the account's role, username, branch and
+ *  — when the sign-in proved one — the person's email. */
+export function createSessionToken(now: number, session: { role: Role; username: string; branch: string | null; email?: string | null }): string {
+  const body = b64url(JSON.stringify({
+    role: session.role,
+    user: session.username,
+    branch: session.branch ?? null,
+    email: session.email ? String(session.email).trim().toLowerCase() : null,
+    exp: now + MAX_AGE * 1000,
+  }));
   return `${body}.${sign(body)}`;
 }
 function safeEqual(a: string, b: string): boolean {
@@ -72,7 +86,13 @@ export function readSessionToken(token: string | undefined, now: number): Sessio
   try {
     const p = JSON.parse(Buffer.from(body, "base64url").toString());
     if (!isRole(p.role) || typeof p.exp !== "number" || p.exp <= now) return null;
-    return { role: p.role, username: typeof p.user === "string" ? p.user : p.role, branch: typeof p.branch === "string" ? p.branch : null, exp: p.exp };
+    return {
+      role: p.role,
+      username: typeof p.user === "string" ? p.user : p.role,
+      branch: typeof p.branch === "string" ? p.branch : null,
+      email: typeof p.email === "string" ? p.email : null,
+      exp: p.exp,
+    };
   } catch { return null; }
 }
 
@@ -250,13 +270,13 @@ export async function adminConfigured(): Promise<boolean> {
   return (await readStoredCredential()) !== null;
 }
 
-/** The current verified session, or null if signed out. `cookies()` is async in Next 15+. */
-export async function getSession(now: number): Promise<Session | null> {
-  return readSessionToken((await cookies()).get(SESSION_COOKIE)?.value, now);
+/** The current verified session, or null if signed out. */
+export function getSession(now: number): Session | null {
+  return readSessionToken(cookies().get(SESSION_COOKIE)?.value, now);
 }
 
-export async function isAdmin(now: number): Promise<boolean> {
-  return (await getSession(now))?.role === "admin";
+export function isAdmin(now: number): boolean {
+  return getSession(now)?.role === "admin";
 }
 
 // ---- Demo login seeding (DEMO_MODE only) ----
@@ -299,6 +319,52 @@ export async function seedDemoLogins(): Promise<{ username: string; role: Role; 
     { username: "admin", role: "admin", branch: null, password: pw },
     ...demoUsers().map((u) => ({ username: u.username, role: u.role, branch: u.branch, password: u.password })),
   ];
+}
+
+/** The session a request works under. A Pulsus company member's comes from their
+ *  verified company session and the company's program (never from this app's own
+ *  sign-in cookie or passwords); everyone else's is this app's own sign-in. Null
+ *  means signed out — or, for a company viewer, read-only. */
+export async function requestSession(now: number): Promise<Session | null> {
+  const c = currentCompany();
+  if (!c) return getSession(now);
+  if (!c.email) return null;
+  const r = companyRole(c, await loadProgram());
+  if (!r) return null;
+  return { role: r.role, username: c.email, branch: r.unit, email: c.email, exp: now + MAX_AGE * 1000 };
+}
+
+// ── Continuing as yourself ───────────────────────────────────────────────────
+// A named administrator (institution/index.ts, plus the ADMIN_EMAILS env list) can
+// unlock the admin screens with the identity already proven for their session,
+// rather than typing the shared admin password. This is the SAME door Pulsus Risk
+// and Pulsus Ops offer, so the roster the COO supplied means the same thing in
+// all three apps.
+//
+// resolveRole() in lib/msauth.ts is untouched and still never returns "admin":
+// signing in with Microsoft does not make anyone an administrator. Elevation is a
+// separate, deliberate act, and it is refused for everyone off the roster.
+
+/** The caller's proven email: the Command Center platform session first (it is
+ *  the launcher people actually arrive through), else an email recorded on this
+ *  app's own session by a Microsoft sign-in. Null for a role/password sign-in. */
+export async function signedInEmail(now: number): Promise<string | null> {
+  const fromPlatform = await verifyPlatformJwt(cookies().get(PLATFORM_COOKIE)?.value);
+  if (fromPlatform) return fromPlatform;
+  return getSession(now)?.email ?? null;
+}
+
+/** May the caller unlock admin as themselves, without the shared password? */
+export async function canElevate(now: number): Promise<{ ok: boolean; email: string | null; name: string | null }> {
+  // The roster is this deployment's own people; a company member is never on it.
+  if (currentCompany()) return { ok: false, email: null, name: null };
+  const email = await signedInEmail(now);
+  if (!email) return { ok: false, email: null, name: null };
+  const person = findAdmin(email);
+  if (person) return { ok: true, email, name: person.name };
+  // ADMIN_EMAILS is deployment config, so it carries no display name.
+  if (adminEmails().includes(email)) return { ok: true, email, name: null };
+  return { ok: false, email, name: null };
 }
 
 export const sessionCookieOptions = {

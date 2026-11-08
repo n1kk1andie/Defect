@@ -5,6 +5,7 @@ import { getStorage } from "@/lib/storage";
 import { buildWorkbook, type Dataset } from "@/lib/xlsx";
 import { seedDefects, seedOpstd } from "@/institution/data";
 import { isDemo, buildDemoDataset, DEMO_SEED_VERSION } from "@/lib/demo";
+import { currentCompany } from "@/lib/company";
 
 const JSON_KEY: Record<Dataset, string> = { defects: "defects.json", opstd: "opstd.json" };
 const XLSX_KEY: Record<Dataset, string> = { defects: "defects.xlsx", opstd: "opstd.xlsx" };
@@ -52,6 +53,12 @@ function overlaySeedLabels(type: Dataset, payload: any): any {
 }
 
 export async function loadDatasets(): Promise<DatasetsResponse> {
+  // A company sees only what its own reviews produce: never this deployment's
+  // history, and no Operational Standard scorecard (that one is ours).
+  if (currentCompany()) {
+    const { companyDefects } = await import("@/lib/companyData");
+    return { defects: await companyDefects(), opstd: null, uploaded: { defects: false, opstd: false } };
+  }
   const [d, o] = await Promise.all([readJson(JSON_KEY.defects), readJson(JSON_KEY.opstd)]);
   return {
     defects: d ? overlaySeedLabels("defects", d) : seedFor("defects"),
@@ -80,6 +87,12 @@ export async function resetDataset(type: Dataset): Promise<void> {
 
 /** The workbook for download: the stored upload if present, else generated from the seed. */
 export async function datasetWorkbook(type: Dataset): Promise<Buffer> {
+  const company = currentCompany();
+  if (company) {
+    const { companyDefects } = await import("@/lib/companyData");
+    const { loadProgram } = await import("@/lib/program");
+    return buildWorkbook("defects", await companyDefects(), { unit: (await loadProgram()).unitLabel, sheet: "Quality reviews" });
+  }
   // Demo: the stored workbook is only current while its JSON is (see readJson).
   if (isDemo() && !(await readJson(JSON_KEY[type]))) return buildWorkbook(type, seedFor(type));
   const stored = await getStorage().read(XLSX_KEY[type]);
@@ -94,6 +107,11 @@ export function statsFor(type: Dataset, payload: any): { periods: number; branch
 /** The live payload for a dataset — the stored upload if present, else a fresh clone of
  *  the bundled seed (cloned so callers can safely mutate it when merging in new rows). */
 export async function loadDatasetPayload(type: Dataset): Promise<any> {
+  // A company works from its own reviews, never this deployment's bundled history.
+  if (currentCompany()) {
+    const { companyDefects } = await import("@/lib/companyData");
+    return type === "defects" ? await companyDefects() : { meta: {}, metrics: [], periods: [], branches: [], rows: [], auditRaw: [] };
+  }
   const stored = await readJson(JSON_KEY[type]);
   return stored ? overlaySeedLabels(type, stored) : structuredClone(seedFor(type));
 }

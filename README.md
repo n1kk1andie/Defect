@@ -19,13 +19,17 @@ authentication.
 
 ### The owner's own institution: `institution/`
 
-Everything that names or identifies the live deployment's own institution — its
+Everything that names or identifies this deployment's own institution — its
 name, email domain and default supervisor, named administrators, branch-name
 spellings, the bundled history workbooks (`institution/seed-*.json`) and their
 converters (`institution/scripts/`) — lives in `institution/` and nowhere else.
-It is read on the server only, for the own tenant only. A demo build
-(`DEMO_MODE=1`) never compiles it: `next.config.mjs` aliases `@/institution` and
-`@/institution/data` to the neutral stand-ins in `demo-institution/`.
+It is read on the server only, and only for this deployment's own tenant: a
+Pulsus platform company gets neutral defaults, and a demo build does not compile
+the folder at all.
+
+A demo build (`DEMO_MODE=1`) never compiles it: `next.config.mjs` aliases
+`@/institution` and `@/institution/data` to the neutral stand-ins in
+`demo-institution/`.
 
 ### The demo's locked date
 
@@ -42,6 +46,14 @@ expiry keep the real clock. Production is unaffected.
   1–5 scale and the 2025+ A–D scale).
 - **Heatmap** — Branch × Month, switchable across each dataset's metrics.
 - **Register** — per-branch (or per-process-area) table, sortable, with totals.
+- **Actions** (officers, supervisors, admins) — the corrective-action register.
+  A supervisor raises an action against a branch (optionally one process area)
+  with a priority, owner and due date — from **+ New action**, or **Raise action**
+  on any defect list. The branch's officers mark it in progress, then submit it
+  with a closure note and evidence files. A *different* supervisor verifies and
+  closes it, or sends it back with a note; a closed action can be reopened.
+  Overdue actions are flagged, officers see only their own branch, and every step
+  is kept in the action's audit trail.
 - **Settings** (admin) — download/upload the dataset workbook and change the
   admin password.
 
@@ -66,6 +78,11 @@ May 2025, and empty future placeholder months are excluded from trends.
   / sign out. A valid password is exchanged for an httpOnly, signed session cookie.
 - **`POST /api/password`** (admin) — change the admin password (scrypt-hashed and
   persisted to Blob; takes precedence over the fallback).
+- **`GET /api/actions` · `POST /api/actions`** — list the corrective actions the
+  session may see; `op` = `create` / `edit` (supervisor, admin), `start` /
+  `submit` (the branch's officers or a supervisor), `verify` / `return` /
+  `reopen` (supervisor, admin — never the submitter), `delete` (admin). Persisted
+  to Blob as `actions.json`; rules live in `lib/actions.ts`.
 
 Storage adapter (`lib/storage.ts`): **Vercel Blob** when `BLOB_READ_WRITE_TOKEN`
 is present (production), otherwise a local `./.data` folder for `next dev`.
@@ -78,12 +95,25 @@ Set these in Vercel (see `.env.example`):
 |---|---|
 | `SESSION_SECRET` | **Required.** Signs the session cookie. `openssl rand -base64 32`. |
 | `ADMIN_PASSWORD` | **Optional.** Password for the Settings page. Overrides the built-in default (`pa55w0rd`) when set. |
+| `ADMIN_EMAILS` | **Optional.** Extra addresses that may unlock admin as themselves, unioned with the roster in `config/admins.ts`. |
 | `BLOB_READ_WRITE_TOKEN` | Injected automatically when you connect a Vercel Blob store. |
 
 Sign-in works out of the box with the built-in default password `pa55w0rd` — no
 env var or Vercel setup required. Override it with `ADMIN_PASSWORD`, or change it
 in-app (Settings → Admin password); the new scrypt hash is persisted to storage
 and takes precedence over both the env var and the default.
+
+### Named administrators
+
+`institution/index.ts` (`ADMINS`) lists the people who may unlock admin with the account they
+are already signed in as, instead of typing the shared password — the admin
+sign-in offers them "Continue as <name>". The same roster, word for word, lives
+in the sibling Pulsus apps, so the same people are administrators everywhere. Edit the file and redeploy.
+
+Being on the roster is permission to *ask*, not admin: nothing is granted until
+the person presses the button, the address is read from their verified session
+rather than anything the browser sends, and `resolveRole()` still never returns
+`admin`, so signing in with Microsoft does not by itself make anyone one.
 
 ## Develop
 
@@ -110,14 +140,17 @@ python3 institution/scripts/convert_opstd.py Operational_Standards_Consolidated.
 ```
 app/
   layout.tsx · page.tsx · globals.css     # shell, fonts, server-loaded initial data
-  api/{data,file,upload,login,logout,password}/route.ts
+  api/{data,file,upload,login,logout,password,actions}/route.ts
 components/TrackerApp.tsx                  # client shell; mounts the render engine
 lib/
   engine.js                               # UI rendering (Pulse/Heatmap/Register/Settings)
   storage.ts · auth.ts · data.ts · xlsx.ts
+  actions.ts                              # corrective actions: lifecycle + permissions
   asOf.ts                                 # business date (demo: locked to 30 Oct 2026)
   demo.ts                                 # demo mode: fictional Meridian Society data
 institution/                               # the owner's own institution (server-only, own tenant only)
-  index.ts · data.ts · seed-*.json · scripts/
+  index.ts                                # name, email domain, supervisors, admin roster, key names
+  data.ts · seed-defects.json · seed-opstd.json
+  scripts/convert.py · convert_opstd.py   # xlsx → seed JSON
 demo-institution/                          # neutral stand-ins compiled into a demo build instead
 ```
