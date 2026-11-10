@@ -167,6 +167,22 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
  *  the story pointing at the wrong branch. */
 const SUMMIT = DEMO_BRANCHES.indexOf("Summit");
 const APR_2026 = ((seedDefects as any).periods as string[]).indexOf("2026-04-01");
+const JAN_2026 = ((seedDefects as any).periods as string[]).indexOf("2026-01-01");
+
+/** Summit's error rate (failed checks / checks) by month of 2026, from the shared
+ *  story (DEMO-WORLD.md): ~3% to March, 11% when the UPS failed in April, eased
+ *  by treatment from August, back to 3.6% in October. */
+const SUMMIT_ERROR_2026: Record<string, number> = {
+  "2026-01-01": 0.030, "2026-02-01": 0.031, "2026-03-01": 0.029, "2026-04-01": 0.110,
+  "2026-05-01": 0.105, "2026-06-01": 0.100, "2026-07-01": 0.098, "2026-08-01": 0.080,
+  "2026-09-01": 0.050, "2026-10-01": 0.036,
+};
+/** Share of Summit's defects resolved in the month: low while the branch ran on
+ *  manual fallbacks, recovering once the UPS was replaced (9 Sep). */
+const SUMMIT_RESOLVED_2026: Record<string, [number, number]> = {
+  "2026-04-01": [0.45, 0.7], "2026-05-01": [0.45, 0.7], "2026-06-01": [0.45, 0.7], "2026-07-01": [0.45, 0.7],
+  "2026-08-01": [0.6, 0.8], "2026-09-01": [0.72, 0.92], "2026-10-01": [0.8, 1],
+};
 
 /**
  * Bump whenever the fictional dataset changes shape or figures. It is stamped
@@ -174,7 +190,7 @@ const APR_2026 = ((seedDefects as any).periods as string[]).indexOf("2026-04-01"
  * stored copy that carries a different stamp — so a demo store holding an older
  * build's payload serves the current figures instead of freezing the old ones.
  */
-export const DEMO_SEED_VERSION = 3;
+export const DEMO_SEED_VERSION = 4;
 
 /** The demo's last month of data — the month of the demo's locked date
  *  (lib/asOf.ts, 30 Oct 2026). The seed shapes stop at May 2026 (opstd) / list
@@ -197,17 +213,19 @@ function demoPeriods(seedPeriods: string[]): string[] {
 }
 
 /**
- * Operational Standard Score targets (mean across branches) for the months
- * appended after the bundled seed ends. A gentle autumn drift down from the
- * mid/high 80s of early 2026 — led by Summit, which never recovered from the
- * April power failure (see buildDemoDefects).
+ * Operational Standard Score from April 2026: the network mean each month, and
+ * how far Summit sits below it. The other five branches hold steady; Summit
+ * trails from the April power failure and closes the gap once treated
+ * (see buildDemoDefects and DEMO-WORLD.md).
  */
-const OPSTD_EXTENSION_TARGETS: Record<string, number> = {
-  "2026-06-01": 86.4,
-  "2026-07-01": 85.1,
-  "2026-08-01": 83.6,
-  "2026-09-01": 82.2,
-  "2026-10-01": 80.7,
+const OPSTD_STORY: Record<string, { mean: number; summitGap: number; summitSla: number }> = {
+  "2026-04-01": { mean: 86.9, summitGap: -11, summitSla: 80 },
+  "2026-05-01": { mean: 86.7, summitGap: -11, summitSla: 78 },
+  "2026-06-01": { mean: 86.8, summitGap: -10, summitSla: 82 },
+  "2026-07-01": { mean: 86.6, summitGap: -10, summitSla: 83 },
+  "2026-08-01": { mean: 87.4, summitGap: -6, summitSla: 91 },
+  "2026-09-01": { mean: 88.1, summitGap: -3, summitSla: 96 },
+  "2026-10-01": { mean: 88.4, summitGap: -1, summitSla: 98 },
 };
 
 function buildDemoDefects() {
@@ -228,20 +246,25 @@ function buildDemoDefects() {
         const instances = reviewed * Math.round(between(r, 14, 24));
         // Mostly low defect rates, with the occasional elevated month for variety.
         //
-        // Except at Summit from April 2026. The branch lost power on 8 April
-        // (Pulsus Tech records the UPS failure) and fell back to manual
-        // processing across every area; the fallbacks were never withdrawn. So
-        // its defect rate steps up and its resolution rate drops from that month
-        // on — the same branch Cash shows an unreconciled till at, and Risk has
-        // two overdue findings against. A demo should show one story from several
-        // angles, not six unrelated sets of noise.
-        const degraded = bi === SUMMIT && pi >= APR_2026;
-        const rate = degraded
-          ? between(r, 0.07, 0.14)
+        // 2026 follows the shared story (DEMO-WORLD.md). The branch lost power on
+        // 8 April (Pulsus Tech records the UPS failure) and fell back to manual
+        // processing across every area, so its error rate steps up and its
+        // resolution rate drops — the same branch Recon shows unexplained breaks
+        // at, and Risk has two overdue findings against. Treatment from August
+        // brings it back by October. The other branches stay steady near 3%.
+        // A demo should show one story from several angles, not six unrelated
+        // sets of noise.
+        const in2026 = pi >= JAN_2026;
+        const story = bi === SUMMIT ? SUMMIT_ERROR_2026[periods[pi]] : undefined;
+        const degraded = bi === SUMMIT && pi >= APR_2026 && pi < APR_2026 + 4;
+        const band = SUMMIT_RESOLVED_2026[periods[pi]];
+        const rate = story != null
+          ? story * between(r, 0.9, 1.1)
+          : in2026 ? between(r, 0.022, 0.038)
           : r() < 0.15 ? between(r, 0.05, 0.11) : between(r, 0.004, 0.05);
         const defects = Math.round(instances * rate);
         const resolvable = defects;
-        const resolved = Math.round(defects * (degraded ? between(r, 0.45, 0.7) : between(r, 0.7, 1)));
+        const resolved = Math.round(defects * (bi === SUMMIT && band ? between(r, band[0], band[1]) : between(r, 0.7, 1)));
         const recurring = Math.round(defects * (degraded ? between(r, 0.15, 0.35) : between(r, 0, 0.2)));
         rows.push([pi, bi, ai, reviewed, instances, defects, resolvable, resolved, recurring]);
       }
@@ -262,7 +285,6 @@ function buildDemoDefects() {
 }
 
 function buildDemoOpstd() {
-  const seedPeriodCount = ((seedOpstd as any).periods as string[]).length;
   const periods: string[] = demoPeriods((seedOpstd as any).periods);
   const metrics = (seedOpstd as any).metrics;
   const columns: string[] = (seedOpstd as any).meta.columns;
@@ -287,17 +309,25 @@ function buildDemoOpstd() {
       if (year <= 2024) auditRaw.push([4, 5, 5, 4, 3][Math.floor(r() * 5)]);
       else auditRaw.push([100, 80, 100, 60, 80][Math.floor(r() * 5)]);
     }
-    // Months appended beyond the bundled seed: reshape this month's scores so
-    // the branch mean lands on its target, with Summit trailing the network.
-    if (pi >= seedPeriodCount) {
-      const target = OPSTD_EXTENSION_TARGETS[periods[pi]];
+    // From April 2026: reshape the month's scores so the branch mean lands on
+    // the story's figure, Summit trailing by the story's gap, its service levels
+    // at the counter's, and its audit resolution held down while two audit
+    // actions were overdue (May to August).
+    const story = OPSTD_STORY[periods[pi]];
+    if (story) {
       const month = rows.slice(rows.length - branches.length);
       const spread = rng(pi * 7919 + 3);
-      const raw = month.map((row, bi) => bi === SUMMIT ? -9 - spread() * 3 : (spread() - 0.5) * 9);
+      const raw = month.map((row, bi) => bi === SUMMIT ? story.summitGap : (spread() - 0.5) * 6);
       const mean = raw.reduce((a, b) => a + b, 0) / raw.length;
       month.forEach((row, bi) => {
-        row[2] = round2(Math.min(99, Math.max(55, target + raw[bi] - mean)));
-        if (bi === SUMMIT) row[10] = round2(Math.min(row[10] as number, 62 + spread() * 8));
+        row[2] = round2(Math.min(99, Math.max(55, story.mean + raw[bi] - mean)));
+        if (bi !== SUMMIT) return;
+        row[3] = round2(story.summitSla + spread() * 2);
+        row[4] = round2(Math.min(100, story.summitSla + 2 + spread() * 2));
+        const p = periods[pi];
+        if (p >= "2026-05-01" && p <= "2026-08-01") row[10] = round2(Math.min(row[10] as number, 62 + spread() * 8));
+        else if (p === "2026-09-01") row[10] = round2(78 + spread() * 8);
+        if (p <= "2026-08-01") row[9] = round2(70 + spread() * 8); // complaints piled up during the outage
       });
     }
   }
