@@ -82,15 +82,16 @@ Set these in Vercel (see `.env.example`):
 
 | Var | Purpose |
 |---|---|
-| `SESSION_SECRET` | **Required.** Signs the session cookie. `openssl rand -base64 32`. |
-| `ADMIN_PASSWORD` | **Optional.** Password for the Settings page. Overrides the built-in default (`pa55w0rd`) when set. |
+| `SESSION_SECRET` | **Required.** Signs the session cookie. `openssl rand -base64 32`. In production the app refuses to serve or sign anyone in without it. |
+| `ADMIN_PASSWORD` | Admin password, until one is set in-app. There is no built-in default. |
+| `SUPERVISOR_PASSWORD` · `OFFICER_PASSWORD` | Shared Supervisor / Officer sign-in passwords, until set in-app. No built-in default. |
 | `ADMIN_EMAILS` | **Optional.** Extra addresses that may unlock admin as themselves, unioned with the roster in `config/admins.ts`. |
 | `BLOB_READ_WRITE_TOKEN` | Injected automatically when you connect a Vercel Blob store. |
 
-Sign-in works out of the box with the built-in default password `pa55w0rd` — no
-env var or Vercel setup required. Override it with `ADMIN_PASSWORD`, or change it
-in-app (Settings → Admin password); the new scrypt hash is persisted to storage
-and takes precedence over both the env var and the default.
+There are no built-in passwords: sign-in fails closed. A role (Admin, Supervisor,
+Officer) with neither an in-app password nor its env var cannot sign in, and the
+sign-in says "Ask your administrator to set a password". A password changed in-app
+(Settings) is persisted as a scrypt hash and takes precedence over the env var.
 
 ### Named administrators
 
@@ -108,13 +109,13 @@ rather than anything the browser sends, and `resolveRole()` still never returns
 
 ```bash
 npm install
-cp .env.example .env.local        # SESSION_SECRET recommended; ADMIN_PASSWORD + Blob token optional (uses ./.data)
+cp .env.example .env.local        # set ADMIN_PASSWORD (no default); Blob token optional (uses ./.data)
 npm run dev                        # http://localhost:3000
 npm run build                      # production build
 npm run typecheck
 ```
 
-Sign in to Settings with the default password `pa55w0rd`, or set `ADMIN_PASSWORD` in `.env.local` to override it.
+Sign in to Settings with the `ADMIN_PASSWORD` you set in `.env.local`.
 
 ## Regenerating the seed from spreadsheets
 

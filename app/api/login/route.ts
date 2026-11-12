@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { adminConfigured, canElevate, checkLogin, checkRoleLogin, createSessionToken, getSession, isRole, Role, SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth";
+import { adminConfigured, canElevate, checkLogin, checkRoleLogin, createSessionToken, getSession, isRole, NO_PASSWORD_MESSAGE, Role, rolePasswordConfigured, SESSION_COOKIE, sessionCookieOptions, sessionSecretConfigured } from "@/lib/auth";
 import { resolveRole } from "@/lib/msauth";
 import { PLATFORM_COOKIE, verifyPlatformJwt } from "@/lib/server/platform";
 import { currentCompany } from "@/lib/company";
@@ -8,9 +8,9 @@ import { currentCompany } from "@/lib/company";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// Session status. `configured` is always true — a built-in default password
-// means sign-in works without any host/env configuration. `admin` is kept for
-// backwards compatibility; `role`/`username` describe the signed-in account.
+// Session status. `configured` is true once an admin password exists (in-app or
+// ADMIN_PASSWORD) — there is no built-in default. `admin` is kept for backwards
+// compatibility; `role`/`username` describe the signed-in account.
 export async function GET() {
   const now = Date.now();
   let s = getSession(now);
@@ -67,6 +67,11 @@ export async function POST(req: NextRequest) {
   let body: any = {};
   try { body = await req.json(); } catch { /* empty */ }
 
+  // Fail closed: no sign-in of any kind without a real signing secret in production.
+  if (!sessionSecretConfigured()) {
+    return NextResponse.json({ ok: false, error: "Sign-in is turned off: SESSION_SECRET is not set on this deployment. Ask your administrator to set it." }, { status: 503 });
+  }
+
   // Continue as yourself: a named administrator (institution/index.ts) unlocks the
   // admin screens with the identity their session already proves, no password.
   // The address is read from the verified session/platform cookie — never from
@@ -87,6 +92,9 @@ export async function POST(req: NextRequest) {
     const branch = (body?.branch || "").trim();
     if (!name) return NextResponse.json({ ok: false, error: "Enter your name." }, { status: 400 });
     if (body.role === "inspector" && !branch) return NextResponse.json({ ok: false, error: "Choose your branch." }, { status: 400 });
+    if (!(await rolePasswordConfigured(body.role))) {
+      return NextResponse.json({ ok: false, error: NO_PASSWORD_MESSAGE }, { status: 403 });
+    }
     if (!(await checkRoleLogin(body.role, body?.password || ""))) {
       return NextResponse.json({ ok: false, error: "Incorrect password for that role." }, { status: 401 });
     }
@@ -96,6 +104,10 @@ export async function POST(req: NextRequest) {
   }
 
   // Admin login (username optional; blank/"admin" + admin password).
+  const uname = String(body?.username || "").trim().toLowerCase();
+  if ((!uname || uname === "admin") && !(await adminConfigured())) {
+    return NextResponse.json({ ok: false, error: NO_PASSWORD_MESSAGE }, { status: 403 });
+  }
   const result = await checkLogin(body?.username || "", body?.password || "");
   if (!result) return NextResponse.json({ ok: false, error: "Incorrect password." }, { status: 401 });
   cookies().set(SESSION_COOKIE, createSessionToken(Date.now(), result), sessionCookieOptions);
