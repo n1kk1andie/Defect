@@ -15,6 +15,7 @@
 // and payload as lib/auth.ts.
 import { NextRequest, NextResponse } from "next/server";
 import { licenseWallActive, licenseWallResponse } from "./lib/licenseWall";
+import { demoOpenView } from "./lib/demoOpen";
 import { INSTITUTION } from "@/institution";
 
 const SESSION_COOKIE = INSTITUTION.sessionCookie;
@@ -221,6 +222,11 @@ export async function middleware(req: NextRequest) {
       status: 503, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
     });
   }
+  // A demo deployment opens straight into its fictional sample data: no sign-in
+  // page, no licence wall, no company hand-off (lib/demoOpen.ts). Write routes
+  // still check the role of whoever calls them.
+  if (demoOpenView()) return forward(req);
+
   // A Pulsus company's session carries its company on EVERY path, so no route
   // answers a company member with this deployment's own data; a company without
   // this module is refused outright. Customer companies are licensed by their own
