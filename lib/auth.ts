@@ -6,8 +6,8 @@
 //   • inspector  — keys reviews for their branch, tracked until a supervisor publishes
 //
 // The gear/login flow returns the account's role, and the client shows screens based
-// on it. The legacy admin password still works out of the box (sign in with username
-// "admin", or leave the username blank) so nothing breaks with no configuration.
+// on it. The built-in admin login (username "admin", or blank) checks the in-app or
+// ADMIN_PASSWORD password. There are no default passwords: unset means no sign-in.
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { getStorage } from "@/lib/storage";
@@ -21,12 +21,6 @@ const MAX_AGE = 60 * 60 * 12; // 12h
 const CRED_BLOB = "admin-credentials.json"; // legacy admin password (scrypt)
 const ACCOUNTS_BLOB = "accounts.json"; // inspector / supervisor / extra admin accounts
 
-// Built-in default admin password. This makes sign-in work out of the box with
-// NO Vercel setup required (no ADMIN_PASSWORD env var, no Blob store). It can be
-// overridden by setting ADMIN_PASSWORD, or by changing the password in-app
-// (Settings → Admin password), which persists a scrypt hash to storage.
-const DEFAULT_ADMIN_PASSWORD = "pa55w0rd";
-
 export type Role = "inspector" | "supervisor" | "admin";
 export const ROLES: Role[] = ["inspector", "supervisor", "admin"];
 export function isRole(x: unknown): x is Role { return typeof x === "string" && (ROLES as string[]).includes(x); }
@@ -38,10 +32,10 @@ export function isRole(x: unknown): x is Role { return typeof x === "string" && 
  *  administrator can later continue as themselves — see canElevate below. */
 export interface Session { role: Role; username: string; branch: string | null; email: string | null; exp: number; }
 
-/** The effective admin password from env, falling back to the built-in default. */
-function envOrDefaultPassword(): string {
-  const fromEnv = (process.env.ADMIN_PASSWORD || "").trim();
-  return fromEnv || DEFAULT_ADMIN_PASSWORD;
+/** The admin password from env, or null when none is configured. No built-in
+ *  default — a public default would let anyone sign in as admin. */
+function envAdminPassword(): string | null {
+  return (process.env.ADMIN_PASSWORD || "").trim() || null;
 }
 
 interface StoredCredential { alg: "scrypt"; salt: string; hash: string; updatedAt: string; }
@@ -51,8 +45,13 @@ export interface Account { username: string; role: Role; alg: "scrypt"; salt: st
 /** Account without secrets — safe to send to the client. */
 export interface PublicAccount { username: string; role: Role; branch: string | null; createdAt: string; }
 
+// Fails CLOSED: no baked-in constant. This secret signs the session token (any
+// role, incl. admin) — a default would let anyone forge an admin session.
 function secret(): string {
-  return process.env.SESSION_SECRET || INSTITUTION.devSessionSecret;
+  const s = process.env.SESSION_SECRET;
+  if (s) return s;
+  if (process.env.NODE_ENV === "production") throw new Error("SESSION_SECRET must be set in production");
+  return "dev-only-insecure-secret-not-for-production";
 }
 function b64url(s: string): string { return Buffer.from(s).toString("base64url"); }
 function sign(payload: string): string { return createHmac("sha256", secret()).update(payload).digest("base64url"); }
@@ -118,20 +117,18 @@ export async function setPassword(newPassword: string): Promise<void> {
 
 // ---- Shared role passwords (Inspector / Supervisor) ----
 // Staff sign in by role: they pick a role, type their name, and enter one password
-// shared across that role. The admin sets these; until set, they fall back to the
-// admin default so sign-in works out of the box.
+// shared across that role. The admin sets these (or the env var); until one is set,
+// that role cannot sign in.
 const ROLE_PW_BLOB = "role-passwords.json";
 const ROLE_LOGIN_ROLES: Role[] = ["inspector", "supervisor"];
 
-// Built-in shared passwords per staff role, used until an admin sets a custom one
-// (Settings → Role sign-in passwords) or overrides via env. Officer = the inspector
-// role. These make role sign-in work out of the box, like the admin default password.
-const ROLE_DEFAULT_PW: Partial<Record<Role, string>> = { inspector: "0ff1cer", supervisor: "5uperv1sor" };
+// Shared role passwords come from an admin (persisted, scrypt) or the per-role env
+// var (OFFICER_PASSWORD / SUPERVISOR_PASSWORD). NO built-in default — a public
+// default would let anyone sign in as an inspector/supervisor.
 const ROLE_ENV_KEY: Partial<Record<Role, string>> = { inspector: "OFFICER_PASSWORD", supervisor: "SUPERVISOR_PASSWORD" };
-function roleDefaultPassword(role: Role): string {
+function roleEnvPassword(role: Role): string | null {
   const key = ROLE_ENV_KEY[role];
-  const fromEnv = key ? (process.env[key] || "").trim() : "";
-  return fromEnv || ROLE_DEFAULT_PW[role] || envOrDefaultPassword();
+  return (key ? (process.env[key] || "").trim() : "") || null;
 }
 
 async function readRolePasswords(): Promise<Partial<Record<Role, StoredCredential>>> {
@@ -165,9 +162,11 @@ export async function rolePasswordStatus(): Promise<Record<string, boolean>> {
 export async function checkRoleLogin(role: Role, password: string): Promise<boolean> {
   if (!ROLE_LOGIN_ROLES.includes(role)) return false;
   const pw = (password || "").trim();
+  if (!pw) return false;
   const cred = (await readRolePasswords())[role];
   if (cred) return safeEqual(hashPassword(pw, cred.salt), cred.hash);
-  return safeEqual(pw, roleDefaultPassword(role));
+  const env = roleEnvPassword(role);
+  return env ? safeEqual(pw, env) : false; // no password configured → role login disabled
 }
 
 // Admin password precedence: an in-app password (persisted to storage) takes
@@ -177,9 +176,11 @@ export async function checkPassword(submitted: string): Promise<boolean> {
   // Trim surrounding whitespace on both sides — env values pasted into a host often
   // carry a trailing space/newline, which would otherwise reject a correct password.
   const pw = (submitted || "").trim();
+  if (!pw) return false;
   const stored = await readStoredCredential();
   if (stored) return safeEqual(hashPassword(pw, stored.salt), stored.hash);
-  return safeEqual(pw, envOrDefaultPassword());
+  const env = envAdminPassword();
+  return env ? safeEqual(pw, env) : false; // no admin password configured → login disabled
 }
 
 // ---- Account registry (inspector / supervisor / extra admins) ----
@@ -253,10 +254,11 @@ export async function checkLogin(username: string, password: string): Promise<{ 
   return null;
 }
 
-/** Whether admin auth is usable. Always true — a built-in default password
- *  guarantees sign-in works even with no env var or storage configured. */
+/** Whether admin auth is usable — true once an ADMIN_PASSWORD env var or an in-app
+ *  password has been set. No public default, so a fresh deploy is NOT auto-admin. */
 export async function adminConfigured(): Promise<boolean> {
-  return true;
+  if (envAdminPassword()) return true;
+  return (await readStoredCredential()) !== null;
 }
 
 /** The current verified session, or null if signed out. */
@@ -321,3 +323,25 @@ export const sessionCookieOptions = {
   path: "/",
   maxAge: MAX_AGE,
 };
+
+// ---- Fail-closed sign-in checks ----
+// There are no built-in passwords: a role with no in-app password and no env var
+// cannot sign in at all, and nothing is signed without SESSION_SECRET in
+// production. The login route uses these to say WHY, instead of a bare
+// "Incorrect password".
+
+/** The message shown when a role has no password configured. */
+export const NO_PASSWORD_MESSAGE = "No password has been set for this sign-in yet. Ask your administrator to set a password.";
+
+/** Whether a password exists for this role: in-app (persisted) or its env var. */
+export async function rolePasswordConfigured(role: Role): Promise<boolean> {
+  if (role === "admin") return adminConfigured();
+  if (!ROLE_LOGIN_ROLES.includes(role)) return false;
+  if (roleEnvPassword(role)) return true;
+  return !!(await readRolePasswords())[role];
+}
+
+/** False only in production with no SESSION_SECRET — then nobody may sign in. */
+export function sessionSecretConfigured(): boolean {
+  return !!process.env.SESSION_SECRET || process.env.NODE_ENV !== "production";
+}

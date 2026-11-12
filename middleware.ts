@@ -20,11 +20,12 @@ import { INSTITUTION } from "@/institution";
 const SESSION_COOKIE = INSTITUTION.sessionCookie;
 const PLATFORM_COOKIE = "exec_auth";
 
+// Matches lib/auth.ts secret(). Fails CLOSED — no baked-in constant.
 function secret(): string {
-  // Matches lib/auth.ts secret() (incl. its built-in default), so a valid session
-  // verifies here even before SESSION_SECRET is set — and the built-in admin
-  // password still lets someone sign in, so the app is never locked out.
-  return process.env.SESSION_SECRET || INSTITUTION.devSessionSecret;
+  const s = process.env.SESSION_SECRET;
+  if (s) return s;
+  if (process.env.NODE_ENV === "production") throw new Error("SESSION_SECRET must be set in production");
+  return "dev-only-insecure-secret-not-for-production";
 }
 
 // ── base64url + HMAC (must match Node's base64url digest in lib/auth.ts) ──────
@@ -192,6 +193,13 @@ function companyRefusal(pathname: string, notEnabled: boolean): NextResponse {
 }
 
 export async function middleware(req: NextRequest) {
+  // Refuse to serve at all in production without SESSION_SECRET: nothing could be
+  // signed or verified safely, and there is no built-in fallback secret.
+  if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
+    return new NextResponse("Pulsus Quality is not configured: SESSION_SECRET is not set. Ask your administrator to set it.", {
+      status: 503, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+    });
+  }
   // A Pulsus company's session carries its company on EVERY path, so no route
   // answers a company member with this deployment's own data; a company without
   // this module is refused outright. Customer companies are licensed by their own

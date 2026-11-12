@@ -14,8 +14,12 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const PLATFORM_COOKIE = "exec_auth";
 
+// Fails CLOSED — no baked-in constant.
 function secret(): string {
-  return process.env.SESSION_SECRET || "cash-dev-secret-change-me";
+  const s = process.env.SESSION_SECRET;
+  if (s) return s;
+  if (process.env.NODE_ENV === "production") throw new Error("SESSION_SECRET must be set in production");
+  return "dev-only-insecure-secret-not-for-production";
 }
 
 export function readPlatformSession(token: string | undefined, now: number): string | null {
