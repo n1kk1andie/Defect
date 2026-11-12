@@ -6,8 +6,8 @@
 //   • inspector  — keys reviews for their branch, tracked until a supervisor publishes
 //
 // The gear/login flow returns the account's role, and the client shows screens based
-// on it. The legacy admin password still works out of the box (sign in with username
-// "admin", or leave the username blank) so nothing breaks with no configuration.
+// on it. The built-in admin login (username "admin", or blank) checks the in-app or
+// ADMIN_PASSWORD password. There are no default passwords: unset means no sign-in.
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { getStorage } from "@/lib/storage";
@@ -119,8 +119,8 @@ export async function setPassword(newPassword: string): Promise<void> {
 
 // ---- Shared role passwords (Inspector / Supervisor) ----
 // Staff sign in by role: they pick a role, type their name, and enter one password
-// shared across that role. The admin sets these; until set, they fall back to the
-// admin default so sign-in works out of the box.
+// shared across that role. The admin sets these (or the env var); until one is set,
+// that role cannot sign in.
 const ROLE_PW_BLOB = "role-passwords.json";
 const ROLE_LOGIN_ROLES: Role[] = ["inspector", "supervisor"];
 
@@ -374,3 +374,25 @@ export const sessionCookieOptions = {
   path: "/",
   maxAge: MAX_AGE,
 };
+
+// ---- Fail-closed sign-in checks ----
+// There are no built-in passwords: a role with no in-app password and no env var
+// cannot sign in at all, and nothing is signed without SESSION_SECRET in
+// production. The login route uses these to say WHY, instead of a bare
+// "Incorrect password".
+
+/** The message shown when a role has no password configured. */
+export const NO_PASSWORD_MESSAGE = "No password has been set for this sign-in yet. Ask your administrator to set a password.";
+
+/** Whether a password exists for this role: in-app (persisted) or its env var. */
+export async function rolePasswordConfigured(role: Role): Promise<boolean> {
+  if (role === "admin") return adminConfigured();
+  if (!ROLE_LOGIN_ROLES.includes(role)) return false;
+  if (roleEnvPassword(role)) return true;
+  return !!(await readRolePasswords())[role];
+}
+
+/** False only in production with no SESSION_SECRET — then nobody may sign in. */
+export function sessionSecretConfigured(): boolean {
+  return !!process.env.SESSION_SECRET || process.env.NODE_ENV !== "production";
+}

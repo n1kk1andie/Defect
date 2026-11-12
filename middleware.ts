@@ -214,6 +214,13 @@ function companyRefusal(pathname: string, notEnabled: boolean): NextResponse {
 }
 
 export async function middleware(req: NextRequest) {
+  // Refuse to serve at all in production without SESSION_SECRET: nothing could be
+  // signed or verified safely, and there is no built-in fallback secret.
+  if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
+    return new NextResponse("Pulsus Quality is not configured: SESSION_SECRET is not set. Ask your administrator to set it.", {
+      status: 503, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+    });
+  }
   // A Pulsus company's session carries its company on EVERY path, so no route
   // answers a company member with this deployment's own data; a company without
   // this module is refused outright. Customer companies are licensed by their own

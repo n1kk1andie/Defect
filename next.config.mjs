@@ -1,3 +1,4 @@
+import { withSecurityHeaders } from "./security-headers.mjs";
 /** @type {import('next').NextConfig} */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -71,4 +72,4 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSecurityHeaders(nextConfig);
