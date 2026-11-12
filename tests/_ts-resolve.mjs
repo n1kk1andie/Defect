@@ -31,3 +31,11 @@ export async function resolve(specifier, context, next) {
   }
   return next(specifier, context);
 }
+
+// JSON imports (seed data) without `with { type: "json" }`, as the bundler allows.
+export async function load(url, context, next) {
+  if (url.startsWith("file:") && url.endsWith(".json")) {
+    return next(url, { ...context, importAttributes: { ...context.importAttributes, type: "json" } });
+  }
+  return next(url, context);
+}
