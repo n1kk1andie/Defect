@@ -64,7 +64,9 @@ jobs:
             if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
             if node -e "process.exit(require('./package.json').scripts?.build ? 0 : 1)"; then npm run build; fi
           fi
-          if ls tests/*.test.mjs >/dev/null 2>&1; then node --experimental-strip-types --test tests/*.test.mjs; fi
+          # The app's own test command (it may register loaders the bare runner lacks).
+          if node -e "process.exit(require('./package.json').scripts?.test ? 0 : 1)"; then npm test;
+          elif ls tests/*.test.mjs >/dev/null 2>&1; then node --experimental-strip-types --test tests/*.test.mjs; fi
 
       - name: Push the demo
         if: steps.merge.outputs.result == 'merged' && steps.check.outcome == 'success'
