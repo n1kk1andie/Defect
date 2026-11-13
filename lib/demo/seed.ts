@@ -18,6 +18,7 @@ import { DEMO_COMPANY, DEMO_DOMAIN, PERSONAS } from "@/lib/demo/personas";
 import { seedInspections } from "@/lib/demo/inspections";
 
 const UNITS = ["Harbour", "Riverside", "Parkway", "Summit", "Crossroads", "Gateway"];
+const REGIONS = [["Harbour", "South"], ["Riverside", "South"], ["Gateway", "South"], ["Parkway", "North"], ["Summit", "North"], ["Crossroads", "North"]] as const;
 // Base defect rate per branch: Summit is the watchlist story; Crossroads is drifting.
 const BASE: Record<string, number> = { Harbour: 0.034, Riverside: 0.033, Parkway: 0.034, Summit: 0.072, Crossroads: 0.036, Gateway: 0.033 };
 const RESOLVE: Record<string, number> = { Harbour: 0.83, Riverside: 0.85, Parkway: 0.83, Summit: 0.62, Crossroads: 0.78, Gateway: 0.845 };
@@ -63,14 +64,46 @@ export async function clearDemo(tx: Tx): Promise<void> {
 }
 
 /** Seed the demo tenant if it's empty. Safe to call on every request; only the first does anything. */
+/**
+ * The demo data's version. A demo database seeded by an earlier release is
+ * brought up to date in place (only additions, demo tenant only), so a deploy
+ * never leaves the demo without the newest screens' sample data.
+ *   1  Milestone 1: history, reviews, scorecard, actions
+ *   2  Milestone 2: templates, inspections, inspection actions, scorecard in design
+ */
+export const DEMO_SEED_VERSION = 2;
+
+async function seedVersion(tx: Tx): Promise<number> {
+  return Number(rowsOf<{ v: number }>(await tx.execute(sql`select value as v from counters where name = 'demo_seed'`))[0]?.v ?? 1);
+}
+async function setSeedVersion(tx: Tx, v: number) {
+  await tx.insert(counters).values({ companyId: DEMO, name: "demo_seed", value: v }).onConflictDoUpdate({ target: [counters.companyId, counters.name], set: { value: v } });
+}
+
 export async function ensureDemoSeeded(): Promise<void> {
   if ((process.env.DEMO_MODE || "").trim() !== "1") return;
   await withTenant(DEMO, async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(727002)`);
     const n = Number(rowsOf<{ n: string }>(await tx.execute(sql`select count(*)::text as n from units`))[0]?.n ?? 0);
-    if (n > 0) return;
-    await seedDemo(tx);
+    if (n === 0) { await seedDemo(tx); return; }
+    if ((await seedVersion(tx)) < DEMO_SEED_VERSION) await upgradeDemo(tx);
   });
+}
+
+/** Bring a demo seeded by an earlier release up to the current sample data, adding only what's missing. */
+export async function upgradeDemo(tx: Tx, now = new Date()): Promise<void> {
+  const from = await seedVersion(tx);
+  if (from < 2) {
+    const s = rowsOf<{ data: unknown }>(await tx.execute(sql`select data from company_settings where company_id = ${DEMO}`))[0]?.data;
+    await writeSettings(tx, DEMO, cleanSettings({ ...((s as object) || {}), sector: "banking", groupLabel: "Region", setupDone: true }), "demo");
+    const rows = await tx.select({ id: units.id, name: units.name }).from(units).where(sql`company_id = ${DEMO}`);
+    const unitIds = new Map(rows.filter((u) => UNITS.includes(u.name)).map((u) => [u.name, u.id]));
+    for (const [u, region] of REGIONS) if (unitIds.has(u)) await tx.update(units).set({ region }).where(sql`id = ${unitIds.get(u)!} and region is null`);
+    const already = Number(rowsOf<{ n: number }>(await tx.execute(sql`select count(*)::int as n from inspections where client_id like 'demo-%'`))[0]?.n ?? 0);
+    const ins = already ? { templates: 0, inspections: 0 } : await seedInspections(tx, now, unitIds);
+    await record(tx, DEMO, { actor: "demo", action: "demo.upgrade", entityType: "company", entityId: DEMO, summary: `Demo sample data brought up to version ${DEMO_SEED_VERSION}: ${ins.templates} templates, ${ins.inspections} inspections` });
+  }
+  await setSeedVersion(tx, DEMO_SEED_VERSION);
 }
 
 export async function seedDemo(tx: Tx, now = new Date()): Promise<void> {
@@ -78,7 +111,7 @@ export async function seedDemo(tx: Tx, now = new Date()): Promise<void> {
   await ensureCompany(tx, DEMO, DEMO_COMPANY, "demo");
   await writeSettings(tx, DEMO, cleanSettings({ unitLabel: "Branch", unitPlural: "Branches", itemLabel: "File", itemTypes: ["New", "Change", "Maintenance", "Other"], instanceBasis: "check", scorecard: true, sector: "banking", groupLabel: "Region", setupDone: true }), "demo");
   const unitIds = await ensureUnits(tx, DEMO, UNITS);
-  for (const [u, region] of [["Harbour", "South"], ["Riverside", "South"], ["Gateway", "South"], ["Parkway", "North"], ["Summit", "North"], ["Crossroads", "North"]] as const) await tx.update(units).set({ region }).where(sql`id = ${unitIds.get(u)!}`);
+  for (const [u, region] of REGIONS) await tx.update(units).set({ region }).where(sql`id = ${unitIds.get(u)!}`);
   const areaIds = await ensureAreas(tx, DEMO, PROGRAM.map((p) => p.area));
   for (const p of PROGRAM) await setAreaChecklist(tx, DEMO, areaIds.get(p.area)!, p.checks, p.natures.map(([label, category]) => ({ label, category })));
   for (const p of PERSONAS) {
@@ -233,6 +266,7 @@ export async function seedDemo(tx: Tx, now = new Date()): Promise<void> {
   }
   await tx.insert(counters).values({ companyId: DEMO, name: "action", value: 42 });
   const ins = await seedInspections(tx, now, unitIds);
+  await setSeedVersion(tx, DEMO_SEED_VERSION);
   await record(tx, DEMO, { actor: "demo", action: "demo.seed", entityType: "company", entityId: DEMO, summary: `${DEMO_COMPANY} sample data: ${stats.length} history rows, ${reviewRows.length} reviews, ${LIST.length} actions, ${ins.templates} templates, ${ins.inspections} inspections` });
 }
 
