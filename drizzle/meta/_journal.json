@@ -57,6 +57,27 @@
       "when": 1794540045422,
       "tag": "0007_sampling_programmes_tenancy",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794610610417,
+      "tag": "0008_m4_issues_api_structure",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794610614763,
+      "tag": "0009_m4_tenancy",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794613511324,
+      "tag": "0010_company_plan",
+      "breakpoints": true
     }
   ]
 }

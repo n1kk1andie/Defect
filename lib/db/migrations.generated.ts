@@ -111,5 +111,42 @@ export const MIGRATIONS: { id: string; statements: string[] }[] = [
   "statements": [
    "-- Tenant isolation for sampling plans, programmes and site risk factors (as 0001_tenancy).\nDO $$\nDECLARE t text;\nBEGIN\n  FOREACH t IN ARRAY ARRAY['sampling_plans','programmes','unit_factors']\n  LOOP\n    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);\n    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);\n    EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', t);\n    EXECUTE format('CREATE POLICY tenant_isolation ON %I USING (company_id = current_setting(''app.company_id'', true)) WITH CHECK (company_id = current_setting(''app.company_id'', true))', t);\n    BEGIN\n      EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO quality_app', t);\n    EXCEPTION WHEN others THEN NULL;\n    END;\n  END LOOP;\nEND $$;"
   ]
+ },
+ {
+  "id": "0008_m4_issues_api_structure",
+  "statements": [
+   "CREATE TABLE \"api_keys\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"company_id\" text NOT NULL,\n\t\"name\" text NOT NULL,\n\t\"hint\" text NOT NULL,\n\t\"hash\" text NOT NULL,\n\t\"scopes\" text[] DEFAULT '{}'::text[] NOT NULL,\n\t\"created_by\" text NOT NULL,\n\t\"created_at\" timestamp with time zone DEFAULT now() NOT NULL,\n\t\"last_used_at\" timestamp with time zone,\n\t\"expires_at\" timestamp with time zone,\n\t\"revoked_at\" timestamp with time zone,\n\t\"replaced_by\" text\n);",
+   "CREATE TABLE \"entities\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"company_id\" text NOT NULL,\n\t\"name\" text NOT NULL,\n\t\"code\" text,\n\t\"sort\" integer DEFAULT 0 NOT NULL,\n\t\"created_at\" timestamp with time zone DEFAULT now() NOT NULL\n);",
+   "CREATE TABLE \"issue_reports\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"company_id\" text NOT NULL,\n\t\"ref\" text NOT NULL,\n\t\"unit_id\" text NOT NULL,\n\t\"category\" text NOT NULL,\n\t\"description\" text NOT NULL,\n\t\"location\" text DEFAULT '' NOT NULL,\n\t\"reporter_name\" text DEFAULT '' NOT NULL,\n\t\"reporter_contact\" text DEFAULT '' NOT NULL,\n\t\"status\" text DEFAULT 'new' NOT NULL,\n\t\"triage_note\" text DEFAULT '' NOT NULL,\n\t\"triaged_by\" text,\n\t\"triaged_at\" timestamp with time zone,\n\t\"action_id\" text,\n\t\"inspection_id\" text,\n\t\"source\" text DEFAULT 'link' NOT NULL,\n\t\"created_at\" timestamp with time zone DEFAULT now() NOT NULL\n);",
+   "CREATE TABLE \"report_links\" (\n\t\"company_id\" text NOT NULL,\n\t\"unit_id\" text NOT NULL,\n\t\"token\" text NOT NULL,\n\t\"active\" boolean DEFAULT true NOT NULL,\n\t\"created_by\" text NOT NULL,\n\t\"created_at\" timestamp with time zone DEFAULT now() NOT NULL,\n\tCONSTRAINT \"report_links_company_id_unit_id_pk\" PRIMARY KEY(\"company_id\",\"unit_id\")\n);",
+   "CREATE TABLE \"site_groups\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"company_id\" text NOT NULL,\n\t\"name\" text NOT NULL,\n\t\"unit_ids\" text[] DEFAULT '{}'::text[] NOT NULL,\n\t\"created_by\" text NOT NULL,\n\t\"created_at\" timestamp with time zone DEFAULT now() NOT NULL\n);",
+   "ALTER TABLE \"actions\" ADD COLUMN \"rca\" jsonb;",
+   "ALTER TABLE \"actions\" ADD COLUMN \"effectiveness_days\" integer DEFAULT 0 NOT NULL;",
+   "ALTER TABLE \"actions\" ADD COLUMN \"effectiveness\" jsonb;",
+   "ALTER TABLE \"actions\" ADD COLUMN \"reopen_count\" integer DEFAULT 0 NOT NULL;",
+   "ALTER TABLE \"members\" ADD COLUMN \"email_alerts\" boolean DEFAULT true NOT NULL;",
+   "ALTER TABLE \"units\" ADD COLUMN \"entity_id\" text;",
+   "CREATE UNIQUE INDEX \"api_keys_hash\" ON \"api_keys\" USING btree (\"hash\");",
+   "CREATE UNIQUE INDEX \"entities_company_name\" ON \"entities\" USING btree (\"company_id\",\"name\");",
+   "CREATE UNIQUE INDEX \"issue_reports_ref\" ON \"issue_reports\" USING btree (\"company_id\",\"ref\");",
+   "CREATE INDEX \"issue_reports_status\" ON \"issue_reports\" USING btree (\"company_id\",\"status\");",
+   "CREATE UNIQUE INDEX \"report_links_token\" ON \"report_links\" USING btree (\"token\");",
+   "CREATE UNIQUE INDEX \"site_groups_company_name\" ON \"site_groups\" USING btree (\"company_id\",\"name\");"
+  ]
+ },
+ {
+  "id": "0009_m4_tenancy",
+  "statements": [
+   "-- Tenant isolation for the Milestone 4 tables (as 0001_tenancy).\nDO $$\nDECLARE t text;\nBEGIN\n  FOREACH t IN ARRAY ARRAY['entities','site_groups','report_links','issue_reports','api_keys']\n  LOOP\n    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);\n    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);\n    EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', t);\n    EXECUTE format('CREATE POLICY tenant_isolation ON %I USING (company_id = current_setting(''app.company_id'', true)) WITH CHECK (company_id = current_setting(''app.company_id'', true))', t);\n    BEGIN\n      EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO quality_app', t);\n    EXCEPTION WHEN others THEN NULL;\n    END;\n  END LOOP;\nEND $$;",
+   "-- The daily alert email (lib/notify.ts, /api/cron/notify) needs the list of tenant ids, and\n-- nothing else, across companies: a read-only policy on the companies table\n-- for the reserved setting \"__registry__\", which withTenant() can never set.\nDROP POLICY IF EXISTS tenant_registry ON companies;",
+   "CREATE POLICY tenant_registry ON companies FOR SELECT USING (current_setting('app.company_id', true) = '__registry__');"
+  ]
+ },
+ {
+  "id": "0010_company_plan",
+  "statements": [
+   "ALTER TABLE \"companies\" ADD COLUMN \"plan\" jsonb;",
+   "ALTER TABLE \"companies\" ADD COLUMN \"plan_seen_at\" timestamp with time zone;"
+  ]
  }
 ];

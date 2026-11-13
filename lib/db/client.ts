@@ -141,3 +141,17 @@ export async function withTenant<T>(companyId: string, fn: (tx: Tx) => Promise<T
 export function rowsOf<T>(r: unknown): T[] {
   return ((r as { rows?: T[] })?.rows ?? (r as T[])) || [];
 }
+
+/**
+ * The ids of every tenant, for the daily alert email only. Runs under the reserved
+ * setting "__registry__", which a read-only policy on the companies table admits
+ * (drizzle/0009_m4_tenancy.sql); every other table stays closed to it.
+ */
+export async function listTenantIds(): Promise<string[]> {
+  const c = await connection();
+  return c.db.transaction(async (tx) => {
+    if (c.appRole) await tx.execute(sql`set local role quality_app`);
+    await tx.execute(sql`select set_config('app.company_id', '__registry__', true)`);
+    return rowsOf<{ company_id: string }>(await tx.execute(sql`select company_id from companies order by company_id`)).map((r) => r.company_id).filter((id) => TENANT_ID.test(id));
+  });
+}

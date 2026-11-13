@@ -333,12 +333,33 @@ async function raiseActions(tx: Tx, a: Actor, r: typeof inspections.$inferSelect
   const byQ = new Map<string, Score["findings"]>();
   for (const f of score.findings) (byQ.get(f.questionId) || byQ.set(f.questionId, []).get(f.questionId)!).push(f);
   const today = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  // Earlier actions raised at this site from this checklist: a question that fails again reopens its action (recurrence) instead of raising a new one.
+  const prior = (await tx.select().from(actions).where(and(eq(actions.companyId, a.tenant), eq(actions.unitId, r.unitId), eq(actions.sourceType, "inspection"))))
+    .filter((x) => x.sourceId && !x.sourceId.startsWith(r.id + ":"));
+  const priorIns = prior.length ? await tx.select({ id: inspections.id, templateId: inspections.templateId }).from(inspections).where(and(eq(inspections.companyId, a.tenant), inArray(inspections.id, Array.from(new Set(prior.map((x) => x.sourceId!.split(":")[0])))))) : [];
+  const tplOf = new Map(priorIns.map((i) => [i.id, i.templateId]));
+  const sameChecklist = prior.filter((x) => tplOf.get(x.sourceId!.split(":")[0]) === r.templateId).sort((x, y) => y.createdAt.getTime() - x.createdAt.getTime());
   for (const [qid, fs] of byQ) {
     const q = allQuestions(def).find((x) => x.q.id === qid)!.q;
     if (!q.action?.auto && !q.critical) continue;
     const sourceId = `${r.id}:${qid}`;
     const exists = (await tx.select({ id: actions.id }).from(actions).where(and(eq(actions.companyId, a.tenant), eq(actions.sourceType, "inspection"), eq(actions.sourceId, sourceId))).limit(1)).length;
     if (exists) continue;
+    const earlier = sameChecklist.find((x) => x.sourceId!.endsWith(":" + qid) && (x.status !== "closed" || (x.closedAt && now.getTime() - x.closedAt.getTime() < 365 * 864e5)));
+    if (earlier) {
+      if (earlier.status === "closed") {
+        const eff = earlier.effectiveness as { status?: string } | null;
+        const effectiveness = eff && (eff.status === "pending" || eff.status === "due") ? { ...eff, status: "ineffective", checkedAt: now.toISOString(), by: a.email, note: `Failed again on ${r.ref}.`, inspectionRef: r.ref } : eff;
+        await tx.update(actions).set({ status: "in_progress", closedAt: null, verifiedBy: null, verifiedAt: null, reopenCount: earlier.reopenCount + 1, effectiveness, updatedAt: now }).where(eq(actions.id, earlier.id));
+        await tx.insert(actionEvents).values({ companyId: a.tenant, actionId: earlier.id, kind: "status", status: "in_progress", by: a.email, note: `Reopened: "${q.label.slice(0, 120)}" failed again on ${r.ref}.` });
+        await record(tx, a.tenant, { actor: a.email, action: "action.recurred", entityType: "action", entityId: earlier.id, summary: `${earlier.ref} reopened: the finding recurred on ${r.ref}`, before: { status: "closed" }, after: { status: "in_progress", reopenCount: earlier.reopenCount + 1 }, requestId });
+      } else {
+        await tx.insert(actionEvents).values({ companyId: a.tenant, actionId: earlier.id, kind: "comment", status: null, by: a.email, note: `Failed again on ${r.ref} while this action is still open.` });
+        await tx.update(actions).set({ updatedAt: now }).where(eq(actions.id, earlier.id));
+      }
+      continue;
+    }
     const id = randomUUID();
     const ref = await nextRef(tx, a.tenant, "action", "ACT");
     const itemLabel = def.sampling?.itemLabel ?? "item";
@@ -349,10 +370,22 @@ async function raiseActions(tx: Tx, a: Actor, r: typeof inspections.$inferSelect
       id, companyId: a.tenant, ref, kind: "corrective", unitId: r.unitId, areaId: def.binding?.kind === "defects" ? def.binding.areaId : null,
       title: (q.critical ? "Critical: " : "") + q.label.slice(0, 150), details, rootCause: "", priority: q.action?.priority ?? "high",
       ownerEmail: null, ownerName: `${unit?.name ?? ""} ${settings.unitLabel.toLowerCase()} manager`.trim(), dueDate: addDays(today, q.action?.dueDays ?? 14),
-      status: "open", raisedBy: a.email, sourceType: "inspection", sourceId,
+      status: "open", raisedBy: a.email, sourceType: "inspection", sourceId, effectivenessDays: 30,
     };
     await tx.insert(actions).values(v);
     await tx.insert(actionEvents).values({ companyId: a.tenant, actionId: id, kind: "status", status: "open", by: a.email, note: `Raised from ${r.ref}` });
     await record(tx, a.tenant, { actor: a.email, action: "action.create", entityType: "action", entityId: id, summary: `${ref} raised from ${r.ref}: ${v.title}`, after: { ref, title: v.title, sourceId }, requestId });
+  }
+  // Effectiveness checks: a closed action's check passes when a re-inspection of the same checklist, on or after its check date, answers its questions without failing them.
+  const failed = new Set(score.findings.map((f) => f.questionId));
+  const answered = (qid: string) => { const top = (r.answers as Answers)?.[qid]; if (top && !top.na) return true; return ((r.items as SampledItem[]) || []).some((it) => it.answers?.[qid] && !it.answers[qid].na); };
+  for (const x of sameChecklist) {
+    const eff = x.effectiveness as { status?: string; due?: string; questionIds?: string[] } | null;
+    if (x.status !== "closed" || !eff || (eff.status !== "pending" && eff.status !== "due") || !eff.due || today < eff.due) continue;
+    const qs = eff.questionIds ?? [];
+    if (!qs.length || qs.some((qid) => failed.has(qid)) || !qs.every(answered)) continue;
+    await tx.update(actions).set({ effectiveness: { ...eff, status: "effective", checkedAt: now.toISOString(), by: a.email, note: `Passed on re-inspection ${r.ref}.`, inspectionRef: r.ref }, updatedAt: now }).where(eq(actions.id, x.id));
+    await tx.insert(actionEvents).values({ companyId: a.tenant, actionId: x.id, kind: "effectiveness", status: null, by: a.email, note: `Effective: passed on re-inspection ${r.ref}.` });
+    await record(tx, a.tenant, { actor: a.email, action: "action.effective", entityType: "action", entityId: x.id, summary: `${x.ref}: effective, passed on re-inspection ${r.ref}`, requestId });
   }
 }

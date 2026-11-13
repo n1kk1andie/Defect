@@ -4,6 +4,10 @@
 //    sets them (lib/session.ts reads them back), so they can't be forged.
 // 2. Public: the sign-in and sign-up pages, the licence page, health, the
 //    web manifest and icons. GET /api/pulse checks its own service grant.
+//    Each of these checks its own credential instead of a session: the
+//    report-an-issue page and form (/r/<token>, /api/public/report/<token>:
+//    the site's link token, Turnstile), the REST API (/api/v1: an API key),
+//    and the daily alert email (/api/cron: CRON_SECRET).
 // 3. Writes: a non-GET API call must come from this site (Origin check).
 // 4. A demo deployment (DEMO_MODE=1) opens straight into its fictional
 //    company as the chosen persona (guest viewer by default): no sign-in, no
@@ -18,6 +22,7 @@
 // 8. A Pulsus staff session opens the institution's tenant; lib/session.ts
 //    applies its allow-list.
 // Otherwise: 401 for an API, /login for a page.
+import { licenceLapsed } from "./lib/planStatus";
 import { NextRequest, NextResponse } from "next/server";
 import { licenseWallActive, licenseWallResponse } from "./lib/licenseWall";
 import { claimedIssuer, COMPANY_JWT_ISSUER, platformSession, PLATFORM_COOKIE, type PlatformSession } from "./lib/platform-jwt";
@@ -32,7 +37,7 @@ const H = {
 const PERSONA_COOKIE = "pq_persona";
 const DEMO_PERSONAS = ["guest", "admin", "taylor.reid", "robin.ellis", "jordan.blake", "sam.foster"].map((p) => `${p}@demo.pulsus.tech`);
 
-const PUBLIC = /^\/(?:login|signup|licence|api\/health|api\/logout|manifest\.webmanifest|icon\.png|apple-icon\.png|favicon\.ico|pulsus-quality[\w.-]*\.png)(?:\/|$)/;
+const PUBLIC = /^\/(?:login|signup|licence|api\/health|api\/logout|manifest\.webmanifest|icon\.png|apple-icon\.png|favicon\.ico|pulsus-quality[\w.-]*\.png|r|api\/public|api\/v1|api\/cron)(?:\/|$)/;
 const isDemo = () => (process.env.DEMO_MODE || "").trim().replace(/^["']+|["']+$/g, "") === "1";
 
 function forward(req: NextRequest, id: Record<string, string> | null): NextResponse {
@@ -86,10 +91,10 @@ export async function proxy(req: NextRequest) {
     const s = await platformSession(token);
     if (s?.company) {
       if (!s.company.modules.includes(MODULE_KEY)) return refuse(pathname, 403, "Pulsus Quality isn't switched on for your company", "An owner or admin can add it on the company page in Pulsus.");
-      const standing = s.company.plan?.standing;
-      if (standing === "suspended" || standing === "ended") {
+      const lapsed = licenceLapsed(s.company.plan);
+      if (lapsed) {
         if (api) return NextResponse.json({ error: "licence_required" }, { status: 402 });
-        if (pathname !== "/licence") { const u = req.nextUrl.clone(); u.pathname = "/licence"; u.search = `?reason=${standing}`; return NextResponse.redirect(u); }
+        if (pathname !== "/licence") { const u = req.nextUrl.clone(); u.pathname = "/licence"; u.search = `?reason=${lapsed}`; return NextResponse.redirect(u); }
       }
       return forward(req, companyIdentity(s));
     }

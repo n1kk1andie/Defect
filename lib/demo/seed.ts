@@ -8,7 +8,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { withTenant, rowsOf, type Tx } from "@/lib/db/client";
-import { samplingPlans, programmes, unitFactors, inspectionEvents, inspections, scorecardVersions, templateVersions, templates, actionEvents, actions, members, monthlyStats, reviewEvents, reviewItems, reviews, scorecardEntries, scorecards, units, areas, natures, checks, companySettings, counters, evidence, imports, riskOutbox, companies } from "@/lib/db/schema";
+import { samplingPlans, programmes, unitFactors, inspectionEvents, inspections, scorecardVersions, templateVersions, templates, actionEvents, actions, members, monthlyStats, reviewEvents, reviewItems, reviews, scorecardEntries, scorecards, units, areas, natures, checks, companySettings, counters, evidence, imports, riskOutbox, companies, apiKeys, issueReports, reportLinks, siteGroups, entities } from "@/lib/db/schema";
 import { DEMO, ensureAreas, ensureCompany, ensureUnits, setAreaChecklist, writeSettings } from "@/lib/company";
 import { record } from "@/lib/audit";
 import { cleanSettings, type Severity } from "@/lib/settings";
@@ -17,6 +17,7 @@ import { AUDIT_POINTS } from "@/lib/bands";
 import { DEMO_COMPANY, DEMO_DOMAIN, PERSONAS } from "@/lib/demo/personas";
 import { seedInspections } from "@/lib/demo/inspections";
 import { seedM3 } from "@/lib/demo/m3";
+import { hasM4, seedM4 } from "@/lib/demo/m4";
 
 const UNITS = ["Harbour", "Riverside", "Parkway", "Summit", "Crossroads", "Gateway"];
 const REGIONS = [["Harbour", "South"], ["Riverside", "South"], ["Gateway", "South"], ["Parkway", "North"], ["Summit", "North"], ["Crossroads", "North"]] as const;
@@ -58,7 +59,7 @@ async function chunked<T>(rows: T[], n: number, fn: (c: T[]) => Promise<unknown>
 
 /** Wipe the demo tenant (demo only). */
 export async function clearDemo(tx: Tx): Promise<void> {
-  for (const t of [samplingPlans, programmes, unitFactors, inspectionEvents, inspections, templateVersions, templates, scorecardVersions, actionEvents, actions, reviewEvents, reviewItems, reviews, scorecardEntries, scorecards, monthlyStats, checks, natures, areas, units, members, companySettings, counters, evidence, imports, riskOutbox, companies]) {
+  for (const t of [apiKeys, issueReports, reportLinks, siteGroups, entities, samplingPlans, programmes, unitFactors, inspectionEvents, inspections, templateVersions, templates, scorecardVersions, actionEvents, actions, reviewEvents, reviewItems, reviews, scorecardEntries, scorecards, monthlyStats, checks, natures, areas, units, members, companySettings, counters, evidence, imports, riskOutbox, companies]) {
     await tx.delete(t).where(sql`company_id = ${DEMO}`);
   }
   // The change history is append-only (its trigger refuses deletes), so a reset is recorded in it rather than erasing it.
@@ -72,8 +73,10 @@ export async function clearDemo(tx: Tx): Promise<void> {
  *   1  Milestone 1: history, reviews, scorecard, actions
  *   2  Milestone 2: templates, inspections, inspection actions, scorecard in design
  *   3  Milestone 3: programmes, sampling plans, risk factors per branch
+ *   4  Meridian Financial Group wording
+ *   5  Milestone 4: subsidiaries and groups, reported issues, root cause and effectiveness, API keys
  */
-export const DEMO_SEED_VERSION = 4;
+export const DEMO_SEED_VERSION = 5;
 
 async function seedVersion(tx: Tx): Promise<number> {
   return Number(rowsOf<{ v: number }>(await tx.execute(sql`select value as v from counters where name = 'demo_seed'`))[0]?.v ?? 1);
@@ -120,6 +123,12 @@ export async function upgradeDemo(tx: Tx, now = new Date()): Promise<void> {
     await tx.update(checks).set({ label: "Request signed by the customer" })
       .where(sql`company_id = ${DEMO} and code = 'request-signed' and label = 'Request signed by the member'`);
     await record(tx, DEMO, { actor: "demo", action: "demo.upgrade", entityType: "company", entityId: DEMO, summary: "Demo sample data brought up to version 4: Meridian Financial Group, customers not members" });
+  }
+  if (from < 5) {
+    const rows = await tx.select({ id: units.id, name: units.name }).from(units).where(sql`company_id = ${DEMO}`);
+    const unitIds = new Map(rows.filter((u) => UNITS.includes(u.name)).map((u) => [u.name, u.id]));
+    const m4 = (await hasM4(tx)) ? { entities: 0, issues: 0 } : await seedM4(tx, now, unitIds);
+    await record(tx, DEMO, { actor: "demo", action: "demo.upgrade", entityType: "company", entityId: DEMO, summary: `Demo sample data brought up to version 5: ${m4.entities} subsidiaries, ${m4.issues} reported issues, API keys` });
   }
   await setSeedVersion(tx, DEMO_SEED_VERSION);
 }
@@ -285,6 +294,7 @@ export async function seedDemo(tx: Tx, now = new Date()): Promise<void> {
   await tx.insert(counters).values({ companyId: DEMO, name: "action", value: 42 });
   const ins = await seedInspections(tx, now, unitIds);
   await seedM3(tx, now, unitIds);
+  await seedM4(tx, now, unitIds);
   await setSeedVersion(tx, DEMO_SEED_VERSION);
   await record(tx, DEMO, { actor: "demo", action: "demo.seed", entityType: "company", entityId: DEMO, summary: `${DEMO_COMPANY} sample data: ${stats.length} history rows, ${reviewRows.length} reviews, ${LIST.length} actions, ${ins.templates} templates, ${ins.inspections} inspections` });
 }

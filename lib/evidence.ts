@@ -6,7 +6,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { withTenant } from "@/lib/db/client";
-import { actions, evidence, inspections, reviews } from "@/lib/db/schema";
+import { actions, evidence, inspections, issueReports, reviews } from "@/lib/db/schema";
 import { getStorage, storageIsDurable } from "@/lib/storage";
 import { record } from "@/lib/audit";
 import { canSeeAction } from "@/lib/actions";
@@ -40,6 +40,12 @@ async function entityVisible(a: Actor, entityType: string, entityId: string, for
       if (!r) return false;
       if (forWrite) return (r.inspectorEmail === a.email || a.roles.includes("admin")) && (r.status === "draft" || r.status === "returned");
       return canSeeInspection(a, r);
+    }
+    if (entityType === "issue_report") {
+      // Photos from public reports: read by whoever triages that site's reports; added only through the report itself.
+      if (forWrite) return false;
+      const r = (await tx.select().from(issueReports).where(and(eq(issueReports.companyId, a.tenant), eq(issueReports.id, entityId))).limit(1))[0];
+      return !!r && a.roles.some((x) => x === "admin" || x === "supervisor" || x === "inspector") && (!a.unitIds.length || a.unitIds.includes(r.unitId));
     }
     return false;
   });

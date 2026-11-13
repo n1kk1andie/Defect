@@ -51,7 +51,7 @@ export async function updateSettings(actor: Actor, patch: Partial<CompanySetting
 
 export interface ProgramCheck { id: string; code: string; label: string; severity: Severity }
 export interface ProgramArea { id: string; name: string; checks: ProgramCheck[]; natures: { id: string; label: string; category: string }[] }
-export interface Program { units: { id: string; name: string; region: string | null; active: boolean }[]; areas: ProgramArea[] }
+export interface Program { units: { id: string; name: string; region: string | null; entityId: string | null; code: string | null; active: boolean }[]; areas: ProgramArea[] }
 
 export async function loadProgram(tx: Tx, companyId: string): Promise<Program> {
   const [u, a, c, n] = await Promise.all([
@@ -61,7 +61,7 @@ export async function loadProgram(tx: Tx, companyId: string): Promise<Program> {
     tx.select().from(natures).where(eq(natures.companyId, companyId)),
   ]);
   return {
-    units: u.map((x) => ({ id: x.id, name: x.name, region: x.region, active: x.active })),
+    units: u.map((x) => ({ id: x.id, name: x.name, region: x.region, entityId: x.entityId, code: x.code, active: x.active })),
     areas: a.filter((x) => x.active).map((x) => ({
       id: x.id, name: x.name,
       checks: c.filter((k) => k.areaId === x.id).map((k) => ({ id: k.id, code: k.code, label: k.label, severity: (SEVERITIES.includes(k.severity as Severity) ? k.severity : "major") as Severity })),
