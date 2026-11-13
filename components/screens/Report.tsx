@@ -69,7 +69,7 @@ export function Report({ actions }: { actions: ActionView[] }) {
         </div>
         {sc && scLast >= 0 && (
           <Card title={`PMAS to date · ${monthLabel(sc.periods[scLast])}`} sub={`The running average of each ${settings.unitLabel.toLowerCase()}'s monthly ${sc.name} score: the year-to-date sum divided by 6 (to June) or 12 (after).`}>
-            <div className="tablewrap"><table className="t stack">
+            <div className="tablewrap" tabIndex={0}><table className="t stack">
               <thead><tr><th scope="col">{settings.unitLabel}</th><th scope="col" className="num">PMAS</th><th scope="col">Rating</th><th scope="col">Basis</th></tr></thead>
               <tbody>{Array.from(new Set(sc.rows.map((r) => r[1] as number))).filter((u) => filters.unit < 0 || u === filters.unit).map((u) => { const p = pmasToDate(sc, u, sc.periods[scLast]); const rt = opStdRating(p.value); return (
                 <tr key={u}><td data-label={settings.unitLabel}><strong>{data.units[u]?.name}</strong></td><td data-label="PMAS" className="num">{score(p.value)}</td><td data-label="Rating">{rt != null ? <BandPill band={ratingBand(rt) ?? "none"}>Rating {rt}</BandPill> : "—"}</td><td data-label="Basis" className="sub">{p.basis} · {p.months} of {p.divisor} months</td></tr>); })}</tbody>
@@ -77,7 +77,7 @@ export function Report({ actions }: { actions: ActionView[] }) {
           </Card>
         )}
         <Card flush title="Executive actions" sub="High priority or overdue, still open">
-          {execActions.length ? <div className="tablewrap"><table className="t stack">
+          {execActions.length ? <div className="tablewrap" tabIndex={0}><table className="t stack">
             <thead><tr><th scope="col">ID</th><th scope="col">{settings.unitLabel}</th><th scope="col">Issue</th><th scope="col">Priority</th><th scope="col">Status</th><th scope="col">Due</th></tr></thead>
             <tbody>{execActions.map((a) => <tr key={a.id}><td data-label="ID"><a href={`/actions?open=${a.id}`} style={{ fontWeight: 800, color: "var(--ink)" }}>{a.ref}</a></td><td data-label={settings.unitLabel}>{a.unitName}</td><td data-label="Issue">{a.title}</td><td data-label="Priority"><BandPill band={a.priority === "high" ? "escalate" : a.priority === "medium" ? "watch" : "healthy"}>{a.priority}</BandPill></td><td data-label="Status"><StatusPill a={a} /></td><td data-label="Due">{fmtDate(a.dueDate)}</td></tr>)}</tbody>
           </table></div> : <Empty icon="check" title="No high-priority or overdue actions" />}

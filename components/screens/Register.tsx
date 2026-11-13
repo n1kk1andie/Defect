@@ -76,7 +76,7 @@ function Summary() {
         <a className="btn sm" href={`/api/export?what=register&format=xlsx&${q}`}><Icon name="download" />Excel</a>
       </div>}>
       {list.length ? (
-        <div className="tablewrap" style={{ marginTop: 8 }}>
+        <div className="tablewrap" tabIndex={0} style={{ marginTop: 8 }}>
           <table className="t stack">
             <caption className="sr">Register by {group === "area" ? "process area" : settings.unitLabel.toLowerCase()}</caption>
             <thead><tr>{head("name", group === "area" ? "Process area" : settings.unitLabel, false)}{COLS.map((c) => <Fragmented key={c.k}>{head(c.k, c.t)}</Fragmented>)}</tr></thead>
@@ -96,7 +96,7 @@ function StandardRegister() {
   const f = { year: filters.year, unit: filters.unit, area: -1 };
   return (
     <Card flush title={`${sc.name} by ${settings.unitLabel.toLowerCase()}`} sub="Average of each tracked month in scope">
-      <div className="tablewrap" style={{ marginTop: 8 }}>
+      <div className="tablewrap" tabIndex={0} style={{ marginTop: 8 }}>
         <table className="t stack">
           <thead><tr><th scope="col">{settings.unitLabel}</th>{sc.measures.map((m) => <th key={m.key} scope="col" className="num">{m.label}</th>)}</tr></thead>
           <tbody>
@@ -147,7 +147,7 @@ function Defects({ rows }: { rows: DefectRow[] }) {
       )}
       <div style={{ padding: "0 18px" }}><Msg kind={msg?.kind}>{msg?.text}</Msg></div>
       {shown.length ? (
-        <div className="tablewrap" style={{ marginTop: 8 }}>
+        <div className="tablewrap" tabIndex={0} style={{ marginTop: 8 }}>
           <table className="t stack">
             <caption className="sr">Defects</caption>
             <thead><tr>{canResolve && <th scope="col"><span className="sr">Select</span></th>}<th scope="col">Review</th><th scope="col">{app.settings.unitLabel}</th><th scope="col">Process area</th><th scope="col">Month</th><th scope="col">Nature</th><th scope="col">Failed checks</th><th scope="col">Status</th><th scope="col"><span className="sr">Actions</span></th></tr></thead>

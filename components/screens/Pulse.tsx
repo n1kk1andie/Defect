@@ -9,6 +9,7 @@ import { useApp } from "@/components/app-context";
 import { BandPill, Card, Empty, Legend, PageHead, Stat } from "@/components/ui";
 import { BarTrend, Heatmap } from "@/components/charts";
 import { FilterBar, ModeToggle, scopeText, YearSelect } from "@/components/screens/Filters";
+import { can } from "@/lib/roles";
 import { bandInfo, auditGrade, gradeBand, AUDIT_GRADES, opStdRating, ratingBand } from "@/lib/bands";
 import { byArea, byUnit, filterRows, monthShort, num, pct, record, scMean, scMonths, scRows, score, trend } from "@/lib/metrics";
 
@@ -41,7 +42,8 @@ function DefectsPulse() {
       <ModeToggle />
       <FilterBar />
       {nothing ? (
-        <Card><Empty icon="pulse" title="Nothing published in this scope yet">Choose another year or {settings.unitLabel.toLowerCase()}, or key a review on the Review tab. Admins can import the previous version's data or a workbook under Settings → Data and uploads.</Empty></Card>
+        <Card><Empty icon="pulse" title={app.program.areas.length ? "Nothing published in this scope yet" : "Let's set up your programme"}>{app.program.areas.length ? `Choose another year or ${settings.unitLabel.toLowerCase()}, or key a review on the Review tab.` : `Add your ${settings.unitPlural.toLowerCase()}, process areas and checklists, then key the first review.`}</Empty>
+          {can.manage(app.actor) && <div className="row wrap" style={{ justifyContent: "center", paddingBottom: 8 }}><a className="btn primary" href="/settings#settings-setup">Company set-up</a><a className="btn" href="/settings#settings-data">Import data or a workbook</a></div>}</Card>
       ) : (
         <div className="stack">
           <section className="hero" aria-label="Defect rate">
@@ -59,7 +61,7 @@ function DefectsPulse() {
           <Card title="Defect rate trend" sub={`Each month in scope, coloured by band`} actions={<Legend family="defectRate" overrides={settings.bands} />}>
             <BarTrend
               data={months.map((m) => ({ label: monthShort(m.iso), value: m.rec.defectRate, band: band("defectRate", m.rec.defectRate), title: `${monthShort(m.iso)}: ${pct(m.rec.defectRate)} (${num(m.rec.defects)} of ${num(m.rec.instances)})` }))}
-              format={(v) => `${(v * 100).toFixed(0)}%`}
+              format={(v) => `${+(v * 100).toFixed(1)}%`}
               summary={`Defect rate by month, ${months.length} months. Latest ${months.length ? `${monthShort(months[months.length - 1].iso)}: ${pct(months[months.length - 1].rec.defectRate)}` : "none"}.`}
             />
           </Card>

@@ -87,7 +87,7 @@ export function Heatmap({ periods, rows, caption, onPick }: { periods: string[];
     return g;
   }, [periods]);
   return (
-    <div className="tablewrap">
+    <div className="tablewrap" tabIndex={0}>
       <table className="heat">
         <caption className="sr">{caption}</caption>
         <thead>

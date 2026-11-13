@@ -130,7 +130,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <a href="#main" className="skip">Skip to content</a>
       <header className="topbar">
         <div className="topbar-in">
-          <Link href="/" className="brand" aria-label="Pulsus Quality home">
+          <Link href="/" className="brand">
             <ShieldMark />
             <span className="brand-txt">
               <span className="brand-name">Pulsus <b>Quality</b></span>

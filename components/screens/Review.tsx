@@ -67,7 +67,7 @@ function ReviewTable({ rows, empty, onOpen }: { rows: ReviewView[]; empty: strin
   const { settings, band } = useApp();
   if (!rows.length) return <Empty icon="review" title={empty} />;
   return (
-    <div className="tablewrap">
+    <div className="tablewrap" tabIndex={0}>
       <table className="t stack">
         <caption className="sr">Reviews</caption>
         <thead><tr><th scope="col">Review</th><th scope="col">{settings.unitLabel}</th><th scope="col">Month</th><th scope="col">Inspector</th><th scope="col" className="num">Sample</th><th scope="col" className="num">Defect rate</th><th scope="col">Status</th></tr></thead>
@@ -232,7 +232,7 @@ function Viewer({ r, scorecard, onClose }: { r: ReviewView; scorecard: Scorecard
       {r.kind === "scorecard" && scorecard ? (
         <dl className="kv mt">{scorecard.measures.filter((m) => m.kind === "input").map((m) => <Fragment key={m.key}><dt>{m.label}</dt><dd>{r.scorecardValues?.[m.key] ?? "—"}</dd></Fragment>)}{scorecard.audit && <><dt>Audit grade</dt><dd>{r.auditGrade || "—"}</dd></>}</dl>
       ) : (
-        <div className="tablewrap mt"><table className="t">
+        <div className="tablewrap mt" tabIndex={0}><table className="t">
           <thead><tr><th scope="col">#</th><th scope="col">Area</th><th scope="col">Failed checks</th><th scope="col">Nature</th></tr></thead>
           <tbody>{r.items.map((i) => { const fails = Object.entries(i.checks).filter(([, v]) => v === "no").map(([k]) => label(i.areaId, k)); return (
             <tr key={i.idx}><td>{i.idx + 1}{i.reference && <div className="sub">{i.reference}</div>}</td><td>{areaName(i.areaId)}</td><td>{fails.length ? fails.join(", ") : i.defects ? `${i.defects} defect(s)` : <span className="sub">All passed</span>}</td><td>{i.nature || "—"}{i.recurring && <div><span className="pill" data-band="attention">Recurring</span></div>}</td></tr>); })}</tbody>

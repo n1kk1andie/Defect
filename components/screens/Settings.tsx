@@ -288,7 +288,7 @@ function PeoplePage({ members }: { members: MemberRow[] }) {
       <p className="lede" style={{ marginTop: 0 }}>Everyone signs in as themselves with their Pulsus account (Microsoft sign-in included). Their Quality role is set here, optionally limited to some {settings.unitPlural.toLowerCase()}. {!demo && actor.kind === "company" && <a href={`${platformUrl}/company#members`} target="_top">Invite or remove people on Pulsus</a>}</p>
       <div className="grid g3">{ROLES.map((r) => <div key={r} className="minitile" style={{ display: "block" }}><strong>{ROLE_INFO[r].label}</strong><div className="sub">{ROLE_INFO[r].blurb}</div></div>)}</div>
       <Card flush title="People" actions={admin ? <button className="btn sm primary" onClick={() => setEdit({ email: "", name: "", roles: ["viewer"], unitIds: [], isNew: true })}><Icon name="plus" />Add person</button> : undefined}>
-        <div className="tablewrap"><table className="t stack">
+        <div className="tablewrap" tabIndex={0}><table className="t stack">
           <thead><tr><th scope="col">Person</th><th scope="col">Roles</th><th scope="col">{settings.unitPlural}</th><th scope="col">Last seen</th>{admin && <th scope="col"><span className="sr">Edit</span></th>}</tr></thead>
           <tbody>{members.map((m) => (
             <tr key={m.email} style={m.status === "removed" ? { opacity: 0.55 } : undefined}>
@@ -339,7 +339,7 @@ function DataPage({ s }: { s: SettingsData }) {
               <div className="mt">
                 <div className="eyebrow">{mig.summary.source}</div>
                 <div className="grid g4 mt" style={{ gap: 8 }}>{Object.entries(mig.summary.counts).map(([k, v]) => <div key={k} className="minitile"><span className="sub">{k.replace(/([A-Z])/g, " $1").toLowerCase()}</span><strong>{v.toLocaleString("en-US")}</strong></div>)}</div>
-                {mig.summary.figures.length > 0 && <div className="tablewrap mt"><table className="t"><caption className="sr">Figures before and after</caption><thead><tr><th scope="col">Figure</th><th scope="col" className="num">Previous version</th><th scope="col" className="num">This version</th><th scope="col">Match</th></tr></thead>
+                {mig.summary.figures.length > 0 && <div className="tablewrap mt" tabIndex={0}><table className="t"><caption className="sr">Figures before and after</caption><thead><tr><th scope="col">Figure</th><th scope="col" className="num">Previous version</th><th scope="col" className="num">This version</th><th scope="col">Match</th></tr></thead>
                   <tbody>{mig.summary.figures.map((f) => <tr key={f.label}><td>{f.label}</td><td className="num">{f.before}</td><td className="num"><strong>{f.after}</strong></td><td>{f.same ? <BandPill band="worldClass">Same</BandPill> : <BandPill band="watch">Corrected</BandPill>}</td></tr>)}</tbody></table></div>}
                 {mig.summary.warnings.map((w) => <Msg key={w} kind="info">{w}</Msg>)}
                 {mig.summary.notCarried.map((w) => <p key={w} className="sub">Not carried over: {w}</p>)}
@@ -367,7 +367,7 @@ function DataPage({ s }: { s: SettingsData }) {
             {up.newUnits.length > 0 && <p className="sub">New units to be added: {up.newUnits.join(", ")}</p>}
             {up.newAreas.length > 0 && <p className="sub">New process areas: {up.newAreas.join(", ")}</p>}
             {up.problems.length > 0 && <Msg kind="info">{up.problems.length} row note{up.problems.length === 1 ? "" : "s"}: {up.problems.slice(0, 5).map((p) => `row ${p.row}: ${p.message}`).join("; ")}{up.problems.length > 5 ? "…" : ""}</Msg>}
-            <div className="tablewrap mt"><table className="t"><tbody>{up.sample.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{String(c ?? "")}</td>)}</tr>)}</tbody></table></div>
+            <div className="tablewrap mt" tabIndex={0}><table className="t"><tbody>{up.sample.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j}>{String(c ?? "")}</td>)}</tr>)}</tbody></table></div>
             <label className="row mt"><input type="checkbox" checked={upOk} onChange={(e) => setUpOk(e.target.checked)} />Replace the imported {up.kind === "workbook_defects" ? "Branch Defects history" : "Operational Standard entries"} with this workbook.</label>
             <button className="btn navy mt" disabled={!upOk || busy} onClick={() => run(async () => { const r = await api<{ rows: number }>("/api/import", "POST", { commit: up.id, confirm: true }); setMsg({ kind: "ok", text: `Imported ${r.rows} rows.` }); setUp(null); refresh(); })}>Import workbook</button>
           </div>
@@ -448,7 +448,7 @@ function HistoryPage({ s }: { s: SettingsData }) {
         {v && (v.ok ? <Msg kind="ok">All {v.count.toLocaleString("en-US")} entries check out.</Msg> : <Msg>Broken at entry {v.brokenAt}: {v.reason}</Msg>)}
       </Card>
       <Card flush title="Latest changes" actions={<label><span className="sr">Search the history</span><input className="input" type="search" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} /></label>}>
-        <div className="tablewrap"><table className="t stack">
+        <div className="tablewrap" tabIndex={0}><table className="t stack">
           <thead><tr><th scope="col">#</th><th scope="col">When</th><th scope="col">Who</th><th scope="col">What</th></tr></thead>
           <tbody>{rows.map((h) => <tr key={h.seq}><td data-label="#" className="num">{h.seq}</td><td data-label="When" style={{ whiteSpace: "nowrap" }}>{fmtDateTime(h.at)}</td><td data-label="Who">{h.actor}</td><td data-label="What"><strong>{h.action}</strong> · {h.summary}</td></tr>)}</tbody>
         </table></div>

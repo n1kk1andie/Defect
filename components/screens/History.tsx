@@ -56,7 +56,7 @@ function DefectHistory() {
       </div>
       {data.areas.length > 1 && (
         <Card title={`${METRIC_LABEL[metric]} by ${settings.unitLabel.toLowerCase()} and process area`} sub={filters.year === "all" ? "All years" : filters.year}>
-          <div className="tablewrap">
+          <div className="tablewrap" tabIndex={0}>
             <table className="heat wide">
               <caption className="sr">{METRIC_LABEL[metric]} by {settings.unitLabel.toLowerCase()} and process area</caption>
               <thead><tr><th />{data.areas.map((a) => <th key={a.id} scope="col" style={{ whiteSpace: "normal", maxWidth: 120, fontSize: 11.5 }}>{a.name}</th>)}</tr></thead>

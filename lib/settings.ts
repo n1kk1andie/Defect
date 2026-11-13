@@ -34,6 +34,13 @@ export const DEFAULT_SETTINGS: CompanySettings = {
   scorecard: true,
 };
 
+/** English plural of a unit label: Branch → Branches, Agency → Agencies, Store → Stores. */
+export function plural(w: string): string {
+  if (/(s|x|z|ch|sh)$/i.test(w)) return w + "es";
+  if (/[^aeiou]y$/i.test(w)) return w.slice(0, -1) + "ies";
+  return w + "s";
+}
+
 const text = (v: unknown, max: number, d: string) => { const s = String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max); return s || d; };
 
 /** Clean stored or submitted settings onto the defaults. */
@@ -47,7 +54,7 @@ export function cleanSettings(raw: unknown): CompanySettings {
   const rm = Math.round(Number(o.recurringMonths));
   return {
     unitLabel,
-    unitPlural: text(o.unitPlural, 30, unitLabel + "s"),
+    unitPlural: text(o.unitPlural, 30, plural(unitLabel)),
     itemLabel: text(o.itemLabel, 30, d.itemLabel),
     itemTypes: types.length ? types : d.itemTypes,
     instanceBasis: o.instanceBasis === "item" ? "item" : "check",

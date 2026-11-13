@@ -64,7 +64,7 @@ export function Actions({ actions }: { actions: ActionView[] }) {
             </select>
           </div>
           {list.length ? (
-            <div className="tablewrap">
+            <div className="tablewrap" tabIndex={0}>
               <table className="t stack">
                 <caption className="sr">Actions</caption>
                 <thead><tr><th scope="col">ID</th><th scope="col">{settings.unitLabel}</th><th scope="col">Issue</th><th scope="col">Priority</th><th scope="col">Status</th><th scope="col">Due</th><th scope="col">Owner</th></tr></thead>

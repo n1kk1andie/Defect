@@ -50,7 +50,8 @@ h1,h2,h3,.sora{font-family:Sora,"IBM Plex Sans",system-ui,sans-serif}
 .brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink);min-width:0}
 .brand-mark{width:38px;height:38px;flex:none}
 .brand-name{font-family:Sora,sans-serif;font-weight:800;font-size:18px;letter-spacing:-.01em;line-height:1.1;white-space:nowrap}
-.brand-name b{color:var(--red);font-weight:800}
+.brand-name b{color:var(--red-ink);font-weight:800}
+html[data-theme="dark"] .brand-name b{color:#FF4D6D}
 .brand-sub{font-size:12.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .brand-txt{min-width:0}
 .tb-right{margin-left:auto;display:flex;align-items:center;gap:8px}
@@ -315,3 +316,7 @@ html[data-theme="dark"] .msbtn{background:#2F2F2F;color:#fff;border-color:#2F2F2
 .or::before,.or::after{content:"";flex:1;height:1px;background:var(--line-2)}
 @media (max-width:640px){.t.stack th[scope="row"]{display:block;border:0!important;padding:4px 10px!important;font-size:15px}}
 .t td:first-child strong,.t td[data-label="ID"]{white-space:nowrap}
+@media (max-width:640px){html[data-theme="dark"] .navbtn[aria-current="page"]{background:transparent;color:#FF8099}}
+.scale div[data-band="escalate"],.heat.wide td[data-band="escalate"]{color:#fff}
+.heat td{min-width:24px}
+.gauge b{background:var(--card);padding:1px 6px;border-radius:6px;white-space:nowrap}

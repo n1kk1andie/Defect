@@ -48,7 +48,7 @@ export function Insights() {
             </Card>
             <Card title="Resolution gap: found vs fixed" sub={`${settings.unitPlural} with 10 or more defects, lowest resolution first`}>
               {gap.length && (gap[0].rec.resolutionRate ?? 1) < 0.95 ? (
-                <div className="tablewrap"><table className="t">
+                <div className="tablewrap" tabIndex={0}><table className="t">
                   <thead><tr><th scope="col">{settings.unitLabel}</th><th scope="col" className="num">Defects</th><th scope="col" className="num">Open</th><th scope="col" className="num">Resolved</th></tr></thead>
                   <tbody>{gap.map((g, i) => (
                     <tr key={g.index} className={i === 0 && (g.rec.resolutionRate ?? 1) < 0.7 ? "hl" : undefined}><td><strong>{g.name}</strong></td><td className="num">{num(g.rec.defects)}</td><td className="num">{num(g.rec.unresolved)}</td><td className="num"><span className="tone" data-band={band("resolutionRate", g.rec.resolutionRate)} style={{ fontWeight: 800 }}>{pct(g.rec.resolutionRate)}</span></td></tr>
