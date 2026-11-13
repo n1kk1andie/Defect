@@ -136,13 +136,19 @@ export function toCsv(header: string[], rows: (string | number | null)[][]): str
   return "﻿" + [header, ...rows].map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n";
 }
 
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+/** The templates' example month ("YYYY-MM"): last month, never a fixed one. */
+export function exampleMonth(now: Date = new Date()): string {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
+}
+
 export async function defectsTemplate(units: string[], areas: string[]): Promise<Buffer> {
   const header = ["Period", "Branch", "Process Area", "# of Items Reviewed", "# of Possible Instances", "# of Defects", "# of Resolvable Defects", "# of Defects Resolved", "# of Recurring Defects"];
-  const ex = [["2026-01-01", units[0] || "Harbour", areas[0] || "Payments", 30, 150, 6, 6, 5, 1]];
+  const ex = [[`${exampleMonth()}-01`, units[0] || "Harbour", areas[0] || "Payments", 30, 150, 6, 6, 5, 1]];
   return buildXlsx([{ name: "Branch Defects", header, rows: ex }, { name: "Guide", header: ["Valid branches", "Valid process areas"], rows: Array.from({ length: Math.max(units.length, areas.length) }, (_, i) => [units[i] ?? null, areas[i] ?? null]) }]);
 }
 
 export async function opstdTemplate(units: string[]): Promise<Buffer> {
   const header = ["Year", "Month", "Branch", "Operational Standard Score", "Average SLA Score", "% Queue SLA Adherence", "Onboarding SLA", "Procurement Score", "Compliance to Major Procedure Policy", "Avg Compliance to Major Procedure Policy", "Customer Complaints Resolved", "Audit Resolution", "Audit Score"];
-  return buildXlsx([{ name: "Operational Standards", header, rows: [[2026, "January", units[0] || "Harbour", 92.4, 95.1, 96.8, 94.2, 90.4, 93.6, 93.6, 95.0, 88.0, 80]] }]);
+  return buildXlsx([{ name: "Operational Standards", header, rows: [[Number(exampleMonth().slice(0, 4)), MONTH_NAMES[Number(exampleMonth().slice(5, 7)) - 1], units[0] || "Harbour", 92.4, 95.1, 96.8, 94.2, 90.4, 93.6, 93.6, 95.0, 88.0, 80]] }]);
 }
