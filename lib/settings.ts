@@ -20,6 +20,12 @@ export interface CompanySettings {
   recurringMonths: number;
   /** Whether the scorecard (Operational Standard) section is on. */
   scorecard: boolean;
+  /** The organisation's sector: sets the starting labels, template library and risk factors (all editable). */
+  sector: "banking" | "healthcare" | "government" | "higher_ed" | "general";
+  /** What groups sites: Region, Hospital, Agency, Faculty… */
+  groupLabel: string;
+  /** Set when an admin finishes (or skips) the set-up wizard. */
+  setupDone: boolean;
 }
 
 export const DEFAULT_SETTINGS: CompanySettings = {
@@ -32,6 +38,9 @@ export const DEFAULT_SETTINGS: CompanySettings = {
   bands: {},
   recurringMonths: 3,
   scorecard: true,
+  sector: "banking",
+  groupLabel: "Region",
+  setupDone: false,
 };
 
 /** English plural of a unit label: Branch → Branches, Agency → Agencies, Store → Stores. */
@@ -62,5 +71,8 @@ export function cleanSettings(raw: unknown): CompanySettings {
     bands: (o.bands && typeof o.bands === "object" ? o.bands : {}) as BandOverrides,
     recurringMonths: Number.isFinite(rm) && rm >= 2 && rm <= 12 ? rm : d.recurringMonths,
     scorecard: o.scorecard !== false,
+    sector: (["banking", "healthcare", "government", "higher_ed", "general"] as const).find((x) => x === o.sector) ?? d.sector,
+    groupLabel: text(o.groupLabel, 30, d.groupLabel),
+    setupDone: o.setupDone === true,
   };
 }

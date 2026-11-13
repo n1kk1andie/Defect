@@ -39,6 +39,17 @@ const SCREENS = [
   { name: "settings: people", path: "/settings#settings-people", persona: ADMIN },
   { name: "settings: data", path: "/settings#settings-data", persona: ADMIN },
   { name: "more", path: "/more" },
+  { name: "templates", path: "/templates", persona: ADMIN },
+  { name: "templates: library", path: "/templates", persona: ADMIN, go: (p) => p.getByRole("button", { name: /^Library/ }).click() },
+  { name: "templates: preview", path: "/templates", persona: ADMIN, go: async (p) => { await p.getByRole("button", { name: /^Library/ }).click(); await p.getByRole("button", { name: /^Preview / }).first().click(); } },
+  { name: "builder", path: "/templates", persona: ADMIN, go: async (p) => { await p.getByRole("link", { name: /Edit/ }).first().click(); await p.waitForURL(/\/templates\/.+/); await p.waitForLoadState("networkidle"); await p.locator(".bq-main").nth(1).click(); } },
+  { name: "inspect", path: "/inspect", persona: "taylor.reid@demo.pulsus.tech" },
+  { name: "inspect: start", path: "/inspect", persona: "jordan.blake@demo.pulsus.tech", go: (p) => p.getByRole("button", { name: "Start an inspection" }).click() },
+  { name: "inspect: capture", path: "/inspect", persona: "jordan.blake@demo.pulsus.tech", go: async (p) => { await p.getByRole("button", { name: "Start an inspection" }).click(); await p.getByRole("button", { name: /^Start$/ }).click(); await p.waitForURL(/\/inspect\/new/); await p.waitForLoadState("networkidle"); await p.getByRole("radio", { name: "No" }).first().click(); } },
+  { name: "inspect: approve", path: "/inspect", persona: "taylor.reid@demo.pulsus.tech", go: async (p) => { await p.locator("tbody tr").first().click(); await p.waitForURL(/\/inspect\/[0-9a-f-]{36}/); await p.waitForLoadState("networkidle"); } },
+  { name: "scorecards", path: "/scorecards", persona: ADMIN },
+  { name: "scorecard designer", path: "/scorecards", persona: ADMIN, go: async (p) => { await p.getByRole("link", { name: /Design/ }).last().click(); await p.waitForURL(/\/scorecards\/.+/); await p.waitForLoadState("networkidle"); } },
+  { name: "set-up wizard", path: "/setup", persona: ADMIN },
   { name: "sign-in", path: "/login" },
 ];
 

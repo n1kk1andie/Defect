@@ -15,6 +15,34 @@
       "when": 1794528809758,
       "tag": "0001_tenancy",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794534146821,
+      "tag": "0002_inspections",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794534155347,
+      "tag": "0003_inspections_tenancy",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794535129117,
+      "tag": "0004_scorecard_versions",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794535129906,
+      "tag": "0005_scorecard_versions_tenancy",
+      "breakpoints": true
     }
   ]
 }

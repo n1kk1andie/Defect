@@ -31,13 +31,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       isSupervisor(actor) ? tx.select({ email: members.email, name: members.name, roles: members.roles }).from(members).where(and(eq(members.companyId, actor.tenant), eq(members.status, "active"))) : Promise.resolve([]),
       tx.execute(sql`select
         (select count(*) from reviews where status = 'submitted' and inspector_email <> ${actor.email})::int as approvals,
+        (select count(*) from inspections where status = 'submitted' and inspector_email <> ${actor.email})::int as inspections,
         (select count(*) from reviews where status in ('draft','returned') and inspector_email = ${actor.email})::int as drafts,
         (select count(*) from actions where status <> 'closed')::int as open,
         (select count(*) from actions where status <> 'closed' and due_date < current_date)::int as overdue,
         (select count(*) from actions a where status = 'awaiting_verification' and raised_by <> ${actor.email} and coalesce(owner_email,'') <> ${actor.email}
            and coalesce((select e.by from action_events e where e.action_id = a.id and e.status = 'awaiting_verification' order by e.at desc limit 1),'') <> ${actor.email})::int as verify`),
     ]);
-    const n = rowsOf<{ approvals: number; drafts: number; open: number; overdue: number; verify: number }>(c)[0];
+    const n = rowsOf<{ approvals: number; inspections: number; drafts: number; open: number; overdue: number; verify: number }>(c)[0];
     // Someone scoped to some units sees only those units' figures.
     if (actor.unitIds.length) {
       const keep = new Set(data.units.map((u, i) => (actor.unitIds.includes(u.id) ? i : -1)).filter((i) => i >= 0));
@@ -52,6 +53,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       counts: {
         awaitingApproval: isSupervisor(actor) ? Number(n?.approvals ?? 0) : 0, myDrafts: Number(n?.drafts ?? 0),
         openActions: Number(n?.open ?? 0), overdue: Number(n?.overdue ?? 0), awaitingVerification: isSupervisor(actor) ? Number(n?.verify ?? 0) : 0,
+        awaitingInspections: isSupervisor(actor) ? Number(n?.inspections ?? 0) : 0,
       },
       demo, platformUrl: hub, billingUrl: `${hub}/company#billing`, now: new Date().toISOString(),
     };

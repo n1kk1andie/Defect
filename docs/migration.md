@@ -32,3 +32,11 @@ Resolution and recurring differ only because **3 history rows recorded more defe
 ## The way back
 
 Nothing in Blob is changed or deleted. Until the switch-over is confirmed, the previous deployment can be redeployed against the same store unchanged.
+
+## Milestone 2: the programme becomes templates
+
+Nothing to run. The first time a supervisor or admin opens Templates or Inspect, each process area of the programme becomes a published **Branch Defects** template (its checks as pass/fail questions, severities and check codes kept), and the active scorecard becomes an **Operational Standard** template (`lib/templates/store.ts ensureProgramTemplates`, idempotent, recorded in the change history).
+
+- Approving an inspection of a Branch Defects template adds to the same month × branch × area figures that reviews feed, so the defect, recurring and nature figures stay consistent.
+- Approving an Operational Standard entry writes the month's scorecard entry, as the old entry form does.
+- Existing reviews, imported history and scorecard entries are unchanged and stay as history. The Review screen still keys and approves monthly reviews.

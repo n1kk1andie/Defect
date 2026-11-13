@@ -1,11 +1,15 @@
 # Pulsus Quality
 
-Branch and operational quality, inspections and corrective actions, for multi-site organisations. Part of the Pulsus suite. **Live. Signal. Clarity.**
+Quality management and inspections for multi-site organisations: banks and credit unions, hospitals and health systems, government agencies, universities and any business with many sites. Part of the Pulsus suite. **Live. Signal. Clarity.**
 
 - **Pulse:** defect rate, defects found, resolved and recurring, the trend, every branch and process area; or the Operational Standard scorecard against its target, with audit grades.
 - **Register:** the counts behind every rate (sortable, CSV/Excel) and each published defect, which supervisors resolve or turn into actions.
 - **History:** branch × month heat-maps of the defect, resolution and recurring rates, and branch × process area.
 - **Insights:** the branch watchlist, the resolution gap, recurring-issue detection (preventive actions, send to Pulsus Risk), systemic recurring, scorecard vs defects.
+- **Inspect:** inspections, field visits and file reviews on any published template, on a phone and offline: check-in, photos per question, signatures, live score; a supervisor who didn't carry it out approves it, and failed items become corrective actions.
+- **Templates:** the checklist builder (sections, eleven question types, weights, critical items, logic, guidance, policy references, auto-actions, a live phone preview, drag and drop), locked published versions, JSON and Excel import/export, and a library of 29 starter templates across five sectors. The institution's Branch Defects and Operational Standard are templates too.
+- **Scorecards:** the scorecard designer (entered, computed and checklist-fed measures, weights, target, rounding, dashboard columns, sample-data preview, locked versions) and ready-made scorecards by sector.
+- **Set up:** a wizard from sign-up to the first inspection: sector, site labels, locations (typed or pasted), starter checklists and a scorecard.
 - **Review:** inspectors key reviews against their checklist on a phone (saved on the device as they type); a different supervisor approves or returns them.
 - **Actions:** corrective and preventive actions with owner, due date, root cause and evidence, verified by someone who didn't raise, own or submit them.
 - **Report:** the executive report, printable to PDF, with PMAS to date.
@@ -21,7 +25,7 @@ Branch and operational quality, inspections and corrective actions, for multi-si
 - Evidence in private Blob storage, hashed (`lib/evidence.ts`).
 - The pure figures (`lib/metrics.ts`, `lib/bands.ts`, `lib/scorecard.ts`) are shared by the server and the browser.
 
-Docs: [migration](docs/migration.md) · [platform feed](docs/platform-feed.md) · [Pulsus Risk contract](docs/risk-contract.md).
+Docs: [quality model and benchmark](docs/quality-model.md) · [migration](docs/migration.md) · [platform feed](docs/platform-feed.md) · [Pulsus Risk contract](docs/risk-contract.md).
 
 ## Develop
 

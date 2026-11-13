@@ -12,7 +12,10 @@ const BLURB: Record<string, string> = {
   "/register": "The counts behind every rate, and each defect",
   "/history": "Heat-maps by month",
   "/insights": "Watchlist, recurring issues, resolution gap",
-  "/review": "Key reviews and approve them",
+  "/inspect": "Inspections and field visits",
+  "/review": "Monthly reviews and approvals",
+  "/templates": "Checklists and the template library",
+  "/scorecards": "Design the scorecard",
   "/actions": "Corrective and preventive actions",
   "/report": "The executive report",
   "/settings": "Company set-up, people, bands, data",
@@ -24,7 +27,7 @@ export function MoreMenu() {
     <>
       <PageHead eyebrow="Pulsus Quality" title="Everything" lede={app.actor.tenantName} />
       <nav className="card flush" aria-label="All sections">
-        {NAV.map((n) => (
+        {NAV.filter((n) => n.href !== "/scorecards" || app.actor.roles.includes("admin")).map((n) => (
           <Link key={n.href} href={n.href} className="sitem">
             <span className="badge sm" aria-hidden="true"><Icon name={n.icon} /></span>
             <span className="grow"><span className="t1" style={{ display: "block" }}>{n.label}</span><span className="t2" style={{ display: "block" }}>{BLURB[n.href]}</span></span>

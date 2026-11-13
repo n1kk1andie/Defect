@@ -63,6 +63,9 @@ export const can = {
   deleteActions: (a: Actor) => isAdmin(a),
   manage: (a: Actor) => isAdmin(a),
   sendToRisk: (a: Actor) => isSupervisor(a),
+  buildTemplates: (a: Actor) => isSupervisor(a),
+  inspect: (a: Actor) => has(a, "admin", "supervisor", "inspector"),
+  approveInspections: (a: Actor) => isSupervisor(a),
 };
 
 /** The roles a member starts with, from their role on Pulsus Platform. */
@@ -83,8 +86,8 @@ export function verifyBlocker(a: Pick<Actor, "email" | "roles">, action: { raise
 }
 
 /** Why someone may not approve a review, or null when they may. */
-export function approveBlocker(a: Pick<Actor, "email" | "roles">, review: { inspectorEmail: string }): string | null {
-  if (!isSupervisor(a)) return "A supervisor approves reviews.";
-  if (review.inspectorEmail.toLowerCase() === a.email.toLowerCase()) return "You keyed this review, so another supervisor must approve it.";
+export function approveBlocker(a: Pick<Actor, "email" | "roles">, review: { inspectorEmail: string }, noun = "review"): string | null {
+  if (!isSupervisor(a)) return `A supervisor approves ${noun}s.`;
+  if (review.inspectorEmail.toLowerCase() === a.email.toLowerCase()) return noun === "review" ? "You keyed this review, so another supervisor must approve it." : `You carried out this ${noun}, so another supervisor must approve it.`;
   return null;
 }
