@@ -113,7 +113,7 @@ function AvatarMenu() {
           ) : (
             <>
               <hr />
-              <a role="menuitem" href={platformUrl} target="_top"><Icon name="globe" />Pulsus home</a>
+              <a role="menuitem" href={platformUrl}><Icon name="globe" />Pulsus home</a>
               <button role="menuitem" onClick={signOut}><Icon name="lock" />Sign out</button>
             </>
           )}
