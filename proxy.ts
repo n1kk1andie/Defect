@@ -7,8 +7,7 @@
 //    Each of these checks its own credential instead of a session: the
 //    report-an-issue page and form (/r/<token>, /api/public/report/<token>:
 //    the site's link token, Turnstile), the REST API (/api/v1: an API key),
-//    the scheduled sweep (/api/cron: CRON_SECRET) and Pulsus Risk's
-//    decision callback (/api/risk/status: the intake key).
+//    and the daily alert email (/api/cron: CRON_SECRET).
 // 3. Writes: a non-GET API call must come from this site (Origin check).
 // 4. A demo deployment (DEMO_MODE=1) opens straight into its fictional
 //    company as the chosen persona (guest viewer by default): no sign-in, no
@@ -37,7 +36,7 @@ const H = {
 const PERSONA_COOKIE = "pq_persona";
 const DEMO_PERSONAS = ["guest", "admin", "taylor.reid", "robin.ellis", "jordan.blake", "sam.foster"].map((p) => `${p}@demo.pulsus.tech`);
 
-const PUBLIC = /^\/(?:login|signup|licence|api\/health|api\/logout|manifest\.webmanifest|icon\.png|apple-icon\.png|favicon\.ico|pulsus-quality[\w.-]*\.png|r|api\/public|api\/v1|api\/cron|api\/risk\/status)(?:\/|$)/;
+const PUBLIC = /^\/(?:login|signup|licence|api\/health|api\/logout|manifest\.webmanifest|icon\.png|apple-icon\.png|favicon\.ico|pulsus-quality[\w.-]*\.png|r|api\/public|api\/v1|api\/cron)(?:\/|$)/;
 const isDemo = () => (process.env.DEMO_MODE || "").trim().replace(/^["']+|["']+$/g, "") === "1";
 
 function forward(req: NextRequest, id: Record<string, string> | null): NextResponse {

@@ -18,6 +18,7 @@ export { SCOPES, SCOPE_INFO, type Scope };
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string; status?: number };
 const TENANT_ID = /^(?:_own|_demo|[a-z0-9][a-z0-9-]{0,39})$/;
+const demoMode = () => (process.env.DEMO_MODE || "").trim() === "1";
 export const hashKey = (key: string) => createHash("sha256").update(key).digest("hex");
 
 export function makeKey(companyId: string): string {
@@ -50,6 +51,7 @@ const cleanScopes = (v: unknown): Scope[] => Array.from(new Set(Array.isArray(v)
 /** Create a key (admins). The secret is returned once. */
 export async function createKey(a: Actor, input: { name?: unknown; scopes?: unknown; expiresInDays?: unknown }, requestId?: string): Promise<Result<{ id: string; key: string }>> {
   if (!can.manage(a)) return { ok: false, error: "Only a Quality admin creates API keys.", status: 403 };
+  if (demoMode()) return { ok: false, error: "The demo doesn't issue API keys.", status: 403 };
   const name = String(input.name || "").trim().slice(0, 80);
   if (!name) return { ok: false, error: "Name the key after what will use it.", status: 400 };
   const scopes = cleanScopes(input.scopes);
@@ -67,6 +69,7 @@ export async function createKey(a: Actor, input: { name?: unknown; scopes?: unkn
 /** Revoke now, or rotate: a new key with the same name and scopes; the old one works for 24 more hours. */
 export async function changeKey(a: Actor, id: string, op: "revoke" | "rotate", requestId?: string): Promise<Result<{ key?: string; id?: string }>> {
   if (!can.manage(a)) return { ok: false, error: "Only a Quality admin manages API keys.", status: 403 };
+  if (demoMode()) return { ok: false, error: "The demo doesn't change API keys.", status: 403 };
   return withTenant(a.tenant, async (tx) => {
     const k = (await tx.select().from(apiKeys).where(and(eq(apiKeys.companyId, a.tenant), eq(apiKeys.id, id))).limit(1))[0];
     if (!k) return { ok: false as const, error: "Key not found.", status: 404 };

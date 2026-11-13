@@ -143,7 +143,7 @@ export function rowsOf<T>(r: unknown): T[] {
 }
 
 /**
- * The ids of every tenant, for the scheduled sweep only. Runs under the reserved
+ * The ids of every tenant, for the daily alert email only. Runs under the reserved
  * setting "__registry__", which a read-only policy on the companies table admits
  * (drizzle/0009_m4_tenancy.sql); every other table stays closed to it.
  */

@@ -1,7 +1,7 @@
 "use client";
 // The frame around every screen, as in Pulsus Risk: the sidebar (desktop) or
 // the tab bar with "More" (phone), the top bar (where you are, trial chip,
-// day/night, export, you) and the trial banner.
+// day/night, export, alerts bell, you) and the trial banner.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -13,6 +13,7 @@ import { monthLabel, lastActive } from "@/lib/metrics";
 import { ROLE_INFO, isAdmin } from "@/lib/roles";
 import { PERSONAS } from "@/lib/demo/personas";
 import DemoGuard from "@/components/DemoGuard";
+import { ALERT_KINDS, type AlertItem } from "@/lib/alertInfo";
 
 type Badge = "approvals" | "verify" | "inspections" | "issues";
 export const NAV: { href: string; label: string; icon: IconName; badge?: Badge; build?: boolean }[] = [
@@ -75,6 +76,53 @@ function TrialBanner() {
         {owner ? <a className="btn primary sm" href={billingUrl} target="_top">Choose a plan</a> : <span className="sub">Ask your administrator to choose a plan.</span>}
         {days !== 0 && <button type="button" className="iconbtn" style={{ width: 34, height: 34 }} onClick={dismiss} aria-label="Dismiss for today"><Icon name="close" /></button>}
       </div>
+    </div>
+  );
+}
+
+/** The alerts bell: what needs you now (lib/notify.ts), grouped by kind, each a link. */
+function AlertsBell() {
+  const path = usePathname();
+  const { now } = useApp();
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<AlertItem[] | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let live = true;
+    fetch("/api/alerts", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setItems(j.items); }).catch(() => {});
+    return () => { live = false; };
+  }, [path, now]);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent | KeyboardEvent) => { if (e instanceof KeyboardEvent ? e.key === "Escape" : !ref.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", close); document.addEventListener("keydown", close);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", close); };
+  }, [open]);
+  const n = items?.length ?? 0;
+  const groups = ALERT_KINDS.map((k) => ({ ...k, items: (items ?? []).filter((i) => i.kind === k.key) })).filter((g) => g.items.length);
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button type="button" className="iconbtn bell" aria-haspopup="true" aria-expanded={open} aria-label={n ? `Alerts: ${n} need${n === 1 ? "s" : ""} you` : "Alerts: nothing needs you"} title="Alerts" onClick={() => setOpen((o) => !o)}>
+        <Icon name="bell" />{n > 0 && <span className="bell-n" aria-hidden="true">{n > 99 ? "99+" : n}</span>}
+      </button>
+      {open && (
+        <div className="menu alerts-pop" role="region" aria-label="Alerts">
+          <div className="who"><strong style={{ color: "var(--ink)", display: "block", fontSize: 15 }}>{n ? `${n} thing${n === 1 ? "" : "s"} need${n === 1 ? "s" : ""} you` : "You're up to date"}</strong>{n ? "Most urgent first." : "Nothing is waiting on you."}</div>
+          {groups.map((g) => (
+            <div key={g.key} className="alerts-g">
+              <div className="alerts-h"><Icon name={g.icon} width={14} height={14} />{g.label} <span className="sub">({g.items.length})</span></div>
+              {g.items.slice(0, 6).map((i) => (
+                <Link key={i.kind + i.id} href={i.href} onClick={() => setOpen(false)}>
+                  <span className="grow" style={{ minWidth: 0 }}><strong className="alerts-t">{i.title}</strong><small className="sub alerts-d">{i.detail}</small></span>
+                </Link>
+              ))}
+              {g.items.length > 6 && <p className="sub alerts-more">and {g.items.length - 6} more</p>}
+            </div>
+          ))}
+          <hr />
+          <Link href="/settings#settings-alerts" onClick={() => setOpen(false)}><Icon name="mail" />Email alerts</Link>
+        </div>
+      )}
     </div>
   );
 }
@@ -194,6 +242,7 @@ export function Shell({ children }: { children: ReactNode }) {
               <Icon name={app.theme === "dark" ? "sun" : "moon"} />
             </button>
             <a className="iconbtn hide-sm" href={`/api/export?what=register&format=xlsx&year=${app.filters.year}&unit=${app.filters.unit}&area=${app.filters.area}`} aria-label="Download the register (Excel)" title="Download (Excel)"><Icon name="download" /></a>
+            <AlertsBell />
             <AvatarMenu />
           </div>
         </header>

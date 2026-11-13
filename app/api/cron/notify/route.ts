@@ -1,9 +1,9 @@
-// The scheduled sweep (Vercel Cron, vercel.json): band changes, overdue actions,
-// effectiveness checks, scheduled reports and retries, for every company.
-// Needs Authorization: Bearer $CRON_SECRET; without CRON_SECRET it refuses.
+// The daily email of what needs each person (Vercel Cron, vercel.json). Needs
+// Authorization: Bearer $CRON_SECRET; without CRON_SECRET it refuses. Sends
+// nothing unless RESEND_API_KEY is set, and never from a demo (lib/notify.ts).
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { sweepAll } from "@/lib/automation";
+import { sendAllDigests } from "@/lib/notify";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -13,6 +13,6 @@ export async function GET(req: Request) {
   const got = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
   const ok = !!want && want.length === got.length && timingSafeEqual(Buffer.from(want), Buffer.from(got));
   if (!ok) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const results = await sweepAll();
-  return NextResponse.json({ ran: results.length, results: results.map((r) => ({ company: r.companyId.slice(0, 8), ...r, companyId: undefined })) }, { headers: { "Cache-Control": "no-store" } });
+  const runs = await sendAllDigests();
+  return NextResponse.json({ companies: runs.length, sent: runs.reduce((n, r) => n + r.sent, 0), failed: runs.reduce((n, r) => n + r.failed, 0) }, { headers: { "Cache-Control": "no-store" } });
 }

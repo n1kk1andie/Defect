@@ -3,11 +3,12 @@
 // every row (new, update or error, with the reason), then commits. Commit
 // re-checks everything; rows with errors are skipped, never half-written.
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { withTenant } from "@/lib/db/client";
-import { entities, members, units } from "@/lib/db/schema";
+import { actions, entities, members, units } from "@/lib/db/schema";
 import { record } from "@/lib/audit";
-import { setMember } from "@/lib/company";
+import { loadSettings, setMember, writeSettings } from "@/lib/company";
+import { cleanMappings } from "@/lib/settings";
 import { createAction } from "@/lib/actions";
 import { can, isRole, type Actor, type Role } from "@/lib/roles";
 
@@ -46,6 +47,7 @@ export async function previewBulk(a: Actor, kind: BulkKind, raw: unknown): Promi
   const ctx = await withTenant(a.tenant, async (tx) => ({
     units: await tx.select().from(units).where(eq(units.companyId, a.tenant)),
     people: await tx.select({ email: members.email }).from(members).where(eq(members.companyId, a.tenant)),
+    open: kind === "actions" ? await tx.select({ unitId: actions.unitId, title: actions.title, ref: actions.ref }).from(actions).where(and(eq(actions.companyId, a.tenant), ne(actions.status, "closed"))) : [],
   }));
   const byName = new Map(ctx.units.map((u) => [norm(u.name), u]));
   const known = new Set(ctx.people.map((p) => p.email.toLowerCase()));
@@ -79,6 +81,12 @@ export async function previewBulk(a: Actor, kind: BulkKind, raw: unknown): Promi
       if (v.priority && !["high", "medium", "low"].includes(norm(v.priority))) return err("Priority should be high, medium or low.");
       if (v.kind && !["containment", "corrective", "preventive"].includes(norm(v.kind))) return err("Kind should be containment, corrective or preventive.");
       if (v.title.length > 160) return err("The issue is longer than 160 characters; put the rest in Details.");
+      const site = byName.get(norm(v.site))!;
+      const key = `${site.id}|${norm(v.title)}`;
+      if (seen.has(key)) { row.status = "skip"; row.message = "Duplicate: the same issue at the same site appears earlier in the file."; return row; }
+      seen.add(key);
+      const dup = ctx.open.find((x) => x.unitId === site.id && norm(x.title) === norm(v.title));
+      if (dup) { row.status = "skip"; row.message = `Duplicate: ${dup.ref} is already open at ${site.name} with this issue.`; return row; }
       row.message = "A new action will be raised.";
     }
     return row;
@@ -89,7 +97,7 @@ export async function previewBulk(a: Actor, kind: BulkKind, raw: unknown): Promi
 }
 
 /** Apply every row that previews cleanly. */
-export async function commitBulk(a: Actor, kind: BulkKind, raw: unknown, requestId?: string): Promise<Result<{ added: number; updated: number; skipped: number; errors: { n: number; message: string }[] }>> {
+export async function commitBulk(a: Actor, kind: BulkKind, raw: unknown, requestId?: string, mapping?: unknown): Promise<Result<{ added: number; updated: number; skipped: number; errors: { n: number; message: string }[] }>> {
   const p = await previewBulk(a, kind, raw);
   if (!p.ok) return p;
   let added = 0, updated = 0;
@@ -138,7 +146,9 @@ export async function commitBulk(a: Actor, kind: BulkKind, raw: unknown, request
       if (res.ok) added++; else errors.push({ n: r.n, message: res.error });
     }
   }
+  const saved = cleanMappings({ [kind]: mapping })[kind];
+  if (saved && (added || updated)) await withTenant(a.tenant, async (tx) => { const st = await loadSettings(tx, a.tenant); await writeSettings(tx, a.tenant, { ...st, bulkMappings: { ...st.bulkMappings, [kind]: saved } }, a.email); });
   if (kind !== "locations") await withTenant(a.tenant, (tx) => record(tx, a.tenant, { actor: a.email, action: `bulk.${kind}`, entityType: kind === "people" ? "member" : "action", summary: `Bulk import of ${kind}: ${added} added, ${updated} updated, ${errors.length + p.value.counts.error} skipped`, requestId }));
-  return { ok: true, value: { added, updated, skipped: p.value.counts.error + errors.length, errors: [...p.value.rows.filter((r) => r.status === "error").map((r) => ({ n: r.n, message: r.message })), ...errors].slice(0, 100) } };
+  return { ok: true, value: { added, updated, skipped: p.value.counts.error + p.value.counts.skip + errors.length, errors: [...p.value.rows.filter((r) => r.status === "error").map((r) => ({ n: r.n, message: r.message })), ...errors].slice(0, 100) } };
 }
 

@@ -22,7 +22,7 @@ const BLURB: Record<string, string> = {
   "/templates": "Checklists and the template library",
   "/scorecards": "Design the scorecard",
   "/actions": "Corrective and preventive actions",
-  "/report": "The executive report, committee pack and saved reports",
+  "/report": "The executive report",
   "/settings": "Company set-up, people, bands, data",
 };
 

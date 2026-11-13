@@ -100,8 +100,7 @@ export function evaluate(n: number, deviations: number, confidence: number, tdr:
 
 // ── populations, strata and seeded selection ─────────────────────────────────
 
-/** An item of the population: its record reference, optional stratum and value, and (from a file) its row number and a description. */
-export interface PopItem { id: string; stratum?: string; value?: number; row?: number; label?: string }
+export interface PopItem { id: string; stratum?: string; value?: number }
 
 /** FNV-1a, 32-bit: the seed text's number. */
 export function fnv1a(s: string): number {
@@ -189,57 +188,4 @@ export function methodText(p: { method: string; confidence?: number | null; tdr?
   const strata = p.stratify ? " Stratified in proportion to each stratum's size, at least one per stratum." : "";
   const census = p.censusAbove != null ? ` Every item valued at ${p.censusAbove} or more is tested.` : "";
   return `${how}${strata}${census} Random selection: items ordered by id, then a Fisher–Yates shuffle driven by mulberry32 seeded with the FNV-1a hash of “${p.seed}”. Anyone with the same population and seed gets the same items.`;
-}
-
-// ── uploaded populations: column mapping and value bands ─────────────────────
-
-const fmtEdge = (x: number) => x.toLocaleString("en-US", { maximumFractionDigits: 2 });
-
-/** The value band an amount falls in, given ascending edges: "< 1,000", "1,000 to < 10,000", "≥ 10,000". */
-export function valueBand(v: number | undefined, edges: number[]): string {
-  if (v === undefined || !Number.isFinite(v)) return "No value";
-  const e = [...edges].filter(Number.isFinite).sort((a, b) => a - b);
-  if (!e.length) return "All";
-  if (v < e[0]) return `< ${fmtEdge(e[0])}`;
-  for (let i = 1; i < e.length; i++) if (v < e[i]) return `${fmtEdge(e[i - 1])} to < ${fmtEdge(e[i])}`;
-  return `≥ ${fmtEdge(e[e.length - 1])}`;
-}
-
-/** Quartile edges (25th, 50th, 75th percentiles) of the values, rounded to two significant figures, without duplicates. */
-export function quartileEdges(values: number[]): number[] {
-  const v = values.filter(Number.isFinite).sort((a, b) => a - b);
-  if (v.length < 4) return [];
-  const q = (p: number) => v[Math.min(v.length - 1, Math.floor(p * (v.length - 1)))];
-  const round = (x: number) => { if (x === 0) return 0; const m = Math.pow(10, Math.floor(Math.log10(Math.abs(x))) - 1); return Math.round(x / m) * m; };
-  return Array.from(new Set([q(0.25), q(0.5), q(0.75)].map(round))).filter((x) => x > v[0]);
-}
-
-export interface PopulationMapping { id: number; stratum?: number; value?: number; label?: number }
-export interface PopulationRead { items: PopItem[]; duplicates: string[]; missingId: number; badValues: number }
-
-/**
- * Build the population from an uploaded table. The record reference column is
- * kept as each item's id (so selected items carry the file's own references),
- * with its row number in the file. Strata come from a column or from value bands.
- */
-export function populationFromTable(rows: string[][], map: PopulationMapping, strata: { by: "none" | "column" | "value"; edges?: number[] }, parseNum: (s: string) => number | null): PopulationRead {
-  const items: PopItem[] = [], duplicates: string[] = [];
-  const seen = new Set<string>();
-  let missingId = 0, badValues = 0;
-  rows.forEach((r, i) => {
-    if (items.length >= 50000) return;
-    const id = String(r[map.id] ?? "").trim().slice(0, 80);
-    if (!id) { missingId++; return; }
-    if (seen.has(id)) { if (duplicates.length < 20) duplicates.push(id); return; }
-    seen.add(id);
-    let value: number | undefined;
-    if (map.value != null && map.value >= 0) { const raw = String(r[map.value] ?? "").trim(); const n = parseNum(raw); if (n === null) { if (raw) badValues++; } else value = n; }
-    const item: PopItem = { id, row: i + 2 };
-    if (value !== undefined) item.value = value;
-    if (map.label != null && map.label >= 0 && r[map.label]) item.label = String(r[map.label]).slice(0, 120);
-    if (strata.by === "column" && map.stratum != null && map.stratum >= 0) item.stratum = String(r[map.stratum] ?? "").trim().slice(0, 60) || "Blank";
-    else if (strata.by === "value") item.stratum = valueBand(value, strata.edges ?? []);
-    items.push(item);
-  });
-  return { items, duplicates, missingId, badValues };
 }

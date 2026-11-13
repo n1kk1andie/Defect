@@ -1,11 +1,11 @@
-// Read an uploaded CSV, TSV or Excel file into columns, for mapping (sampling populations, bulk imports). Nothing is stored.
+// Read an uploaded CSV, TSV or Excel file into columns, for mapping (bulk imports). Nothing is stored.
 import { actorOr, json } from "@/lib/api";
-import { readTable } from "@/lib/table";
+import { readTable } from "@/lib/tableRead";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
-  const g = await actorOr((a) => a.roles.some((r) => r === "admin" || r === "supervisor")); if ("response" in g) return g.response;
+  const g = await actorOr((a) => a.roles.some((r) => r === "admin")); if ("response" in g) return g.response;
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
   if (!(file instanceof File) || !file.size) return json({ error: "Choose a CSV or Excel file." }, 400);

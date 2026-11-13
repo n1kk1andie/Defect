@@ -2,7 +2,6 @@
 // refreshed after a change: who you are, the company's dataset, settings,
 // programme, people and the counts behind the navigation badges.
 import { redirect } from "next/navigation";
-import { after } from "next/server";
 import { and, eq, sql } from "drizzle-orm";
 import { getActor } from "@/lib/session";
 import { withTenant, rowsOf } from "@/lib/db/client";
@@ -24,8 +23,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const actor = await getActor();
   if (!actor) redirect("/login");
   if (!can.view(actor)) return <NoAccess email={actor.email} company={actor.tenantName} />;
-  // The scheduled checks (band changes, overdue alerts, effectiveness checks, scheduled reports) also run, at most every ten minutes, after a page is served.
-  if (!demo && actor.platformRole !== "feed") after(async () => { try { const { maybeSweep } = await import("@/lib/automation"); await maybeSweep(actor.tenant); } catch (e) { console.error("sweep", e); } });
   const boot = await withTenant(actor.tenant, async (tx): Promise<Boot> => {
     const settings = await loadSettings(tx, actor.tenant);
     const [data, program, people, c] = await Promise.all([

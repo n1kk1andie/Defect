@@ -31,6 +31,10 @@ export interface CompanySettings {
   setupDone: boolean;
   /** The quality risk score model: driver weights, entered factors, band cut-offs, visit frequency by band. */
   risk: RiskConfig;
+  /** Whether people get the daily email of what needs them (when the deployment sends email). Each person can also turn theirs off. */
+  emailAlerts: boolean;
+  /** Bulk import: the column each field came from last time, per kind, so the next file maps itself. */
+  bulkMappings: Partial<Record<"locations" | "people" | "actions", Record<string, string>>>;
 }
 
 export const DEFAULT_SETTINGS: CompanySettings = {
@@ -48,6 +52,8 @@ export const DEFAULT_SETTINGS: CompanySettings = {
   entityLabel: "Entity",
   setupDone: false,
   risk: DEFAULT_RISK,
+  emailAlerts: true,
+  bulkMappings: {},
 };
 
 /** English plural of a unit label: Branch → Branches, Agency → Agencies, Store → Stores. */
@@ -61,6 +67,19 @@ export function plural(w: string): string {
 export const ENTITY_LABEL: Record<string, string> = { banking: "Entity", healthcare: "Hospital", government: "Agency", higher_ed: "Campus", general: "Business unit" };
 
 const text = (v: unknown, max: number, d: string) => { const s = String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max); return s || d; };
+
+/** Saved bulk-import mappings: per kind, field key → the column heading it was mapped from. */
+export function cleanMappings(raw: unknown): CompanySettings["bulkMappings"] {
+  const out: CompanySettings["bulkMappings"] = {};
+  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  for (const k of ["locations", "people", "actions"] as const) {
+    const m = o[k];
+    if (!m || typeof m !== "object") continue;
+    const e = Object.entries(m as Record<string, unknown>).filter(([f, h]) => /^[A-Za-z]{1,30}$/.test(f) && typeof h === "string" && h.trim()).slice(0, 20).map(([f, h]) => [f, String(h).trim().slice(0, 80)]);
+    if (e.length) out[k] = Object.fromEntries(e);
+  }
+  return out;
+}
 
 /** Clean stored or submitted settings onto the defaults. */
 export function cleanSettings(raw: unknown): CompanySettings {
@@ -86,5 +105,7 @@ export function cleanSettings(raw: unknown): CompanySettings {
     entityLabel: text(o.entityLabel, 30, ENTITY_LABEL[String(o.sector)] ?? d.entityLabel),
     setupDone: o.setupDone === true,
     risk: cleanRisk(o.risk, (["banking", "healthcare", "government", "higher_ed", "general"] as const).find((x) => x === o.sector) ?? d.sector),
+    emailAlerts: o.emailAlerts !== false,
+    bulkMappings: cleanMappings(o.bulkMappings),
   };
 }

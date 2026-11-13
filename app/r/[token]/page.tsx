@@ -18,7 +18,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
       {site ? (
         <section className="card rpt-card" aria-labelledby="rpt-title">
           <p className="eyebrow" style={{ margin: 0 }}>{site.companyName}</p>
-          <h1 id="rpt-title" className="h2" style={{ fontSize: 24, margin: "4px 0 2px" }}>Report an issue at {site.unitName}</h1>
+          <h1 id="rpt-title" className="h2" style={{ fontSize: 24, lineHeight: 1.2, margin: "6px 0 6px" }}>Report an issue at {site.unitName}</h1>
           <p className="sub" style={{ margin: 0 }}>Tell the {site.unitLabel.toLowerCase()} team about something that isn&apos;t right. You don&apos;t need an account, and your name is optional.</p>
           <ReportForm token={token} via={via === "qr" ? "qr" : "link"} siteKey={turnstileSiteKey()} unit={site.unitName} />
         </section>
@@ -28,7 +28,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
           <p className="sub">The poster or link may have been replaced. Ask someone at the site for the current one, or tell a member of staff directly.</p>
         </section>
       )}
-      <p className="sub rpt-foot">Pulsus Quality · <a href="https://pulsus.tech/privacy">Privacy</a> · In an emergency, call your local emergency number first.</p>
+      <p className="sub rpt-foot"><span className="tagline">Live. Signal. Clarity.</span> · Pulsus Quality · <a href="https://pulsus.tech/privacy">Privacy</a> · In an emergency, call your local emergency number first.</p>
     </main>
   );
 }

@@ -18,11 +18,12 @@ test("an M1-seeded demo is upgraded with the M2 data, idempotently", async () =>
   // Seed, then strip everything Milestone 2 added: what a demo deployed before #38 holds.
   await withTenant("_demo", async (tx) => {
     await seedDemo(tx);
-    for (const t of ["sampling_plans", "programmes", "unit_factors", "inspection_events", "inspections", "template_versions", "templates", "scorecard_versions"]) await tx.execute(sql.raw(`delete from ${t}`));
-    await tx.execute(sql`delete from actions where source_type = 'inspection'`);
+    for (const t of ["api_keys", "issue_reports", "report_links", "site_groups", "entities", "sampling_plans", "programmes", "unit_factors", "inspection_events", "inspections", "template_versions", "templates", "scorecard_versions"]) await tx.execute(sql.raw(`delete from ${t}`));
+    await tx.execute(sql`update actions set rca = null, effectiveness = null, effectiveness_days = 0`);
+    await tx.execute(sql`delete from actions where source_type in ('inspection', 'issue_report')`);
     await tx.execute(sql`delete from action_events where action_id not in (select id from actions)`);
     await tx.execute(sql`delete from scorecards where active = false`);
-    await tx.execute(sql`delete from counters where name in ('demo_seed', 'inspection', 'sampling')`);
+    await tx.execute(sql`delete from counters where name in ('demo_seed', 'inspection', 'sampling', 'issue')`);
     await tx.execute(sql`update counters set value = 50 where name = 'action'`); // visitors raised a few actions since
     await tx.execute(sql`update company_settings set data = data - 'sector' - 'setupDone' - 'groupLabel'`);
     await tx.execute(sql`update units set region = null`);
@@ -86,5 +87,30 @@ test("a version-3 demo (Meridian Society, member wording) is renamed in place to
   assert.equal(await count("_demo", "select value n from counters where name = 'demo_seed'"), DEMO_SEED_VERSION);
   await ensureDemoSeeded();
   assert.equal(await count("_demo", "select value n from counters where name = 'demo_seed'"), DEMO_SEED_VERSION, "idempotent");
+  assert.ok((await verify("_demo")).ok);
+});
+
+test("a version-4 demo gets the Milestone 4 data: subsidiaries, groups, reported issues, root cause, API keys", async () => {
+  await withTenant("_demo", async (tx) => {
+    for (const t of ["api_keys", "issue_reports", "report_links", "site_groups", "entities"]) await tx.execute(sql.raw(`delete from ${t}`));
+    await tx.execute(sql`update units set entity_id = null`);
+    await tx.execute(sql`update actions set rca = null, effectiveness = null, effectiveness_days = 0`);
+    await tx.execute(sql`delete from action_events where action_id in (select id from actions where source_type = 'issue_report')`);
+    await tx.execute(sql`delete from actions where source_type = 'issue_report'`);
+    await tx.execute(sql`update counters set value = 4 where name = 'demo_seed'`);
+  });
+  await ensureDemoSeeded();
+  assert.equal(await count("_demo", "select count(*)::int n from entities"), 2);
+  assert.equal(await count("_demo", "select count(*)::int n from units where entity_id is not null"), 6);
+  assert.equal(await count("_demo", "select count(*)::int n from site_groups"), 2);
+  assert.equal(await count("_demo", "select count(*)::int n from report_links"), 6);
+  assert.equal(await count("_demo", "select count(*)::int n from issue_reports"), 6);
+  assert.equal(await count("_demo", "select count(*)::int n from issue_reports where status = 'new'"), 3);
+  assert.equal(await count("_demo", "select count(*)::int n from actions where source_type = 'issue_report'"), 2);
+  assert.ok(await count("_demo", "select count(*)::int n from actions where rca is not null") >= 1);
+  assert.equal(await count("_demo", "select count(*)::int n from api_keys"), 2);
+  assert.equal(await count("_demo", "select value n from counters where name = 'demo_seed'"), DEMO_SEED_VERSION);
+  await ensureDemoSeeded();
+  assert.equal(await count("_demo", "select count(*)::int n from issue_reports"), 6, "idempotent");
   assert.ok((await verify("_demo")).ok);
 });

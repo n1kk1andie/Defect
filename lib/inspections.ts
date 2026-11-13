@@ -275,15 +275,6 @@ export function defectsFeed(def: TemplateDef, items: SampledItem[]): DefectsFeed
 
 /** Approve (publish) or return a submitted inspection. */
 export async function decideInspection(a: Actor, id: string, decision: "approve" | "return", note: string, requestId?: string): Promise<Result<InspectionView>> {
-  const res = await decide(a, id, decision, note, requestId);
-  if (res.ok && decision === "approve") {
-    // Webhooks, proposals to Pulsus Risk and the band check run after the approval is committed; they never undo it.
-    try { const { afterInspectionApproved } = await import("@/lib/automation"); await afterInspectionApproved(a.tenant, id); } catch (e) { console.error("automation after approval", e); }
-  }
-  return res;
-}
-
-async function decide(a: Actor, id: string, decision: "approve" | "return", note: string, requestId?: string): Promise<Result<InspectionView>> {
   return withTenant(a.tenant, async (tx) => {
     const r = (await tx.select().from(inspections).where(and(eq(inspections.companyId, a.tenant), eq(inspections.id, id))).limit(1))[0];
     if (!r) return { ok: false as const, error: "Inspection not found.", status: 404 };

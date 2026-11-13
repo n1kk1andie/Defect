@@ -19,7 +19,6 @@ import { can, inScope, isSupervisor, type Actor } from "@/lib/roles";
 import { getStorage, storageIsDurable } from "@/lib/storage";
 import { createAction } from "@/lib/actions";
 import { saveInspection } from "@/lib/inspections";
-import { emit } from "@/lib/webhooks";
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string; status?: number };
 const TENANT_ID = /^(?:_own|_demo|[a-z0-9][a-z0-9-]{0,39})$/;
@@ -94,7 +93,7 @@ export async function resolveLink(token: string): Promise<PublicSite | null> {
     if (!u || !u.active) return null;
     const c = (await tx.select().from(companies).where(eq(companies.companyId, tenant)).limit(1))[0];
     const s = await loadSettings(tx, tenant);
-    return { companyId: tenant, companyName: tenant === "_demo" ? "Meridian Society" : c?.name ?? "", unitId: u.id, unitName: u.name, unitLabel: s.unitLabel };
+    return { companyId: tenant, companyName: tenant === "_demo" ? "Meridian Financial Group" : c?.name ?? "", unitId: u.id, unitName: u.name, unitLabel: s.unitLabel };
   });
 }
 
@@ -161,7 +160,6 @@ export async function submitReport(token: string, input: ReportInput, photo: { t
     await record(tx, site.companyId, { actor: `public:${site.unitName}`, action: "issue.report", entityType: "issue_report", entityId: id, summary: `${ref} reported at ${site.unitName}: ${CATEGORY_INFO[category].label.toLowerCase()}`, after: { ref, category, photo: photoState } });
     return ref;
   });
-  await emit(site.companyId, "issue.reported", id, { title: `${ref}: ${CATEGORY_INFO[category].label} at ${site.unitName}`, text: description.slice(0, 300), url: `${appUrl()}/issues?open=${id}`, facts: [[site.unitLabel, site.unitName], ["Kind", CATEGORY_INFO[category].label], ["Photo", photoState === "stored" ? "yes" : "no"]], issue: { id, ref, unitId: site.unitId, category } });
   return { ok: true, value: { ref, photo: photoState } };
 }
 

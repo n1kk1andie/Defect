@@ -2,7 +2,7 @@
 // Reported issues: what anyone raised from a site's QR code or link, with no
 // sign-in, for a supervisor to triage into an action, an inspection, or close
 // with a reason. The second tab holds every site's link and QR poster.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api, useApp } from "@/components/app-context";
 import { BandPill, Card, Empty, Field, fmtDate, fmtDateTime, Msg, PageHead, Seg, Sheet, Stat } from "@/components/ui";
@@ -73,7 +73,8 @@ function Links({ links, turnstile }: { links: LinkView[]; turnstile: boolean }) 
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const [origin, setOrigin] = useState("");
+  useEffect(() => setOrigin(window.location.origin), []);
   const rotate = async (l: LinkView) => {
     if (!confirm(`Replace ${l.unitName}'s link? Posters with the old QR code will stop working.`)) return;
     setBusy(l.unitId); setMsg("");

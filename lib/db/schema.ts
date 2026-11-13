@@ -42,6 +42,8 @@ export const members = pgTable("members", {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  /** The daily email of what needs this person (when the deployment sends email). They can turn it off. */
+  emailAlerts: boolean("email_alerts").notNull().default(true),
 }, (t) => [primaryKey({ columns: [t.companyId, t.email] })]);
 
 export const units = pgTable("units", {
@@ -299,18 +301,7 @@ export const riskOutbox = pgTable("risk_outbox", {
   createdAt: createdAt(),
   sentAt: timestamp("sent_at", { withTimezone: true }),
   response: jsonb("response"),
-  /** The payload id (SHA-256 of company, record type and record): one row per proposal. */
-  proposalId: text("proposal_id"),
-  /** finding | kri_breach | issue | risk_event */
-  kind: text("kind"),
-  /** Set by the automatic rules (site band, critical failure, failed sample), else null. */
-  rule: text("rule"),
-  attempts: integer("attempts").notNull().default(1),
-  riskRef: text("risk_ref"),
-  /** Risk's decision when it calls back: accepted | rejected. */
-  decision: text("decision"),
-  decidedAt: timestamp("decided_at", { withTimezone: true }),
-}, (t) => [uniqueIndex("risk_outbox_proposal").on(t.companyId, t.proposalId)]);
+});
 
 /** A checklist template a company built, imported or added from the library. The draft is edited; publishing freezes a version. */
 export const templates = pgTable("templates", {
@@ -496,38 +487,6 @@ export const issueReports = pgTable("issue_reports", {
   createdAt: createdAt(),
 }, (t) => [uniqueIndex("issue_reports_ref").on(t.companyId, t.ref), index("issue_reports_status").on(t.companyId, t.status)]);
 
-/** A saved report: its sections, filters, format and schedule. */
-export const savedReports = pgTable("saved_reports", {
-  id: text("id").primaryKey(),
-  companyId: text("company_id").notNull(),
-  name: text("name").notNull(),
-  sections: text("sections").array().notNull().default(sql`'{}'::text[]`),
-  filters: jsonb("filters").notNull().default(sql`'{}'::jsonb`),
-  format: text("format").notNull().default("pdf"), // pdf | xlsx | both
-  schedule: jsonb("schedule").notNull().default(sql`'{"every":"none"}'::jsonb`),
-  recipients: text("recipients").array().notNull().default(sql`'{}'::text[]`),
-  nextRunAt: timestamp("next_run_at", { withTimezone: true }),
-  lastRunAt: timestamp("last_run_at", { withTimezone: true }),
-  lastStatus: text("last_status"),
-  createdBy: text("created_by").notNull(),
-  createdAt: createdAt(),
-  updatedAt: updatedAt(),
-});
-
-/** One run of a saved report: emailed, stored (no email service) or failed. The files are kept for download. */
-export const reportRuns = pgTable("report_runs", {
-  id: text("id").primaryKey(),
-  companyId: text("company_id").notNull(),
-  reportId: text("report_id").notNull(),
-  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
-  status: text("status").notNull(), // emailed | stored | failed
-  recipients: text("recipients").array().notNull().default(sql`'{}'::text[]`),
-  note: text("note").notNull().default(""),
-  by: text("by").notNull(),
-  pdf: text("pdf"),
-  xlsx: text("xlsx"),
-}, (t) => [index("report_runs_report").on(t.companyId, t.reportId)]);
-
 /** An API key: only its SHA-256 is stored; the secret is shown once. */
 export const apiKeys = pgTable("api_keys", {
   id: text("id").primaryKey(),
@@ -544,45 +503,6 @@ export const apiKeys = pgTable("api_keys", {
   replacedBy: text("replaced_by"),
 }, (t) => [uniqueIndex("api_keys_hash").on(t.hash)]);
 
-/** An outgoing webhook: a generic signed JSON endpoint, or a Slack or Teams channel. */
-export const webhooks = pgTable("webhooks", {
-  id: text("id").primaryKey(),
-  companyId: text("company_id").notNull(),
-  name: text("name").notNull(),
-  kind: text("kind").notNull().default("generic"), // generic | slack | teams
-  url: text("url").notNull(),
-  secret: text("secret").notNull(),
-  events: text("events").array().notNull().default(sql`'{}'::text[]`),
-  active: boolean("active").notNull().default(true),
-  createdBy: text("created_by").notNull(),
-  createdAt: createdAt(),
-  lastStatus: text("last_status"),
-  lastAt: timestamp("last_at", { withTimezone: true }),
-});
-
-/** Each event sent to each webhook, once (the event key makes it idempotent), with retries. */
-export const webhookDeliveries = pgTable("webhook_deliveries", {
-  id: text("id").primaryKey(),
-  companyId: text("company_id").notNull(),
-  webhookId: text("webhook_id").notNull(),
-  event: text("event").notNull(),
-  eventKey: text("event_key").notNull(),
-  payload: jsonb("payload").notNull(),
-  status: text("status").notNull(), // sent | failed | skipped
-  code: integer("code"),
-  attempts: integer("attempts").notNull().default(1),
-  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [uniqueIndex("webhook_deliveries_key").on(t.companyId, t.webhookId, t.eventKey)]);
-
-/** Each site's last known risk band, so a change of band is noticed once. */
-export const siteBands = pgTable("site_bands", {
-  companyId: text("company_id").notNull(),
-  unitId: text("unit_id").notNull(),
-  band: text("band").notNull(),
-  score: doublePrecision("score"),
-  since: timestamp("since", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [primaryKey({ columns: [t.companyId, t.unitId] })]);
-
 /** Per-company counters for human references (REV-0001, ACT-0001). */
 export const counters = pgTable("counters", {
   companyId: text("company_id").notNull(),
@@ -595,5 +515,5 @@ export const TENANT_TABLES = [
   "companies", "company_settings", "members", "units", "areas", "checks", "natures", "monthly_stats", "reviews", "review_items",
   "review_events", "scorecards", "scorecard_entries", "actions", "action_events", "evidence", "audit_log", "imports", "risk_outbox", "counters",
   "templates", "template_versions", "inspections", "inspection_events", "scorecard_versions", "sampling_plans", "programmes", "unit_factors",
-  "entities", "site_groups", "report_links", "issue_reports", "saved_reports", "report_runs", "api_keys", "webhooks", "webhook_deliveries", "site_bands",
+  "entities", "site_groups", "report_links", "issue_reports", "api_keys",
 ] as const;

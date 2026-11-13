@@ -2,7 +2,7 @@
 DO $$
 DECLARE t text;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['entities','site_groups','report_links','issue_reports','saved_reports','report_runs','api_keys','webhooks','webhook_deliveries','site_bands']
+  FOREACH t IN ARRAY ARRAY['entities','site_groups','report_links','issue_reports','api_keys']
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
@@ -15,7 +15,7 @@ BEGIN
   END LOOP;
 END $$;
 --> statement-breakpoint
--- The scheduled sweep (lib/automation.ts) needs the list of tenant ids, and
+-- The daily alert email (lib/notify.ts, /api/cron/notify) needs the list of tenant ids, and
 -- nothing else, across companies: a read-only policy on the companies table
 -- for the reserved setting "__registry__", which withTenant() can never set.
 DROP POLICY IF EXISTS tenant_registry ON companies;

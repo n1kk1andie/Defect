@@ -14,9 +14,14 @@ Quality management and inspections for multi-site organisations: banks and credi
 - **Scorecards:** the scorecard designer (entered, computed and checklist-fed measures, weights, target, rounding, dashboard columns, sample-data preview, locked versions) and ready-made scorecards by sector.
 - **Set up:** a wizard from sign-up to the first inspection: sector, site labels, locations (typed or pasted), starter checklists and a scorecard.
 - **Review:** inspectors key reviews against their checklist on a phone (saved on the device as they type); a different supervisor approves or returns them.
-- **Actions:** corrective and preventive actions with owner, due date, root cause and evidence, verified by someone who didn't raise, own or submit them.
+- **Issues:** anyone (staff without a seat, contractors, customers, visitors) reports an observation, hazard, near miss or complaint from a site's QR poster or link, on a phone, with no sign-in or app; a supervisor triages it into an action or an inspection, or closes it with a reason.
+- **Actions:** containment, corrective and preventive actions with owner, due date, root cause (5 whys and fishbone) and evidence, verified by someone who didn't raise, own or submit them, then an effectiveness check: the failed question passing on a later inspection, or a supervisor who didn't own it recording whether the fix held. A finding that fails again reopens its action instead of raising another.
+- **Compare:** every site rolled up to its entity (a subsidiary, hospital, agency or campus), region or a named group, side by side, and each site benchmarked against the median.
+- **Alerts:** the bell in the top bar shows what needs you (approvals, actions to verify, your overdue actions, effectiveness checks, reported issues); the same list goes out as one daily email per person when email is set up.
 - **Report:** the executive report, printable to PDF, with PMAS to date; the committee report as a PDF and Excel workbook.
-- **Settings:** the suite's grouped settings (plan and trial, company set-up, colour bands, people and roles, data and uploads, how it's measured, integrations, change history, approvals, appearance, about, help).
+- **Settings:** the suite's grouped settings (plan and trial, company set-up, colour bands, people and roles, data and uploads, bulk import, how it's measured, integrations, API keys, email alerts, change history, approvals, appearance, about, help).
+- **Bulk import:** locations, people or actions from Excel or CSV: download a template, upload, map the columns (the mapping is remembered), preview every row as new, update, duplicate or error with the reason, then import the good rows.
+- **REST API:** company API keys (hashed, scoped, expiring, rotated with a day's grace, revocable) for other systems to read sites, inspections, actions, risk, sampling and issues, and to raise actions and report issues. See [docs/api.md](docs/api.md).
 
 ## Architecture
 
@@ -28,7 +33,10 @@ Quality management and inspections for multi-site organisations: banks and credi
 - Evidence in private Blob storage, hashed (`lib/evidence.ts`).
 - The pure figures (`lib/metrics.ts`, `lib/bands.ts`, `lib/scorecard.ts`) are shared by the server and the browser.
 
-Docs: [quality model and benchmark](docs/quality-model.md) · [migration](docs/migration.md) · [platform feed](docs/platform-feed.md) · [Pulsus Risk contract](docs/risk-contract.md).
+- **Email:** the daily alert email goes through Resend from "Pulsus Quality <support@pulsus.tech>", only when `RESEND_API_KEY` is set, never from a demo; Vercel Cron calls `/api/cron/notify` each morning with `CRON_SECRET` (`lib/notify.ts`).
+- **Public report form:** `/r/<token>`; Cloudflare Turnstile checks each report when `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are set, and a trap field and a per-address limit apply always.
+
+Docs: [quality model and benchmark](docs/quality-model.md) · [migration](docs/migration.md) · [platform feed](docs/platform-feed.md) · [Pulsus Risk contract](docs/risk-contract.md) · [REST API](docs/api.md).
 
 ## Develop
 

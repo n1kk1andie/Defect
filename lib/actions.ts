@@ -21,6 +21,8 @@ export type { ActionView };
 import { STATUS_LABEL, PRIORITIES, isOverdue, allowedSteps, cleanRca, effectivenessBlocker, type ActionStatus, type ActionPriority, type ActionStep, type ActionKind, type Effectiveness, type Rca } from "@/lib/actionRules";
 export { STATUS_LABEL, PRIORITIES, isOverdue, allowedSteps, type ActionStatus, type ActionPriority, type ActionStep };
 const KINDS: ActionKind[] = ["containment", "corrective", "preventive"];
+/** A pending effectiveness check reads "due" once its date has come. */
+const effectivenessNow = (e: Effectiveness | null, today = new Date().toISOString().slice(0, 10)): Effectiveness | null => (e && e.status === "pending" && e.due <= today ? { ...e, status: "due" } : e);
 const addDaysIso = (d: Date, n: number) => new Date(d.getTime() + n * 864e5).toISOString().slice(0, 10);
 type Result<T> = { ok: true; value: T } | { ok: false; error: string; status?: number };
 
@@ -55,7 +57,7 @@ async function view(tx: Tx, companyId: string, rows: (typeof actions.$inferSelec
       verifiedBy: r.verifiedBy, verifiedAt: r.verifiedAt?.toISOString() ?? null, submittedBy, sourceType: r.sourceType, sourceId: r.sourceId,
       createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(), closedAt: r.closedAt?.toISOString() ?? null,
       overdue: isOverdue({ status: r.status, dueDate: due }),
-      rca: (r.rca as Rca | null) ?? null, effectivenessDays: r.effectivenessDays, effectiveness: (r.effectiveness as Effectiveness | null) ?? null, reopenCount: r.reopenCount,
+      rca: (r.rca as Rca | null) ?? null, effectivenessDays: r.effectivenessDays, effectiveness: effectivenessNow(r.effectiveness as Effectiveness | null), reopenCount: r.reopenCount,
       history,
       evidence: files.filter((f) => f.entityId === r.id).map((f) => ({ id: f.id, name: f.name, size: f.size, contentType: f.contentType, uploadedBy: f.uploadedBy, uploadedAt: f.uploadedAt.toISOString() })),
     };
