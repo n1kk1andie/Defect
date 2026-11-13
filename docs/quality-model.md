@@ -92,7 +92,7 @@ Quality is sold to banks and credit unions, hospitals and health systems, govern
 | Inherent-risk factors (M3 defaults) | Transaction volume, staff turnover, branch size, prior incidents, cash holdings | Bed count/acuity, staff vacancy, infection incidents, prior incidents | Caseload volume, staff turnover, public-facing hours, prior complaints | Student population, lab count, prior incidents, residence capacity | Volume, headcount, turnover, prior incidents |
 
 - Sector packs are **starting points**: an organisation picks its sector at onboarding (Settings → Company set-up), and every label, template and factor stays editable.
-- The demo is Meridian Society, a financial co-operative. Every sector pack can be browsed in its library, so a hospital or university buyer sees their own templates.
+- The demo is Meridian Financial Group, a commercial financial group. Every sector pack can be browsed in its library, so a hospital or university buyer sees their own templates.
 
 ### 2.1 From sign-up to the first inspection (a hospital or a university)
 

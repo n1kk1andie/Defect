@@ -6,7 +6,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { QualityData } from "@/lib/metrics";
-import { years } from "@/lib/metrics";
+import { openingYear, years } from "@/lib/metrics";
 import type { CompanySettings } from "@/lib/settings";
 import type { Actor } from "@/lib/roles";
 import type { Program } from "@/lib/company";
@@ -46,7 +46,8 @@ const VIEW_KEY = "pq-view";
 export function AppProvider({ boot, children }: { boot: Boot; children: ReactNode }) {
   const router = useRouter();
   const ys = years(boot.data.periods);
-  const latestYear = ys[ys.length - 1] || String(new Date().getFullYear());
+  // The latest year with data, else this year (lib/metrics openingYear).
+  const latestYear = openingYear(boot.data);
   const [filters, set] = useState<Filters>({ mode: "defects", year: latestYear, unit: -1, area: -1 });
   const [theme, setTheme] = useState<"light" | "dark">("light");
 

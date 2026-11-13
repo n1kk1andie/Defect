@@ -1,4 +1,4 @@
-// Demo: Meridian Society's Milestone 3 data — programmes of visits, sampling
+// Demo: Meridian Financial Group's Milestone 3 data — programmes of visits, sampling
 // plans (Summit's KYC files fail their sample; Harbour's pass; Crossroads'
 // loan files are selected and waiting), and the risk factors entered per
 // branch, with Summit the weakest. Deterministic; demo tenant only.

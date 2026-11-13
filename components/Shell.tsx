@@ -115,7 +115,7 @@ function AvatarMenu() {
           ) : (
             <>
               <hr />
-              <a role="menuitem" href={platformUrl} target="_top"><Icon name="globe" />Pulsus home</a>
+              <a role="menuitem" href={platformUrl}><Icon name="globe" />Pulsus home</a>
               <button role="menuitem" onClick={signOut}><Icon name="lock" />Sign out</button>
             </>
           )}
@@ -167,7 +167,7 @@ export function Shell({ children }: { children: ReactNode }) {
           {build.map((n) => <Link key={n.href} href={n.href} aria-current={on(n.href) ? "page" : undefined}><Icon name={n.icon} /><span>{n.label}</span></Link>)}
           <span className="nav-label">Organisation</span>
           <Link href="/settings" aria-current={on("/settings") ? "page" : undefined}><Icon name="settings" /><span>Settings</span></Link>
-          {!app.demo && <a href={app.platformUrl} target="_top"><Icon name="globe" /><span>Back to Pulsus</span></a>}
+          {!app.demo && <a href={app.platformUrl}><Icon name="globe" /><span>Back to Pulsus</span></a>}
         </nav>
         <div className="side-foot">
           <div className="me">
@@ -188,7 +188,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </Link>
           <span className="title grow" style={{ minWidth: 0 }}>{current}<small>{context}</small></span>
           <div className="tb-right">
-            {app.demo && <span className="demochip hide-sm" title="Meridian Society is fictional: sample data for the demo">Demo · sample data</span>}
+            {app.demo && <span className="demochip hide-sm" title="Meridian Financial Group is fictional: sample data for the demo">Demo · sample data</span>}
             <span className="hide-sm"><TrialChip /></span>
             <button type="button" className="iconbtn" onClick={app.toggleTheme} aria-label={app.theme === "dark" ? "Switch to day" : "Switch to night"} title={app.theme === "dark" ? "Day" : "Night"}>
               <Icon name={app.theme === "dark" ? "sun" : "moon"} />

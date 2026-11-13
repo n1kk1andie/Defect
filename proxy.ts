@@ -83,7 +83,7 @@ export async function proxy(req: NextRequest) {
   if (isDemo()) {
     const p = (req.cookies.get(PERSONA_COOKIE)?.value || "").toLowerCase();
     const email = DEMO_PERSONAS.includes(p) ? p : DEMO_PERSONAS[0];
-    return forward(req, { [H.tenant]: DEMO, [H.tenantName]: encodeURIComponent("Meridian Society"), [H.email]: email, [H.platformRole]: "demo" });
+    return forward(req, { [H.tenant]: DEMO, [H.tenantName]: encodeURIComponent("Meridian Financial Group"), [H.email]: email, [H.platformRole]: "demo" });
   }
 
   const token = req.cookies.get(PLATFORM_COOKIE)?.value;

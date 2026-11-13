@@ -55,6 +55,15 @@ export const yearOf = (iso: string) => iso.slice(0, 4);
 export const monthLabel = (iso: string) => `${MON3[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}`;
 export const monthShort = (iso: string) => `${MON3[Number(iso.slice(5, 7)) - 1]} '${iso.slice(2, 4)}`;
 
+/** The year screens open on: the year of the latest month with data (entered
+ *  or uploaded), else the last year in the grid, else this year. Never fixed. */
+export function openingYear(d: Pick<QualityData, "rows" | "periods">, now: Date = new Date()): string {
+  const li = lastActive(d);
+  if (li >= 0 && d.periods[li]) return yearOf(d.periods[li]);
+  const ys = years(d.periods);
+  return ys[ys.length - 1] || String(now.getFullYear());
+}
+
 export function years(periods: string[]): string[] {
   return Array.from(new Set(periods.map(yearOf)));
 }
