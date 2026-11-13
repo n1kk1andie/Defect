@@ -200,11 +200,11 @@ result    = fail if any critical question failed (the "critical override")
   - The draft lives on the device (`localStorage`) and photos wait in IndexedDB.
   - A draft carries a client-generated id, so a retry after a dropped connection never creates a duplicate.
   - The sync runs automatically when the device comes back online.
-- **Programmes (M3):**
-  - A programme says which template is inspected, at which sites, how often, who does it, and the due window (for example, "within the first 15 days of the month").
-  - Its calendar creates the due inspections.
-  - Missed and overdue visits raise alerts and appear on Pulse.
-  - The frequency can follow the risk band (§6.4).
+- **Programmes (M3, built; `lib/schedule.ts`, Schedule screen):**
+  - A programme says which checklist is inspected, at which sites (or all), how often (every N days, or **risk-based**), who does it, the due window in days and the start date.
+  - Visits are worked out from the programmes, not stored: each window is *done* when an inspection of that checklist is started at the site inside it, *in progress* while it is a draft, *due* while the window is open, and *overdue* once it has closed with nothing started.
+  - Assignees are rotated across the sites. An inspector sees **My schedule** on the phone (and an "On your schedule" card on Inspect, with a Start button); supervisors see all visits, a month calendar and an overdue alert.
+  - A risk-based programme takes its cadence from the site's band (§6).
 
 ## 5. Pillar 3: sampling (M3)
 
@@ -221,23 +221,38 @@ Every file, chart, transaction or record review can carry a **sampling plan** (`
 4. **Selection.** A seeded random selection: the seed is recorded with the plan and the population hash, so anyone can reproduce the same items. Export the selection as CSV or Excel.
 5. **Evaluation.**
    - Each sampled item's inspection result counts as a deviation or not.
-   - The **sample deviation rate** is projected to the population, with the **upper deviation limit** (Clopper–Pearson) at the plan's confidence.
+   - The **sample deviation rate** is projected to the population, with the **upper deviation limit** (Clopper–Pearson) at the plan's confidence. Below 5,000 items the finite-population (hypergeometric) limit is used, so the evaluation matches the basis the size was worked out on.
    - The conclusion is "the control is operating effectively" when the upper limit is at or below the TDR.
    - The method, seed, inputs and evidence are shown beside the result.
+
+**As built (M3).** `lib/sampling.ts` (pure), `lib/samplingPlans.ts`, the Sampling screens and `/api/sampling`.
+- Selection: the population is sorted by id; each stratum is shuffled with Fisher–Yates driven by mulberry32 seeded with FNV-1a(seed + "|" + stratum); the first *n* are taken. Proportional allocation uses the largest remainder. The plan page shows the seed and the method in words and has a **Re-run the selection here** button that repeats the draw in the browser and compares it.
+- Census items (value at or above the stated amount) are all tested; the statistical sample is sized and drawn from the remaining items, and the census is added on top.
+- **Start the review** creates a draft inspection of the plan's checklist with the selected items already listed in its sampled section. When that inspection is approved the plan is evaluated automatically from its deviations. A result can also be entered by hand.
+- Exports: the selection as CSV, or Excel with a Method sheet.
 
 ## 6. Pillar 4: the risk score (M3)
 
 Each site (or unit or process) has a **quality risk score** from 0 (low) to 100 (high), with three transparent parts and weights the company can edit:
 
-```
-risk = wI × Inherent + wC × ControlWeakness + wR × RecurrenceAndBacklog        (wI + wC + wR = 1; defaults 0.30 / 0.50 / 0.20)
+As built in M3 (`lib/risk.ts`, pure; `lib/riskScore.ts`), the score is a weighted average of driver risks, each 0–100:
 
-Inherent         Σ factor weight × normalised factor (0–100). Factors are configurable per organisation, with sector defaults
-                 (volume, staff turnover, size or complexity, prior incidents; for example bed acuity in healthcare).
-ControlWeakness  100 − decayed mean inspection score, plus deviation-rate and critical-failure terms. Each observation
-                 is weighted by e^(−age/τ), with half-life τ·ln2 = 6 months by default.
-Recurrence…      recurring issues, overdue actions (count and days overdue) and returned inspections.
 ```
+risk = Σ wᵢ × riskᵢ / Σ wᵢ      over the drivers that have data
+
+score      100 − decayed mean inspection score                       default weight 3
+critical   critical failures per inspection, decayed                  default weight 2
+deviation  deviation rate of sampled items and sampling plans         default weight 2
+overdue    overdue corrective actions                                 default weight 1.5
+repeat     findings that failed on consecutive inspections            default weight 1.5
+recency    time since the last visit                                  default weight 1
+factors    entered per site (0–100), configurable per organisation,   each with its own weight
+           with sector defaults (volume, staff turnover; bed acuity, caseload, student population…)
+
+Observations are weighted by ½^(age / half-life), half-life 6 months by default, over the last 12 months.
+```
+
+A driver with no data is left out rather than counted as zero, and the weights, factors, cut-offs and frequencies are edited by an admin under **Risk → Model**.
 
 - **Bands.**
   - The score maps to the six Pulsus bands: World class < 15 ≤ Strong < 25 ≤ Healthy < 40 ≤ Watch < 55 ≤ Attention < 70 ≤ Escalate.
@@ -248,8 +263,8 @@ Recurrence…      recurring issues, overdue actions (count and days overdue) an
   - 4 overdue actions (+9);
   - staff turnover in the top quartile (+7).
 - **Risk-based frequency.** A programme can set its cadence by band, for example monthly for Escalate or Attention, every two months for Watch, quarterly for Healthy, and half-yearly for Strong or World class.
-- **League table and watchlist.** Sites are ranked by risk score, with the trend (Δ against last quarter) and the top driver.
-- **To Pulsus Risk.** A site entering Escalate, a critical failure, or a recurring issue can be proposed to Risk under `docs/risk-contract.md`, with `record_type` `inspection` or `site_risk` (added to the contract in M3).
+- **League table and watchlist.** Sites are ranked by risk score, with the change over the last 30 days and the top driver. The watchlist lists every site at Watch or worse with a sentence saying why. The wording follows the organisation's site label (branch, ward, office, campus).
+- **To Pulsus Risk.** As built, `/api/pulse` carries an additive `inspections` block (`pulsus.quality.inspections/v1`, documented in `docs/platform-feed.md`): the last 90 days of inspections, sampling conclusions, the risk band of every site with its top driver, and the visit status. Risk can read these as KRIs; proposing individual records under `docs/risk-contract.md` is left for a later milestone.
 
 ## 7. Pillar 5: actions, analytics and reporting
 
@@ -269,7 +284,7 @@ Recurrence…      recurring issues, overdue actions (count and days overdue) an
   - league tables by risk;
   - heat-maps by site × template;
   - repeat-finding detection per question.
-- **Reports.** The executive and committee report (print to PDF), plus the Excel exports, now including inspections.
+- **Reports.** The executive report (print to PDF), the Excel exports including inspections, and from M3 a **committee report** generated as a real PDF and as Excel: headline figures, the risk league table, the watchlist with reasons, missed visits, sampling conclusions, the most-failed questions and corrective actions.
 
 ## 7a. The scorecard designer (M2)
 
@@ -295,20 +310,22 @@ The Operational Standard was the institution's own measure tree in code. It is n
 
 | `scorecard_versions` | Immutable published scorecard versions. `scorecards` gains a draft, a dirty flag and an origin |
 
+M3 adds `sampling_plans` (inputs, population and its hash, seed, selection, allocation, evaluation), `programmes` (checklist, sites, cadence or risk-based, window, assignees, start date) and `unit_factors` (the entered risk factors per site). Company settings gain the risk model.
+
 All of these tables are tenant-scoped with row-level security, like every other table. Company settings gain a sector, a grouping label (Region, Hospital, Agency, Faculty) and whether set-up is done.
 
 ## 9. Delivery
 
-- **M2 (this milestone):**
+- **M2 (delivered):**
   - pillar 1, complete;
   - pillar 2: capture, offline drafts, check-in, signatures and approval;
   - pillar 5: failed items become actions, the most-failed questions, scores by site and template, and the inspections export;
   - the scorecard designer;
   - the set-up wizard;
   - the demo.
-- **M3:**
+- **M3 (this milestone, delivered):**
   - pillar 3, sampling (§5);
   - pillar 2's programmes, schedules, calendar and missed-visit alerts;
   - pillar 4, the risk score, with risk-based frequency and the league table;
-  - inspection results sent to Pulsus Risk (`record_type: inspection | site_risk`);
+  - inspection results sent to Pulsus Risk through the `inspections` block of `/api/pulse`;
   - the committee report in PDF and Excel with inspection sections.

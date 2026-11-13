@@ -23,6 +23,7 @@ import { approveBlocker, can, inScope, isSupervisor, type Actor } from "@/lib/ro
 import { loadSettings } from "@/lib/company";
 import { loadVersion } from "@/lib/templates/store";
 import { feedScorecardFromInspections } from "@/lib/scorecards/store";
+import { evaluateFromInspection } from "@/lib/samplingPlans";
 import { allQuestions, answerScore, scoreInspection, type Answer, type Answers, type SampledItem, type Score, type TemplateDef } from "@/lib/templates/model";
 import { evaluate, type ScorecardDef } from "@/lib/scorecard";
 import { AUDIT_POINTS } from "@/lib/bands";
@@ -296,6 +297,7 @@ export async function decideInspection(a: Actor, id: string, decision: "approve"
       await tx.update(inspections).set({ status: "approved", supervisorEmail: a.email, note: n, score, updatedAt: now, approvedAt: now }).where(eq(inspections.id, id));
       if (def.binding?.kind === "scorecard") await writeScorecard(tx, a.tenant, def, answers, r.unitId, iso(r.period), id);
       await feedScorecardFromInspections(tx, a.tenant, r.templateId, r.unitId, iso(r.period));
+      await evaluateFromInspection(tx, a.tenant, r.id, score.items, score.deviations, a.email);
       await raiseActions(tx, a, r, def, score, requestId);
     }
     const status = decision === "return" ? "returned" : "approved";

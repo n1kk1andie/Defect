@@ -16,10 +16,11 @@ import { monthLabel } from "@/lib/metrics";
 import type { InspectionView } from "@/lib/inspections";
 import type { TemplateSummary } from "@/lib/templates/store";
 import type { BandKey } from "@/lib/bands";
+import type { Visit } from "@/lib/schedule";
 
 const scoreBand = (r: InspectionView): BandKey | "none" => (!r.score || r.score.pct === null ? "none" : r.score.result === "fail" ? (r.score.criticalFails ? "escalate" : "attention") : r.score.pct >= 95 ? "worldClass" : r.score.pct >= 90 ? "strong" : "healthy");
 
-export function Inspections({ inspections, templates }: { inspections: InspectionView[]; templates: TemplateSummary[] }) {
+export function Inspections({ inspections, templates, schedule = [] }: { inspections: InspectionView[]; templates: TemplateSummary[]; schedule?: Visit[] }) {
   const app = useApp();
   const router = useRouter();
   const { actor, settings } = app;
@@ -53,7 +54,18 @@ export function Inspections({ inspections, templates }: { inspections: Inspectio
         <Msg kind="info"><span className="row wrap"><Icon name="wifi" /><span className="grow">{unsynced.length} inspection{unsynced.length === 1 ? " is" : "s are"} saved only on this device so far. Open {unsynced.length === 1 ? "it" : "each"} with a connection to sync.</span>
           {unsynced.slice(0, 3).map((l) => <Link key={l.clientId} className="btn sm" href={`/inspect/new?template=${l.templateId}&unit=${l.unitId}&period=${l.period}&client=${l.clientId}`}>{l.templateName.slice(0, 28)} · {app.unitName(l.unitId)}</Link>)}</span></Msg>
       )}
-      <div className="grid g4" style={{ marginBottom: 16 }}>
+      {schedule.length > 0 && (
+        <Card className="mt" title="On your schedule" sub={`${schedule.filter((v) => v.status === "overdue").length} overdue · ${schedule.filter((v) => v.status === "due").length} due now`} actions={<Link className="btn sm" href="/schedule">My schedule</Link>}>
+          <ul className="list">{schedule.slice(0, 4).map((v) => (
+            <li key={v.key} style={{ flexWrap: "wrap" }}>
+              <span className="grow" style={{ minWidth: 160 }}><strong>{v.unit}</strong> · {v.template}<span className="sub" style={{ display: "block", fontSize: 12.5 }}>{v.status === "overdue" ? `Overdue since ${fmtDate(v.by)}` : `Due by ${fmtDate(v.by)}`}</span></span>
+              <span className={`status ${v.status === "overdue" ? "st-overdue" : "st-submitted"}`}>{v.status === "overdue" ? "Overdue" : "Due now"}</span>
+              <Link className="btn sm primary" href={`/inspect/new?template=${v.templateId}&unit=${v.unitId}`}><Icon name="play" />Start</Link>
+            </li>
+          ))}</ul>
+        </Card>
+      )}
+      <div className="grid g4" style={{ marginBottom: 16, marginTop: schedule.length ? 16 : 0 }}>
         <div className="stat"><div className="stat-v">{approved.length}</div><div className="stat-l">Approved inspections</div></div>
         <div className="stat"><div className="stat-v tone" data-band={stats.avg === null ? "none" : stats.avg >= 90 ? "strong" : stats.avg >= 80 ? "watch" : "attention"}>{stats.avg === null ? "—" : `${stats.avg.toFixed(1)}%`}</div><div className="stat-l">Average score</div></div>
         <div className="stat"><div className="stat-v">{stats.fails}</div><div className="stat-l">Failed inspections</div></div>

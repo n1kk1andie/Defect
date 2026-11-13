@@ -96,5 +96,20 @@ export const MIGRATIONS: { id: string; statements: string[] }[] = [
    "DROP TRIGGER IF EXISTS scorecard_versions_no_update ON scorecard_versions;",
    "CREATE TRIGGER scorecard_versions_no_update BEFORE UPDATE ON scorecard_versions FOR EACH ROW EXECUTE FUNCTION scorecard_versions_frozen();"
   ]
+ },
+ {
+  "id": "0006_sampling_programmes",
+  "statements": [
+   "CREATE TABLE \"programmes\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"company_id\" text NOT NULL,\n\t\"name\" text NOT NULL,\n\t\"template_id\" text NOT NULL,\n\t\"unit_ids\" text[] DEFAULT '{}'::text[] NOT NULL,\n\t\"every_days\" integer DEFAULT 30 NOT NULL,\n\t\"window_days\" integer DEFAULT 14 NOT NULL,\n\t\"assignees\" text[] DEFAULT '{}'::text[] NOT NULL,\n\t\"start_date\" date NOT NULL,\n\t\"active\" boolean DEFAULT true NOT NULL,\n\t\"created_by\" text NOT NULL,\n\t\"created_at\" timestamp with time zone DEFAULT now() NOT NULL,\n\t\"updated_at\" timestamp with time zone DEFAULT now() NOT NULL\n);",
+   "CREATE TABLE \"sampling_plans\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"company_id\" text NOT NULL,\n\t\"ref\" text NOT NULL,\n\t\"name\" text NOT NULL,\n\t\"template_id\" text,\n\t\"unit_id\" text,\n\t\"period\" date,\n\t\"method\" text DEFAULT 'statistical' NOT NULL,\n\t\"confidence\" double precision,\n\t\"tdr\" double precision,\n\t\"edr\" double precision,\n\t\"population_size\" integer NOT NULL,\n\t\"population\" jsonb DEFAULT '[]'::jsonb NOT NULL,\n\t\"population_hash\" text NOT NULL,\n\t\"stratify\" boolean DEFAULT false NOT NULL,\n\t\"census_above\" double precision,\n\t\"sample_size\" integer NOT NULL,\n\t\"seed\" text NOT NULL,\n\t\"selection\" jsonb DEFAULT '[]'::jsonb NOT NULL,\n\t\"allocation\" jsonb DEFAULT '[]'::jsonb NOT NULL,\n\t\"status\" text DEFAULT 'selected' NOT NULL,\n\t\"inspection_id\" text,\n\t\"evaluation\" jsonb,\n\t\"created_by\" text NOT NULL,\n\t\"created_at\" timestamp with time zone DEFAULT now() NOT NULL,\n\t\"updated_at\" timestamp with time zone DEFAULT now() NOT NULL\n);",
+   "CREATE TABLE \"unit_factors\" (\n\t\"company_id\" text NOT NULL,\n\t\"unit_id\" text NOT NULL,\n\t\"data\" jsonb DEFAULT '{}'::jsonb NOT NULL,\n\t\"updated_at\" timestamp with time zone DEFAULT now() NOT NULL,\n\t\"updated_by\" text,\n\tCONSTRAINT \"unit_factors_company_id_unit_id_pk\" PRIMARY KEY(\"company_id\",\"unit_id\")\n);",
+   "CREATE UNIQUE INDEX \"sampling_plans_ref\" ON \"sampling_plans\" USING btree (\"company_id\",\"ref\");"
+  ]
+ },
+ {
+  "id": "0007_sampling_programmes_tenancy",
+  "statements": [
+   "-- Tenant isolation for sampling plans, programmes and site risk factors (as 0001_tenancy).\nDO $$\nDECLARE t text;\nBEGIN\n  FOREACH t IN ARRAY ARRAY['sampling_plans','programmes','unit_factors']\n  LOOP\n    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);\n    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);\n    EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', t);\n    EXECUTE format('CREATE POLICY tenant_isolation ON %I USING (company_id = current_setting(''app.company_id'', true)) WITH CHECK (company_id = current_setting(''app.company_id'', true))', t);\n    BEGIN\n      EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO quality_app', t);\n    EXCEPTION WHEN others THEN NULL;\n    END;\n  END LOOP;\nEND $$;"
+  ]
  }
 ];

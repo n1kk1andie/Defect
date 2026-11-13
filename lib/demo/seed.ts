@@ -8,7 +8,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { withTenant, rowsOf, type Tx } from "@/lib/db/client";
-import { inspectionEvents, inspections, scorecardVersions, templateVersions, templates, actionEvents, actions, members, monthlyStats, reviewEvents, reviewItems, reviews, scorecardEntries, scorecards, units, areas, natures, checks, companySettings, counters, evidence, imports, riskOutbox, companies } from "@/lib/db/schema";
+import { samplingPlans, programmes, unitFactors, inspectionEvents, inspections, scorecardVersions, templateVersions, templates, actionEvents, actions, members, monthlyStats, reviewEvents, reviewItems, reviews, scorecardEntries, scorecards, units, areas, natures, checks, companySettings, counters, evidence, imports, riskOutbox, companies } from "@/lib/db/schema";
 import { DEMO, ensureAreas, ensureCompany, ensureUnits, setAreaChecklist, writeSettings } from "@/lib/company";
 import { record } from "@/lib/audit";
 import { cleanSettings, type Severity } from "@/lib/settings";
@@ -16,6 +16,7 @@ import { evaluate, OPERATIONAL_STANDARD } from "@/lib/scorecard";
 import { AUDIT_POINTS } from "@/lib/bands";
 import { DEMO_COMPANY, DEMO_DOMAIN, PERSONAS } from "@/lib/demo/personas";
 import { seedInspections } from "@/lib/demo/inspections";
+import { seedM3 } from "@/lib/demo/m3";
 
 const UNITS = ["Harbour", "Riverside", "Parkway", "Summit", "Crossroads", "Gateway"];
 const REGIONS = [["Harbour", "South"], ["Riverside", "South"], ["Gateway", "South"], ["Parkway", "North"], ["Summit", "North"], ["Crossroads", "North"]] as const;
@@ -57,7 +58,7 @@ async function chunked<T>(rows: T[], n: number, fn: (c: T[]) => Promise<unknown>
 
 /** Wipe the demo tenant (demo only). */
 export async function clearDemo(tx: Tx): Promise<void> {
-  for (const t of [inspectionEvents, inspections, templateVersions, templates, scorecardVersions, actionEvents, actions, reviewEvents, reviewItems, reviews, scorecardEntries, scorecards, monthlyStats, checks, natures, areas, units, members, companySettings, counters, evidence, imports, riskOutbox, companies]) {
+  for (const t of [samplingPlans, programmes, unitFactors, inspectionEvents, inspections, templateVersions, templates, scorecardVersions, actionEvents, actions, reviewEvents, reviewItems, reviews, scorecardEntries, scorecards, monthlyStats, checks, natures, areas, units, members, companySettings, counters, evidence, imports, riskOutbox, companies]) {
     await tx.delete(t).where(sql`company_id = ${DEMO}`);
   }
   // The change history is append-only (its trigger refuses deletes), so a reset is recorded in it rather than erasing it.
@@ -70,8 +71,9 @@ export async function clearDemo(tx: Tx): Promise<void> {
  * never leaves the demo without the newest screens' sample data.
  *   1  Milestone 1: history, reviews, scorecard, actions
  *   2  Milestone 2: templates, inspections, inspection actions, scorecard in design
+ *   3  Milestone 3: programmes, sampling plans, risk factors per branch
  */
-export const DEMO_SEED_VERSION = 2;
+export const DEMO_SEED_VERSION = 3;
 
 async function seedVersion(tx: Tx): Promise<number> {
   return Number(rowsOf<{ v: number }>(await tx.execute(sql`select value as v from counters where name = 'demo_seed'`))[0]?.v ?? 1);
@@ -101,7 +103,14 @@ export async function upgradeDemo(tx: Tx, now = new Date()): Promise<void> {
     for (const [u, region] of REGIONS) if (unitIds.has(u)) await tx.update(units).set({ region }).where(sql`id = ${unitIds.get(u)!} and region is null`);
     const already = Number(rowsOf<{ n: number }>(await tx.execute(sql`select count(*)::int as n from inspections where client_id like 'demo-%'`))[0]?.n ?? 0);
     const ins = already ? { templates: 0, inspections: 0 } : await seedInspections(tx, now, unitIds);
-    await record(tx, DEMO, { actor: "demo", action: "demo.upgrade", entityType: "company", entityId: DEMO, summary: `Demo sample data brought up to version ${DEMO_SEED_VERSION}: ${ins.templates} templates, ${ins.inspections} inspections` });
+    await record(tx, DEMO, { actor: "demo", action: "demo.upgrade", entityType: "company", entityId: DEMO, summary: `Demo sample data brought up to version 2: ${ins.templates} templates, ${ins.inspections} inspections` });
+  }
+  if (from < 3) {
+    const rows = await tx.select({ id: units.id, name: units.name }).from(units).where(sql`company_id = ${DEMO}`);
+    const unitIds = new Map(rows.filter((u) => UNITS.includes(u.name)).map((u) => [u.name, u.id]));
+    const already = Number(rowsOf<{ n: number }>(await tx.execute(sql`select count(*)::int as n from programmes`))[0]?.n ?? 0);
+    const m3 = already ? { programmes: 0, plans: 0 } : await seedM3(tx, now, unitIds);
+    await record(tx, DEMO, { actor: "demo", action: "demo.upgrade", entityType: "company", entityId: DEMO, summary: `Demo sample data brought up to version 3: ${m3.programmes} programmes, ${m3.plans} sampling plans, risk factors` });
   }
   await setSeedVersion(tx, DEMO_SEED_VERSION);
 }
@@ -266,6 +275,7 @@ export async function seedDemo(tx: Tx, now = new Date()): Promise<void> {
   }
   await tx.insert(counters).values({ companyId: DEMO, name: "action", value: 42 });
   const ins = await seedInspections(tx, now, unitIds);
+  await seedM3(tx, now, unitIds);
   await setSeedVersion(tx, DEMO_SEED_VERSION);
   await record(tx, DEMO, { actor: "demo", action: "demo.seed", entityType: "company", entityId: DEMO, summary: `${DEMO_COMPANY} sample data: ${stats.length} history rows, ${reviewRows.length} reviews, ${LIST.length} actions, ${ins.templates} templates, ${ins.inspections} inspections` });
 }

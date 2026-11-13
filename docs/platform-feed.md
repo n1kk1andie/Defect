@@ -36,3 +36,26 @@ Read with the member's company session (the company brief) or, for the instituti
 ```
 
 Values are fractions (rates) or 0–100 (scores); `band` is one of the six suite bands on the company's own Quality cut-offs.
+
+### Added in Milestone 3: `inspections` (additive)
+
+`GET /api/pulse` now also returns an `inspections` block. The fields above are unchanged. Pulsus Risk can read it as key risk indicators: average inspection score, critical failures, controls that sampling found not effective, overdue visits, and each site's risk score and band.
+
+```json
+"inspections": {
+  "schema": "pulsus.quality.inspections/v1",
+  "unitLabel": "Branch",
+  "last90Days": { "approved": 58, "averageScore": 94.1, "failed": 9, "criticalFailures": 11 },
+  "sampling":   { "evaluated": 2, "notEffective": 1 },
+  "risk": {
+    "bands": { "escalate": 1, "watch": 1, "healthy": 2, "strong": 2 },
+    "sites": [{ "name": "Summit", "score": 71.4, "band": "escalate",
+                "topDriver": { "label": "Inspection scores", "detail": "86.8% average over 21 inspections", "contribution": 19.6 } }]
+  },
+  "visits": { "overdue": 3, "dueNow": 5, "done": 41 }
+}
+```
+
+- Each site's `score` runs from 0 (low risk) to 100. `band` is the site's band on the company's own risk cut-offs (Settings → Risk model).
+- `sites` is sorted with the highest risk first.
+- The method is in docs/quality-model.md §6.
