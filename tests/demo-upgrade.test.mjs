@@ -66,9 +66,25 @@ test("a Milestone 2 demo gets the Milestone 3 data: programmes, sampling plans, 
   assert.equal(await count("_demo", "select count(*)::int n from sampling_plans where status = 'evaluated'"), 2);
   assert.equal(await count("_demo", "select count(*)::int n from unit_factors"), 6);
   assert.equal(await count("_demo", "select count(*)::int n from inspections"), insp + 1, "the Summit sample's review");
-  assert.equal(await count("_demo", "select value n from counters where name = 'demo_seed'"), 3);
+  assert.equal(await count("_demo", "select value n from counters where name = 'demo_seed'"), DEMO_SEED_VERSION);
   const { riskBoard } = await import("@/lib/riskScore");
   const b = await riskBoard({ tenant: "_demo", tenantName: "Meridian", kind: "demo", email: "taylor.reid@demo.pulsus.tech", name: "Taylor", roles: ["supervisor"], unitIds: [], platformRole: "viewer", operator: false, plan: null });
   assert.equal(b.sites[0].name, "Summit", "Summit stays the weakest");
+  assert.ok((await verify("_demo")).ok);
+});
+
+test("a version-3 demo (Meridian Society, member wording) is renamed in place to Meridian Financial Group, customers", async () => {
+  await withTenant("_demo", async (tx) => {
+    await tx.execute(sql`update companies set name = 'Meridian Society' where company_id = '_demo'`);
+    await tx.execute(sql`update checks set label = 'Request signed by the member' where code = 'request-signed'`);
+    await tx.execute(sql`update counters set value = 3 where name = 'demo_seed'`);
+  });
+  await ensureDemoSeeded();
+  assert.equal(rowsOf(await withTenant("_demo", (tx) => tx.execute(sql`select name from companies where company_id = '_demo'`)))[0].name, "Meridian Financial Group");
+  assert.equal(await count("_demo", "select count(*)::int n from checks where label like '%member%'"), 0, "no member wording left on the checklist");
+  assert.ok(await count("_demo", "select count(*)::int n from checks where label = 'Request signed by the customer'") >= 1);
+  assert.equal(await count("_demo", "select value n from counters where name = 'demo_seed'"), DEMO_SEED_VERSION);
+  await ensureDemoSeeded();
+  assert.equal(await count("_demo", "select value n from counters where name = 'demo_seed'"), DEMO_SEED_VERSION, "idempotent");
   assert.ok((await verify("_demo")).ok);
 });
