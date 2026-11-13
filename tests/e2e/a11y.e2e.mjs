@@ -32,7 +32,8 @@ const SCREENS = [
   { name: "review", path: "/review", persona: ADMIN },
   { name: "review: new", path: "/review", persona: ADMIN, go: (p) => p.getByRole("button", { name: "New review" }).click() },
   { name: "actions", path: "/actions", persona: ADMIN },
-  { name: "actions: detail", path: "/actions", persona: ADMIN, go: (p) => p.locator("tbody tr").first().click() },
+  // Opening a row scrolls the list under the sticky top bar; scroll back so the bar's buttons don't sit on top of the filter (a scroll artefact, not a target-size problem).
+  { name: "actions: detail", path: "/actions", persona: ADMIN, go: async (p) => { await p.locator("tbody tr").first().click(); await p.evaluate(() => window.scrollTo(0, 0)); } },
   { name: "report", path: "/report" },
   { name: "settings", path: "/settings", persona: ADMIN },
   { name: "settings: bands", path: "/settings#settings-bands", persona: ADMIN },
