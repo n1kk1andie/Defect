@@ -7,12 +7,15 @@ Quality management and inspections for multi-site organisations: banks and credi
 - **History:** branch × month heat-maps of the defect, resolution and recurring rates, and branch × process area.
 - **Insights:** the branch watchlist, the resolution gap, recurring-issue detection (preventive actions, send to Pulsus Risk), systemic recurring, scorecard vs defects.
 - **Inspect:** inspections, field visits and file reviews on any published template, on a phone and offline: check-in, photos per question, signatures, live score; a supervisor who didn't carry it out approves it, and failed items become corrective actions.
+- **Schedule:** programmes of recurring visits per checklist and site (fixed cadence or set by the risk band), assigned to inspectors; my schedule on the phone, all visits, a month calendar and overdue alerts.
+- **Sampling:** attribute sampling plans: the sample size from population, confidence and tolerable/expected deviation, stratification and census items, a seeded selection anyone can re-run, and the projection with the upper deviation limit, evaluated automatically from the review inspection.
+- **Risk:** a risk score per site from configurable, weighted drivers (inspection score, critical failures, deviation rate, overdue actions, repeat findings, time since the last visit, entered factors), in the six bands, with the reasons, risk-based visit frequency, a league table and a watchlist. Sent to Pulsus Risk in `/api/pulse`.
 - **Templates:** the checklist builder (sections, eleven question types, weights, critical items, logic, guidance, policy references, auto-actions, a live phone preview, drag and drop), locked published versions, JSON and Excel import/export, and a library of 29 starter templates across five sectors. The institution's Branch Defects and Operational Standard are templates too.
 - **Scorecards:** the scorecard designer (entered, computed and checklist-fed measures, weights, target, rounding, dashboard columns, sample-data preview, locked versions) and ready-made scorecards by sector.
 - **Set up:** a wizard from sign-up to the first inspection: sector, site labels, locations (typed or pasted), starter checklists and a scorecard.
 - **Review:** inspectors key reviews against their checklist on a phone (saved on the device as they type); a different supervisor approves or returns them.
 - **Actions:** corrective and preventive actions with owner, due date, root cause and evidence, verified by someone who didn't raise, own or submit them.
-- **Report:** the executive report, printable to PDF, with PMAS to date.
+- **Report:** the executive report, printable to PDF, with PMAS to date; the committee report as a PDF and Excel workbook.
 - **Settings:** the suite's grouped settings (plan and trial, company set-up, colour bands, people and roles, data and uploads, how it's measured, integrations, change history, approvals, appearance, about, help).
 
 ## Architecture

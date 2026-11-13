@@ -18,11 +18,11 @@ test("an M1-seeded demo is upgraded with the M2 data, idempotently", async () =>
   // Seed, then strip everything Milestone 2 added: what a demo deployed before #38 holds.
   await withTenant("_demo", async (tx) => {
     await seedDemo(tx);
-    for (const t of ["inspection_events", "inspections", "template_versions", "templates", "scorecard_versions"]) await tx.execute(sql.raw(`delete from ${t}`));
+    for (const t of ["sampling_plans", "programmes", "unit_factors", "inspection_events", "inspections", "template_versions", "templates", "scorecard_versions"]) await tx.execute(sql.raw(`delete from ${t}`));
     await tx.execute(sql`delete from actions where source_type = 'inspection'`);
     await tx.execute(sql`delete from action_events where action_id not in (select id from actions)`);
     await tx.execute(sql`delete from scorecards where active = false`);
-    await tx.execute(sql`delete from counters where name in ('demo_seed', 'inspection')`);
+    await tx.execute(sql`delete from counters where name in ('demo_seed', 'inspection', 'sampling')`);
     await tx.execute(sql`update counters set value = 50 where name = 'action'`); // visitors raised a few actions since
     await tx.execute(sql`update company_settings set data = data - 'sector' - 'setupDone' - 'groupLabel'`);
     await tx.execute(sql`update units set region = null`);
@@ -52,4 +52,23 @@ test("an M1-seeded demo is upgraded with the M2 data, idempotently", async () =>
   assert.equal(await count("acme", "select count(*)::int n from templates"), 0);
   assert.ok((await verify("_demo")).ok);
   void other;
+});
+
+test("a Milestone 2 demo gets the Milestone 3 data: programmes, sampling plans, risk factors", async () => {
+  await withTenant("_demo", async (tx) => {
+    for (const t of ["sampling_plans", "programmes", "unit_factors"]) await tx.execute(sql.raw(`delete from ${t}`));
+    await tx.execute(sql`update counters set value = 2 where name = 'demo_seed'`);
+  });
+  const insp = await count("_demo", "select count(*)::int n from inspections");
+  await ensureDemoSeeded();
+  assert.equal(await count("_demo", "select count(*)::int n from programmes"), 4);
+  assert.equal(await count("_demo", "select count(*)::int n from sampling_plans"), 3);
+  assert.equal(await count("_demo", "select count(*)::int n from sampling_plans where status = 'evaluated'"), 2);
+  assert.equal(await count("_demo", "select count(*)::int n from unit_factors"), 6);
+  assert.equal(await count("_demo", "select count(*)::int n from inspections"), insp + 1, "the Summit sample's review");
+  assert.equal(await count("_demo", "select value n from counters where name = 'demo_seed'"), 3);
+  const { riskBoard } = await import("@/lib/riskScore");
+  const b = await riskBoard({ tenant: "_demo", tenantName: "Meridian", kind: "demo", email: "taylor.reid@demo.pulsus.tech", name: "Taylor", roles: ["supervisor"], unitIds: [], platformRole: "viewer", operator: false, plan: null });
+  assert.equal(b.sites[0].name, "Summit", "Summit stays the weakest");
+  assert.ok((await verify("_demo")).ok);
 });
