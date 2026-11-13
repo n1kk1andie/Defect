@@ -7,7 +7,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { api, useApp } from "@/components/app-context";
 import { Icon, type IconName } from "@/components/icons";
-import { ShieldMark } from "@/components/Brand";
+import { FooterLines, ShieldMark } from "@/components/Brand";
 import { trialDaysLeft } from "@/lib/trial";
 import { monthLabel, lastActive } from "@/lib/metrics";
 import { ROLE_INFO, isAdmin } from "@/lib/roles";
@@ -195,6 +195,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <AvatarMenu />
           </div>
         </header>
+        {app.demo && <p className="demonote mobile-only">Demo · fictional sample data</p>}
         <TrialBanner />
         {isAdmin(app.actor) && app.actor.kind === "company" && !app.settings.setupDone && !path.startsWith("/setup") && (
           <div className="trialbanner" role="region" aria-label="Set up"><div className="trialbanner-in" style={{ background: "var(--info-tint)", color: "var(--info-ink)", borderColor: "transparent" }}>
@@ -204,8 +205,7 @@ export function Shell({ children }: { children: ReactNode }) {
         )}
         <main id="main" className="main" tabIndex={-1}>{children}</main>
         <footer className="foot">
-          <span>Pulsus Quality · {app.actor.tenantName}{app.demo ? " (fictional sample data)" : ""}</span>
-          <span><span className="tagline">Live. Signal. Clarity.</span> · © 2026 Tumblehill Holdings LLC</span>
+          <FooterLines />
         </footer>
       </div>
       <nav className="tabbar" aria-label="Main">
