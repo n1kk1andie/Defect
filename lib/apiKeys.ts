@@ -9,7 +9,8 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { withTenant } from "@/lib/db/client";
-import { apiKeys } from "@/lib/db/schema";
+import { apiKeys, companies } from "@/lib/db/schema";
+import { cachedLicenceLapsed, licenceLapsed, type PlanState } from "@/lib/planStatus";
 import { record } from "@/lib/audit";
 import { can, type Actor, type Role } from "@/lib/roles";
 
@@ -52,6 +53,7 @@ const cleanScopes = (v: unknown): Scope[] => Array.from(new Set(Array.isArray(v)
 export async function createKey(a: Actor, input: { name?: unknown; scopes?: unknown; expiresInDays?: unknown }, requestId?: string): Promise<Result<{ id: string; key: string }>> {
   if (!can.manage(a)) return { ok: false, error: "Only a Quality admin creates API keys.", status: 403 };
   if (demoMode()) return { ok: false, error: "The demo doesn't issue API keys.", status: 403 };
+  if (licenceLapsed(a.plan) || (await storedLicence(a.tenant))) return { ok: false, error: "Your company's plan isn't active, so new API keys can't be issued. Choose a plan on Pulsus first.", status: 402 };
   const name = String(input.name || "").trim().slice(0, 80);
   if (!name) return { ok: false, error: "Name the key after what will use it.", status: 400 };
   const scopes = cleanScopes(input.scopes);
@@ -88,7 +90,14 @@ export async function changeKey(a: Actor, id: string, op: "revoke" | "rotate", r
   });
 }
 
-export interface KeyActor { actor: Actor; keyId: string; scopes: Scope[] }
+/** Why the company's cached plan stops it using Quality, or null (lib/planStatus.ts). */
+export async function storedLicence(tenant: string, now = Date.now()) {
+  const c = await withTenant(tenant, async (tx) => (await tx.select({ plan: companies.plan }).from(companies).where(eq(companies.companyId, tenant)).limit(1))[0]);
+  return cachedLicenceLapsed((c?.plan as PlanState | null) ?? null, now);
+}
+
+/** A key's actor; `licence` is set when the company's plan has lapsed, and the API then refuses it. */
+export interface KeyActor { actor: Actor; keyId: string; scopes: Scope[]; licence: "suspended" | "ended" | "trial_ended" | null }
 
 /** Check a bearer key and build the actor it acts as. Roles follow its scopes; it is never a person and never verifies or approves. */
 export async function authenticateKey(header: string | null): Promise<KeyActor | null> {
@@ -104,9 +113,10 @@ export async function authenticateKey(header: string | null): Promise<KeyActor |
   });
   if (!row) return null;
   const scopes = row.scopes as Scope[];
+  const licence = await storedLicence(tenant);
   const roles: Role[] = scopes.includes("actions:write") ? ["supervisor"] : ["viewer"];
   return {
-    keyId: row.id, scopes,
+    keyId: row.id, scopes, licence,
     actor: { tenant, tenantName: tenant, kind: tenant === "_own" ? "institution" : tenant === "_demo" ? "demo" : "company", email: `api-key:${row.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)}`, name: `API key "${row.name}"`, roles, unitIds: [], platformRole: "api", operator: false, plan: null },
   };
 }

@@ -9,6 +9,7 @@ Other systems (a BI tool, an HR or complaints system, a facilities desk) read Qu
 - **Rotate** issues a new key with the same name and scopes; the old key keeps working for 24 hours so the other system can switch over. **Revoke** stops a key at once.
 - Every create, rotate and revoke is in the hash-chained change history. Actions a key raises show it as `api-key:<name>`; a key never approves, verifies or closes anything.
 - The demo shows sample keys and issues none.
+- Keys follow the company's plan. The plan comes from the Pulsus Platform session; the API has no session, so it reads the copy cached on the company row each time a member's session is seen (the licence page included). While the plan is suspended or ended, or a trial has passed its end, every call answers 402 `licence_required` and no new key can be issued; once the plan is active again, the same keys work (`lib/planStatus.ts`, `lib/planCache.ts`).
 
 Send the key on every request:
 
@@ -59,6 +60,7 @@ Lists take `?limit=` (1–200, default 50) and `?after=<cursor>`, and answer `{ 
 | --- | --- |
 | 400 | `invalid_json`, `invalid_request` |
 | 401 | `unauthorized` (no key, a wrong key, or a revoked or expired one) |
+| 402 | `licence_required`: the company's plan isn't active (suspended, ended, or a trial past its end). The same rule as the app's licence wall; keys work again, unchanged, once the plan is active |
 | 403 | `insufficient_scope` |
 | 404 | `not_found` |
 | 429 | `rate_limited`: 120 requests a minute per key; `Retry-After: 60` |

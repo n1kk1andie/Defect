@@ -1,12 +1,13 @@
 // The REST API's front page: what this key can reach. Documented in docs/api.md.
 import { authenticateKey } from "@/lib/apiKeys";
-import { API_VERSION, apiError, apiJson } from "@/lib/restApi";
+import { API_VERSION, apiError, apiJson, licenceRefusal } from "@/lib/restApi";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   const k = await authenticateKey(req.headers.get("authorization"));
   if (!k) return apiError(401, "unauthorized", "Send a valid API key as Authorization: Bearer pq_…");
+  if (k.licence) return licenceRefusal();
   return apiJson({
     api: "Pulsus Quality", version: API_VERSION, key: { name: k.actor.name, scopes: k.scopes },
     endpoints: {

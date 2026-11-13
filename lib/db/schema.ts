@@ -20,6 +20,9 @@ export const companies = pgTable("companies", {
   name: text("name").notNull(),
   kind: text("kind").notNull(), // institution | company | demo
   createdAt: createdAt(),
+  /** The plan the Pulsus Platform session last carried ({ standing, trialEndsAt }), cached for the REST API, which has no session. */
+  plan: jsonb("plan"),
+  planSeenAt: timestamp("plan_seen_at", { withTimezone: true }),
 });
 
 /** One row per company: labels, how instances are counted, colour bands, scorecard switch. */

@@ -22,6 +22,7 @@
 // 8. A Pulsus staff session opens the institution's tenant; lib/session.ts
 //    applies its allow-list.
 // Otherwise: 401 for an API, /login for a page.
+import { licenceLapsed } from "./lib/planStatus";
 import { NextRequest, NextResponse } from "next/server";
 import { licenseWallActive, licenseWallResponse } from "./lib/licenseWall";
 import { claimedIssuer, COMPANY_JWT_ISSUER, platformSession, PLATFORM_COOKIE, type PlatformSession } from "./lib/platform-jwt";
@@ -90,10 +91,10 @@ export async function proxy(req: NextRequest) {
     const s = await platformSession(token);
     if (s?.company) {
       if (!s.company.modules.includes(MODULE_KEY)) return refuse(pathname, 403, "Pulsus Quality isn't switched on for your company", "An owner or admin can add it on the company page in Pulsus.");
-      const standing = s.company.plan?.standing;
-      if (standing === "suspended" || standing === "ended") {
+      const lapsed = licenceLapsed(s.company.plan);
+      if (lapsed) {
         if (api) return NextResponse.json({ error: "licence_required" }, { status: 402 });
-        if (pathname !== "/licence") { const u = req.nextUrl.clone(); u.pathname = "/licence"; u.search = `?reason=${standing}`; return NextResponse.redirect(u); }
+        if (pathname !== "/licence") { const u = req.nextUrl.clone(); u.pathname = "/licence"; u.search = `?reason=${lapsed}`; return NextResponse.redirect(u); }
       }
       return forward(req, companyIdentity(s));
     }

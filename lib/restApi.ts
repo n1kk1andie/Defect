@@ -9,6 +9,7 @@ import { withTenant } from "@/lib/db/client";
 import { actions, entities, inspections, siteGroups, templates, units } from "@/lib/db/schema";
 import { authenticateKey, rateLimited, type KeyActor, type Scope } from "@/lib/apiKeys";
 import type { StoredScore } from "@/lib/inspections";
+import { LICENCE_MESSAGE } from "@/lib/planStatus";
 
 export const API_VERSION = "2026-11-01";
 
@@ -17,10 +18,14 @@ export function apiError(status: number, code: string, message: string, headers:
 }
 export const apiJson = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { "Cache-Control": "no-store", "X-Pulsus-Api-Version": API_VERSION } });
 
-/** Authenticate, check the scope and the rate limit, then run. */
+/** 402 with code "licence_required": the company's plan has lapsed (the same rule as the licence wall). */
+export const licenceRefusal = () => apiError(402, "licence_required", LICENCE_MESSAGE);
+
+/** Authenticate, check the licence, the scope and the rate limit, then run. */
 export async function withKey(req: Request, scope: Scope, fn: (k: KeyActor) => Promise<Response>): Promise<Response> {
   const k = await authenticateKey(req.headers.get("authorization"));
   if (!k) return apiError(401, "unauthorized", "Send a valid API key as Authorization: Bearer pq_…", { "WWW-Authenticate": 'Bearer realm="pulsus-quality"' });
+  if (k.licence) return licenceRefusal();
   if (!k.scopes.includes(scope)) return apiError(403, "insufficient_scope", `This key doesn't have the ${scope} scope.`);
   if (rateLimited(k.keyId)) return apiError(429, "rate_limited", "Too many requests: 120 a minute per key.", { "Retry-After": "60" });
   try { return await fn(k); } catch (e) { console.error("api v1", e); return apiError(500, "server_error", "Something went wrong on our side."); }

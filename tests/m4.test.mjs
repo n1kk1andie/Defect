@@ -364,3 +364,49 @@ test("the daily email: grouped, escaped, sent once a day through Resend, only wh
   }, { RESEND_API_KEY: "re_test" });
   assert.ok((await verify("m4a")).ok);
 });
+
+// ── the licence: the API follows the company's plan ─────────────────────────
+
+test("the REST API follows the company's plan: paid works, lapsed is refused with licence_required, reinstated works again with the same key", async () => {
+  const { resolveActor } = await import("@/lib/session");
+  const { cachePlan } = await import("@/lib/planCache");
+  const { licenceLapsed, cachedLicenceLapsed } = await import("@/lib/planStatus");
+  const { GET: root } = await import("@/app/api/v1/route");
+  const { GET: sitesGet } = await import("@/app/api/v1/sites/route");
+  await setupCompany("lic");
+  const visit = (standing, trialEndsAt = null) => resolveActor({ tenant: "lic", tenantName: "Lic", kind: "company", email: "owner@lic.com", name: "Owner", platformRole: "owner", operator: false, plan: { standing, trialEndsAt }, requestId: "" });
+  const owner = await visit("active");
+  assert.deepEqual(owner.roles, ["admin"]);
+  const made = await live(() => keys.createKey(owner, { name: "BI", scopes: ["sites:read"] }));
+  assert.ok(made.ok, made.error);
+  const key = made.value.key;
+  const call = async (h = sitesGet) => { const r = await h(req("/api/v1/sites", key)); return { status: r.status, body: await r.json() }; };
+
+  assert.equal((await call()).status, 200, "paid: data");
+
+  await visit("suspended");
+  const refused = await call();
+  assert.equal(refused.status, 402); assert.equal(refused.body.error.code, "licence_required");
+  assert.ok(!refused.body.sites, "no data");
+  assert.equal((await call(root)).body.error.code, "licence_required", "the API's front page too");
+  const lapsedOwner = await visit("ended");
+  const noKey = await live(() => keys.createKey(lapsedOwner, { name: "Another", scopes: ["sites:read"] }));
+  assert.equal(noKey.ok, false); assert.equal(noKey.status, 402, "no new keys while lapsed");
+
+  const reinstated = await visit("active");
+  assert.equal((await call()).status, 200, "the same key works again once paid, with no new key");
+  assert.ok((await live(() => keys.createKey(reinstated, { name: "Another", scopes: ["sites:read"] }))).ok);
+
+  // A trial: works while it runs; a cached trial whose end has passed counts as ended (the platform will have moved it).
+  await visit("trial", new Date(Date.now() + 5 * 864e5).toISOString());
+  assert.equal((await call()).status, 200);
+  await cachePlan("lic", { standing: "trial", trialEndsAt: new Date(Date.now() - 864e5).toISOString() });
+  assert.equal((await call()).body.error.code, "licence_required");
+
+  // The rule itself: the same as the licence wall's.
+  assert.equal(licenceLapsed({ standing: "past_due", trialEndsAt: null }), null);
+  assert.equal(licenceLapsed({ standing: "ended", trialEndsAt: null }), "ended");
+  assert.equal(licenceLapsed(null), null, "the institution and the demo have no plan");
+  assert.equal(cachedLicenceLapsed({ standing: "active", trialEndsAt: "2020-01-01" }), null);
+  assert.equal((await keys.authenticateKey(`Bearer ${keyA}`))?.licence ?? null, null, "another company's standing doesn't touch m4a's keys");
+});

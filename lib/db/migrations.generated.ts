@@ -141,5 +141,12 @@ export const MIGRATIONS: { id: string; statements: string[] }[] = [
    "-- The daily alert email (lib/notify.ts, /api/cron/notify) needs the list of tenant ids, and\n-- nothing else, across companies: a read-only policy on the companies table\n-- for the reserved setting \"__registry__\", which withTenant() can never set.\nDROP POLICY IF EXISTS tenant_registry ON companies;",
    "CREATE POLICY tenant_registry ON companies FOR SELECT USING (current_setting('app.company_id', true) = '__registry__');"
   ]
+ },
+ {
+  "id": "0010_company_plan",
+  "statements": [
+   "ALTER TABLE \"companies\" ADD COLUMN \"plan\" jsonb;",
+   "ALTER TABLE \"companies\" ADD COLUMN \"plan_seen_at\" timestamp with time zone;"
+  ]
  }
 ];
