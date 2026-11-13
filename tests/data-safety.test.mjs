@@ -10,6 +10,7 @@ const { systemTx } = await import("@/lib/db/system");
 const { sql } = await import("drizzle-orm");
 
 const ROLE = "quality_app";
+const LIVE_PICKERS = async () => [["lib/storage.ts", (await import("@/lib/storage")).vercelBlobToken]];
 const COMPANY_IDS = ["acme", "globex"];
 const SYSTEM_USE = /\bsystemTx\b|db\/system/;
 const SYSTEM_ALLOWED = ["lib/backup.ts"];
@@ -201,5 +202,46 @@ test("the system path is reachable only from cron routes that check CRON_SECRET"
   for (const f of backupUsers) assert.match(f, /^app\/api\/cron\//, `${f} imports the backup module`);
   for (const f of [...users, ...backupUsers].filter((f) => f.startsWith("app/"))) {
     assert.match(readFileSync(path.join(root, f), "utf8"), /CRON_SECRET|cronAuthorized\(/, `${f} must check the cron secret`);
+  }
+});
+
+// ── The live store never picks up the backup store's token ───────────────────
+
+test("the live Blob token picker never returns the backup (or a preview) store's token", async () => {
+  const saved = { ...process.env };
+  try {
+    for (const k of Object.keys(process.env)) if (String(process.env[k]).startsWith("vercel_blob_rw_")) delete process.env[k];
+    delete process.env.BLOB_READ_WRITE_TOKEN;
+    process.env.BACKUP_BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_backup_store";
+    process.env.PREVIEW_BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_preview_store";
+    for (const [name, pick] of await LIVE_PICKERS()) {
+      assert.equal(pick(), undefined, `${name} picked another store's token`);
+      process.env.EVIDENCE_BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_live_store";
+      assert.equal(pick(), "vercel_blob_rw_live_store", `${name} still finds the live store under another name`);
+      delete process.env.EVIDENCE_BLOB_READ_WRITE_TOKEN;
+    }
+  } finally {
+    for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+    Object.assign(process.env, saved);
+  }
+});
+
+test("the backup route refuses a backup token that is the live store's token", async () => {
+  const { GET } = await import("../app/api/cron/backup/route.ts");
+  const saved = { ...process.env };
+  const orig = console.error;
+  const errs = [];
+  console.error = (...a) => errs.push(a.join(" "));
+  try {
+    process.env.CRON_SECRET = "s3cret";
+    process.env.BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_same_store";
+    process.env.BACKUP_BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_same_store";
+    const r = await GET(new Request("http://localhost/api/cron/backup", { headers: { authorization: "Bearer s3cret" } }));
+    assert.equal(r.status, 500);
+    assert.ok(errs.some((e) => /live Blob store's token/.test(e)));
+  } finally {
+    console.error = orig;
+    for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+    Object.assign(process.env, saved);
   }
 });

@@ -1,10 +1,11 @@
 // The nightly logical backup (vercel.json schedules it; lib/backup.ts does it).
 // Vercel sends Authorization: Bearer $CRON_SECRET. Without the separate backup
-// store's token (BACKUP_BLOB_READ_WRITE_TOKEN) it does nothing but log, and a
-// demo deployment never backs up. A run stops before the function's time limit
+// store's token (BACKUP_BLOB_READ_WRITE_TOKEN) it does nothing but log; it refuses
+// a token equal to the live store's; and a demo deployment never backs up. A run stops before the function's time limit
 // and, if companies remain, calls this route again to carry on with the same day.
 import { cronAuthorized } from "@/lib/cron";
 import { blobBackupStore, runBackup } from "@/lib/backup";
+import { vercelBlobToken as liveBlobToken } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -22,6 +23,11 @@ export async function GET(req: Request) {
   if (!token) {
     if (!warned) { warned = true; console.warn("backup: BACKUP_BLOB_READ_WRITE_TOKEN is not set; the nightly backup is off"); }
     return json({ ok: true, skipped: "BACKUP_BLOB_READ_WRITE_TOKEN is not set" });
+  }
+  if (token === (liveBlobToken() || "").trim().replace(/^["']+|["']+$/g, "")) {
+    // A backup kept in the live store is no backup, and pruning there must never run.
+    console.error("backup: BACKUP_BLOB_READ_WRITE_TOKEN is the live Blob store's token; refusing to back up into the live store");
+    return json({ error: "The backup store must be separate from the live store" }, 500);
   }
   const url = new URL(req.url);
   const hop = Math.max(0, Number(url.searchParams.get("hop")) || 0);
