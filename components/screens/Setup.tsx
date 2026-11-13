@@ -62,7 +62,7 @@ export function SetupWizard() {
   const all = useMemo(() => { const seen = new Set<string>(); return [...list, ...parse(text)].filter((l) => { const k = l.name.toLowerCase(); if (seen.has(k) || existing.has(k)) return false; seen.add(k); return true; }); }, [list, text]); // eslint-disable-line react-hooks/exhaustive-deps
   const groups = Array.from(new Set(all.map((l) => l.group).filter(Boolean)));
 
-  if (!can.manage(app.actor)) return <Card><p>Only a Quality admin sets the organisation up.</p></Card>;
+  const admin = can.manage(app.actor);
 
   const finish = async () => {
     setBusy(true); setErr(null);
@@ -94,6 +94,7 @@ export function SetupWizard() {
   return (
     <div className="wizard">
       <PageHead eyebrow={`Set up · step ${step + 1} of ${STEPS.length}`} title="Make Pulsus Quality" accent="yours." lede="A few choices and you're inspecting. Everything here stays editable." />
+      {!admin && <Msg kind="info">You can look through the set-up steps. Only a Quality admin can apply them{app.demo ? ": in the demo, switch to Alex Morgan from the avatar menu" : ""}.</Msg>}
       <ol className="wsteps" aria-label="Progress">{STEPS.map((s, i) => <li key={s} className={i < step ? "done" : i === step ? "now" : ""} aria-current={i === step ? "step" : undefined}><div className="bar" /><div className="lbl">{s}</div></li>)}</ol>
 
       {step === 0 && (
@@ -193,7 +194,7 @@ export function SetupWizard() {
 
       <div className="row mt2" style={{ justifyContent: "space-between" }}>
         <button className="btn" onClick={back} disabled={step === 0}><Icon name="back" />Back</button>
-        {step < STEPS.length - 1 ? <button className="btn primary" onClick={next}>Continue<Icon name="chevron" /></button> : <button className="btn primary" disabled={busy || (!all.length && !app.program.units.length)} onClick={finish}><Icon name="check" />{busy ? "Setting up…" : "Finish set-up"}</button>}
+        {step < STEPS.length - 1 ? <button className="btn primary" onClick={next}>Continue<Icon name="chevron" /></button> : <button className="btn primary" disabled={!admin || busy || (!all.length && !app.program.units.length)} onClick={finish}><Icon name="check" />{busy ? "Setting up…" : "Finish set-up"}</button>}
       </div>
     </div>
   );

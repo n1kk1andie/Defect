@@ -110,7 +110,9 @@ export async function seedInspections(tx: Tx, now: Date, unitIds: Map<string, st
     { key: "bank-branch-ops", every: 1 }, { key: "bank-teller-cash", every: 1 }, { key: "bank-kyc-file", every: 1, items: [10, 16] },
     { key: "bank-atm", every: 2 }, { key: "bank-premises-hs", every: 3 }, { key: "bank-mystery-shop", every: 2 }, { key: "bank-loan-file", every: 2, items: [8, 12] }, { key: "bank-complaints", every: 3, items: [6, 10] },
   ];
-  let ref = 0, act = 42;
+  // Continue the references from wherever this demo's counters are (an upgraded demo may have had actions added since).
+  const cur = async (name: string) => (await tx.select({ v: counters.value }).from(counters).where(and(eq(counters.companyId, DEMO), eq(counters.name, name))).limit(1))[0]?.v ?? 0;
+  let ref = await cur("inspection"), act = Math.max(42, await cur("action"));
   const rows: (typeof inspections.$inferInsert)[] = [], events: (typeof inspectionEvents.$inferInsert)[] = [];
   const raised: { inspId: string; ref: string; unit: string; q: Question; tplName: string; version: number; at: Date; status: string; sup: string }[] = [];
   months.forEach((m, mi) => {
@@ -194,11 +196,12 @@ export async function seedInspections(tx: Tx, now: Date, unitIds: Map<string, st
     if (x.status === "awaiting_verification") ev.push({ companyId: DEMO, actionId: id, kind: "status", status: "awaiting_verification", by: owner.email ?? insp[0], at: new Date(x.at.getTime() + 2 * 864e5), note: "Procedure re-briefed at the morning huddle; the log is now countersigned daily. Evidence attached." });
     await tx.insert(actionEvents).values(ev);
   }
-  await tx.update(counters).set({ value: act }).where(and(eq(counters.companyId, DEMO), eq(counters.name, "action")));
+  await tx.insert(counters).values({ companyId: DEMO, name: "action", value: act }).onConflictDoUpdate({ target: [counters.companyId, counters.name], set: { value: act } });
 
   // Scorecards: the Operational Standard's first version on record, and a branch quality index being designed.
-  const op = (await tx.select().from(scorecards).where(eq(scorecards.companyId, DEMO)).limit(1))[0];
-  if (op) await tx.insert(scorecardVersions).values({ id: randomUUID(), companyId: DEMO, scorecardId: op.id, version: op.version, definition: op.definition, publishedBy: admin, publishedAt: op.createdAt });
+  const op = (await tx.select().from(scorecards).where(and(eq(scorecards.companyId, DEMO), eq(scorecards.active, true))).limit(1))[0];
+  const hasVersion = op ? (await tx.select({ id: scorecardVersions.id }).from(scorecardVersions).where(and(eq(scorecardVersions.companyId, DEMO), eq(scorecardVersions.scorecardId, op.id))).limit(1)).length > 0 : true;
+  if (op && !hasVersion) await tx.insert(scorecardVersions).values({ id: randomUUID(), companyId: DEMO, scorecardId: op.id, version: op.version, definition: op.definition, publishedBy: admin, publishedAt: op.createdAt });
   const lib = scorecardEntry("branch-standards")!;
   const bq = resolveLibraryScorecard(lib, new Map());
   bq.name = "Branch quality index";

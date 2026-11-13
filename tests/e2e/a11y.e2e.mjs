@@ -50,6 +50,7 @@ const SCREENS = [
   { name: "scorecards", path: "/scorecards", persona: ADMIN },
   { name: "scorecard designer", path: "/scorecards", persona: ADMIN, go: async (p) => { await p.getByRole("link", { name: /Design/ }).last().click(); await p.waitForURL(/\/scorecards\/.+/); await p.waitForLoadState("networkidle"); } },
   { name: "set-up wizard", path: "/setup", persona: ADMIN },
+  { name: "set-up wizard: view only", path: "/setup" },
   { name: "sign-in", path: "/login" },
 ];
 
