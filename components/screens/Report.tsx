@@ -40,6 +40,12 @@ export function Report({ actions }: { actions: ActionView[] }) {
         right={<><YearSelect /><select className="select no-print" aria-label={settings.unitLabel} value={filters.unit} onChange={(e) => app.setFilters({ unit: Number(e.target.value) })}><option value={-1}>All {settings.unitPlural.toLowerCase()}</option>{data.units.map((u, i) => <option key={u.id} value={i}>{u.name}</option>)}</select>
           <button className="btn no-print" onClick={() => window.print()}><Icon name="print" />Print or save as PDF</button>
           <a className="btn no-print" href={`/api/export?what=register&format=xlsx&year=${filters.year}&unit=${filters.unit}`}><Icon name="download" />Excel</a></>} />
+      <div className="card no-print" style={{ marginBottom: 16, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <span className="badge sm" aria-hidden="true"><Icon name="stamp" /></span>
+        <span className="grow" style={{ minWidth: 220 }}><strong>Committee report</strong><span className="sub" style={{ display: "block" }}>Inspection results, the risk league table and watchlist with the reasons, missed visits, sampling conclusions, the most-failed questions and the actions position.</span></span>
+        <a className="btn primary" href="/api/committee" target="_blank" rel="noreferrer"><Icon name="report" />PDF</a>
+        <a className="btn" href="/api/committee?format=xlsx"><Icon name="download" />Excel</a>
+      </div>
       <div className="stack">
         <div className="grid g4">
           <div className="stat"><div className="stat-v tone" data-band={band("resolutionRate", rec.resolutionRate)} style={{ fontSize: 32 }}>{pct(rec.resolutionRate)}</div><div className="stat-l">Defects resolved</div></div>

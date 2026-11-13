@@ -145,7 +145,7 @@ export function Sheet({ title, sub, onClose, children, footer }: { title: ReactN
           </div>
           <button type="button" className="iconbtn" onClick={onClose} aria-label="Close"><Icon name="close" /></button>
         </div>
-        <div className="sheet-b">{children}</div>
+        <div className="sheet-b" tabIndex={0}>{children}</div>
         {footer && <div className="sheet-f">{footer}</div>}
       </div>
     </div>

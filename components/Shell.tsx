@@ -18,6 +18,9 @@ type Badge = "approvals" | "verify" | "inspections";
 export const NAV: { href: string; label: string; icon: IconName; badge?: Badge; build?: boolean }[] = [
   { href: "/", label: "Pulse", icon: "pulse" },
   { href: "/inspect", label: "Inspect", icon: "clipboard", badge: "inspections" },
+  { href: "/schedule", label: "Schedule", icon: "calendar" },
+  { href: "/sampling", label: "Sampling", icon: "hash" },
+  { href: "/risk", label: "Risk", icon: "alert" },
   { href: "/review", label: "Review", icon: "review", badge: "approvals" },
   { href: "/actions", label: "Actions", icon: "actions", badge: "verify" },
   { href: "/register", label: "Register", icon: "register" },
@@ -132,8 +135,8 @@ export function Shell({ children }: { children: ReactNode }) {
   const badge = (b?: Badge) => (b === "approvals" ? app.counts.awaitingApproval : b === "verify" ? app.counts.awaitingVerification : b === "inspections" ? app.counts.awaitingInspections : 0);
   const main = NAV.filter((n) => n.href !== "/settings" && !n.build);
   const build = NAV.filter((n) => n.build && (n.href === "/templates" || isAdmin(app.actor)));
-  const tabs = [NAV[0], NAV.find((n) => n.href === "/inspect")!, NAV.find((n) => n.href === "/actions")!, NAV.find((n) => n.href === "/insights")!, { href: "/more", label: "More", icon: "more" as IconName }];
-  const moreOn = ["/register", "/history", "/report", "/review", "/templates", "/scorecards", "/settings", "/more"].some(on);
+  const tabs = [NAV[0], NAV.find((n) => n.href === "/inspect")!, NAV.find((n) => n.href === "/actions")!, NAV.find((n) => n.href === "/risk")!, { href: "/more", label: "More", icon: "more" as IconName }];
+  const moreOn = ["/register", "/history", "/insights", "/report", "/review", "/schedule", "/sampling", "/templates", "/scorecards", "/settings", "/more"].some(on);
   const initial = (app.actor.name || app.actor.email).trim().charAt(0).toUpperCase();
   return (
     <div className="shell">
