@@ -1,4 +1,4 @@
-// The demo's fictional data: Meridian Society, six branches, five process
+// The demo's fictional data: Meridian Financial Group, six branches, five process
 // areas, about three years of Branch Defects history, the Operational Standard
 // scorecard, recent reviews at item level (natures, recurring repeats, some
 // awaiting approval) and a lived-in action register. Generated from a fixed
@@ -28,7 +28,7 @@ const c = (code: string, label: string, severity: Severity) => ({ code, label, s
 const PROGRAM: { area: string; mult: number; checks: ReturnType<typeof c>[]; natures: [string, string][] }[] = [
   { area: "Card Applications", mult: 1.05, checks: [c("id-verified", "Customer identity verified", "critical"), c("form-complete", "Application form complete", "major"), c("signature", "Signature matches records", "critical"), c("limits", "Approved within authority", "major"), c("keyed", "System record matches documents", "minor")],
     natures: [["Missing customer verification", "Process"], ["Incomplete documentation", "Documentation"], ["Signature mismatch", "Process"], ["Incorrect data entry", "Data"]] },
-  { area: "Account Changes", mult: 1.0, checks: [c("request-signed", "Request signed by the member", "critical"), c("id-checked", "Identity checked", "critical"), c("change-keyed", "Change keyed correctly", "major"), c("notice-sent", "Confirmation sent", "minor"), c("filed", "Request filed", "minor")],
+  { area: "Account Changes", mult: 1.0, checks: [c("request-signed", "Request signed by the customer", "critical"), c("id-checked", "Identity checked", "critical"), c("change-keyed", "Change keyed correctly", "major"), c("notice-sent", "Confirmation sent", "minor"), c("filed", "Request filed", "minor")],
     natures: [["Incorrect data entry", "Data"], ["Supporting file missing", "Documentation"], ["Missing customer verification", "Process"]] },
   { area: "Customer Records", mult: 1.02, checks: [c("kyc-current", "KYC record current", "critical"), c("address-proof", "Proof of address on file", "major"), c("no-duplicate", "No duplicate record", "major"), c("contact-valid", "Contact details valid", "minor"), c("risk-rated", "Risk rating recorded", "major")],
     natures: [["Duplicate record", "Data"], ["Incomplete documentation", "Documentation"], ["Outdated KYC", "People"]] },
@@ -73,7 +73,7 @@ export async function clearDemo(tx: Tx): Promise<void> {
  *   2  Milestone 2: templates, inspections, inspection actions, scorecard in design
  *   3  Milestone 3: programmes, sampling plans, risk factors per branch
  */
-export const DEMO_SEED_VERSION = 3;
+export const DEMO_SEED_VERSION = 4;
 
 async function seedVersion(tx: Tx): Promise<number> {
   return Number(rowsOf<{ v: number }>(await tx.execute(sql`select value as v from counters where name = 'demo_seed'`))[0]?.v ?? 1);
@@ -111,6 +111,15 @@ export async function upgradeDemo(tx: Tx, now = new Date()): Promise<void> {
     const already = Number(rowsOf<{ n: number }>(await tx.execute(sql`select count(*)::int as n from programmes`))[0]?.n ?? 0);
     const m3 = already ? { programmes: 0, plans: 0 } : await seedM3(tx, now, unitIds);
     await record(tx, DEMO, { actor: "demo", action: "demo.upgrade", entityType: "company", entityId: DEMO, summary: `Demo sample data brought up to version 3: ${m3.programmes} programmes, ${m3.plans} sampling plans, risk factors` });
+  }
+  if (from < 4) {
+    // Rename in place: the demo institution was "Meridian Society" and its
+    // account-change checklist said "member". A demo already seeded keeps all
+    // its data; only the wording is corrected.
+    await tx.update(companies).set({ name: DEMO_COMPANY }).where(sql`company_id = ${DEMO}`);
+    await tx.update(checks).set({ label: "Request signed by the customer" })
+      .where(sql`company_id = ${DEMO} and code = 'request-signed' and label = 'Request signed by the member'`);
+    await record(tx, DEMO, { actor: "demo", action: "demo.upgrade", entityType: "company", entityId: DEMO, summary: "Demo sample data brought up to version 4: Meridian Financial Group, customers not members" });
   }
   await setSeedVersion(tx, DEMO_SEED_VERSION);
 }

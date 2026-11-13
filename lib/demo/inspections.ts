@@ -1,4 +1,4 @@
-// Demo: Meridian Society's checklists, inspections and scorecards (Milestone
+// Demo: Meridian Financial Group's checklists, inspections and scorecards (Milestone
 // 2). Banking library templates published (one on version 2), the
 // programme's Branch Defects and the Operational Standard as templates, a
 // draft the admin is still building, and four months of inspections across

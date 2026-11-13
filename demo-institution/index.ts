@@ -4,7 +4,7 @@
 // A demo build (DEMO_MODE=1) never compiles institution/: next.config.mjs aliases
 // "@/institution" to this file and "@/institution/data" to ./data.ts, so no real
 // name, address, person, branch or figure can reach a demo bundle, page or API.
-// Same exports, neutral values; the fictional Meridian Society identity itself
+// Same exports, neutral values; the fictional Meridian Financial Group identity itself
 // lives in lib/demo.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 

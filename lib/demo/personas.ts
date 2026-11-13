@@ -1,9 +1,9 @@
-// The demo's people: the shared Pulsus demo world (Meridian Society; DEMO-WORLD.md
+// The demo's people: the shared Pulsus demo world (Meridian Financial Group; DEMO-WORLD.md
 // in the Command Center repo). A visitor opens the demo as the guest viewer and
 // can switch persona from the avatar menu to try each role's work. Pure.
 import type { Role } from "@/lib/roles";
 
-export const DEMO_COMPANY = "Meridian Society";
+export const DEMO_COMPANY = "Meridian Financial Group";
 export const DEMO_DOMAIN = "demo.pulsus.tech";
 export const PERSONA_COOKIE = "pq_persona";
 

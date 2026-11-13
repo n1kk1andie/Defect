@@ -186,7 +186,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </Link>
           <span className="title grow" style={{ minWidth: 0 }}>{current}<small>{context}</small></span>
           <div className="tb-right">
-            {app.demo && <span className="demochip hide-sm" title="Meridian Society is fictional: sample data for the demo">Demo · sample data</span>}
+            {app.demo && <span className="demochip hide-sm" title="Meridian Financial Group is fictional: sample data for the demo">Demo · sample data</span>}
             <span className="hide-sm"><TrialChip /></span>
             <button type="button" className="iconbtn" onClick={app.toggleTheme} aria-label={app.theme === "dark" ? "Switch to day" : "Switch to night"} title={app.theme === "dark" ? "Day" : "Night"}>
               <Icon name={app.theme === "dark" ? "sun" : "moon"} />
