@@ -1,7 +1,7 @@
 "use client";
-// The frame around every screen: the top bar (logo, where you are, trial chip,
-// day/night, exports, you), the trial banner, and the navigation (a floating
-// pill on desktop, a tab bar on phones).
+// The frame around every screen, as in Pulsus Risk: the sidebar (desktop) or
+// the tab bar with "More" (phone), the top bar (where you are, trial chip,
+// day/night, export, you) and the trial banner.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -14,7 +14,7 @@ import { ROLE_INFO, isAdmin } from "@/lib/roles";
 import { PERSONAS } from "@/lib/demo/personas";
 import DemoGuard from "@/components/DemoGuard";
 
-const NAV: { href: string; label: string; icon: IconName; badge?: "approvals" | "verify" }[] = [
+export const NAV: { href: string; label: string; icon: IconName; badge?: "approvals" | "verify" }[] = [
   { href: "/", label: "Pulse", icon: "pulse" },
   { href: "/register", label: "Register", icon: "register" },
   { href: "/history", label: "History", icon: "history" },
@@ -61,7 +61,7 @@ function TrialBanner() {
   };
   return (
     <div className="trialbanner" role="region" aria-label="Free trial">
-      <div className="trialbanner-in">
+      <div className={`trialbanner-in${days !== null && days <= 3 ? " soon" : ""}`}>
         <p>{text}</p>
         {owner ? <a className="btn primary sm" href={billingUrl} target="_top">Choose a plan</a> : <span className="sub">Ask your administrator to choose a plan.</span>}
         {days !== 0 && <button type="button" className="iconbtn" style={{ width: 34, height: 34 }} onClick={dismiss} aria-label="Dismiss for today"><Icon name="close" /></button>}
@@ -119,26 +119,64 @@ function AvatarMenu() {
 export function Shell({ children }: { children: ReactNode }) {
   const app = useApp();
   const path = usePathname() || "/";
-  const section = NAV.find((n) => (n.href === "/" ? path === "/" : path.startsWith(n.href)))?.label || "Pulse";
+  const on = (href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(href + "/"));
+  const current = [...NAV, { href: "/more", label: "More" }].find((n) => on(n.href))?.label || "Pulse";
   const li = lastActive(app.data);
   const latest = li >= 0 ? monthLabel(app.data.periods[li]) : null;
-  const modeLabel = app.filters.mode === "standard" && app.data.scorecard ? app.data.scorecard.name : "Branch Defects";
+  const modeLabel = app.filters.mode === "standard" && app.data.scorecard ? app.data.scorecard.name : `${app.settings.unitLabel} Defects`;
+  const context = ["Pulse", "Register", "History"].includes(current) ? `${modeLabel}${latest ? ` · latest data ${latest}` : ""}` : app.actor.tenantName;
   const badge = (b?: "approvals" | "verify") => (b === "approvals" ? app.counts.awaitingApproval : b === "verify" ? app.counts.awaitingVerification : 0);
+  const main = NAV.filter((n) => n.href !== "/settings");
+  const tabs = [NAV[0], NAV.find((n) => n.href === "/review")!, NAV.find((n) => n.href === "/actions")!, NAV.find((n) => n.href === "/insights")!, { href: "/more", label: "More", icon: "more" as IconName }];
+  const moreOn = ["/register", "/history", "/report", "/settings", "/more"].some(on);
+  const initial = (app.actor.name || app.actor.email).trim().charAt(0).toUpperCase();
   return (
     <div className="shell">
       <DemoGuard />
       <a href="#main" className="skip">Skip to content</a>
-      <header className="topbar">
-        <div className="topbar-in">
-          <Link href="/" className="brand">
-            <ShieldMark />
-            <span className="brand-txt">
-              <span className="brand-name">Pulsus <b>Quality</b></span>
-              <span className="brand-sub" style={{ display: "block" }}>{section === "Pulse" || section === "Register" || section === "History" ? modeLabel : section}{latest ? ` · Latest data ${latest}` : ""}</span>
+      <aside className="side" aria-label="Pulsus Quality">
+        <Link href="/" className="brand">
+          <ShieldMark />
+          <span className="brand-txt">
+            <span className="brand-name" style={{ display: "block" }}>Pulsus <b>Quality</b></span>
+            <span className="brand-sub" style={{ display: "block" }}>{app.actor.tenantName}</span>
+          </span>
+        </Link>
+        <nav className="sidenav" aria-label="Main">
+          {main.map((n) => {
+            const count = badge(n.badge);
+            return (
+              <Link key={n.href} href={n.href} aria-current={on(n.href) ? "page" : undefined}>
+                <Icon name={n.icon} />
+                <span>{n.label}</span>
+                {count > 0 && <span className="count" aria-label={`${count} waiting`}>{count > 99 ? "99+" : count}</span>}
+              </Link>
+            );
+          })}
+          <span className="nav-label">Organisation</span>
+          <Link href="/settings" aria-current={on("/settings") ? "page" : undefined}><Icon name="settings" /><span>Settings</span></Link>
+          {!app.demo && <a href={app.platformUrl} target="_top"><Icon name="globe" /><span>Back to Pulsus</span></a>}
+        </nav>
+        <div className="side-foot">
+          <div className="me">
+            <span className="avatar" aria-hidden="true">{initial}</span>
+            <span className="grow" style={{ minWidth: 0 }}>
+              <span style={{ display: "block", fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{app.actor.name}</span>
+              <span className="sub" style={{ display: "block", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{app.actor.roles.map((r) => ROLE_INFO[r].label).join(", ") || "No access"}</span>
             </span>
+          </div>
+          <p className="sub" style={{ margin: 0, padding: "4px 8px", fontSize: 12 }}><span className="tagline">Live. Signal. Clarity.</span></p>
+        </div>
+      </aside>
+      <div className="mainwrap">
+        <header className="topbar">
+          <Link href="/" className="brand mobile-only" aria-label="Pulsus Quality, Pulse">
+            <ShieldMark />
+            <span className="brand-name">Pulsus <b>Quality</b></span>
           </Link>
+          <span className="title grow" style={{ minWidth: 0 }}>{current}<small>{context}</small></span>
           <div className="tb-right">
-            {app.demo && <span className="demochip hide-sm" title="Sample data: Meridian Society is fictional">Demo</span>}
+            {app.demo && <span className="demochip hide-sm" title="Meridian Society is fictional: sample data for the demo">Demo · sample data</span>}
             <span className="hide-sm"><TrialChip /></span>
             <button type="button" className="iconbtn" onClick={app.toggleTheme} aria-label={app.theme === "dark" ? "Switch to day" : "Switch to night"} title={app.theme === "dark" ? "Day" : "Night"}>
               <Icon name={app.theme === "dark" ? "sun" : "moon"} />
@@ -146,23 +184,23 @@ export function Shell({ children }: { children: ReactNode }) {
             <a className="iconbtn hide-sm" href={`/api/export?what=register&format=xlsx&year=${app.filters.year}&unit=${app.filters.unit}&area=${app.filters.area}`} aria-label="Download the register (Excel)" title="Download (Excel)"><Icon name="download" /></a>
             <AvatarMenu />
           </div>
-        </div>
-      </header>
-      <TrialBanner />
-      <main id="main" className="main" tabIndex={-1}>{children}</main>
-      <footer className="foot">
-        <span>Pulsus Quality · {app.actor.tenantName}{app.demo ? " (fictional sample data)" : ""}</span>
-        <span><span className="tagline">Live. <em>Signal.</em> Clarity.</span> · © 2026 Tumblehill Holdings LLC</span>
-      </footer>
-      <nav className="nav" aria-label="Sections">
-        {NAV.map((n) => {
-          const on = n.href === "/" ? path === "/" : path.startsWith(n.href);
-          const count = badge(n.badge);
+        </header>
+        <TrialBanner />
+        <main id="main" className="main" tabIndex={-1}>{children}</main>
+        <footer className="foot">
+          <span>Pulsus Quality · {app.actor.tenantName}{app.demo ? " (fictional sample data)" : ""}</span>
+          <span><span className="tagline">Live. Signal. Clarity.</span> · © 2026 Tumblehill Holdings LLC</span>
+        </footer>
+      </div>
+      <nav className="tabbar" aria-label="Main">
+        {tabs.map((n) => {
+          const active = n.href === "/more" ? moreOn : on(n.href);
+          const count = badge((n as { badge?: "approvals" | "verify" }).badge);
           return (
-            <Link key={n.href} href={n.href} className="navbtn" aria-current={on ? "page" : undefined} title={n.label}>
+            <Link key={n.href} href={n.href} aria-current={active ? "page" : undefined}>
               <Icon name={n.icon} />
-              <span className="lbl">{n.label}</span>
-              {count > 0 && <span className="navbadge" aria-label={`${count} waiting`}>{count > 99 ? "99+" : count}</span>}
+              <span>{n.label}</span>
+              {count > 0 && <span className="count" aria-label={`${count} waiting`}>{count > 99 ? "99+" : count}</span>}
             </Link>
           );
         })}

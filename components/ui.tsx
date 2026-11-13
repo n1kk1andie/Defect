@@ -157,7 +157,7 @@ export function PageHead({ eyebrow, title, accent, lede, right }: { eyebrow: str
     <header className="row between wrap" style={{ alignItems: "flex-end", marginBottom: 8 }}>
       <div className="grow" style={{ minWidth: 260 }}>
         <div className="eyebrow">{eyebrow}</div>
-        <h1 className="headline">{title}{accent && <span className="accent">{accent}</span>}</h1>
+        <h1 className="headline">{title}{accent && <> <span className="accent">{accent}</span></>}</h1>
         {lede && <p className="lede">{lede}</p>}
       </div>
       {right && <div className="row wrap" style={{ marginBottom: 18 }}>{right}</div>}
