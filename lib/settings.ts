@@ -2,6 +2,7 @@
 // severity weights, colour bands and recurring-issue rules. Pure types and
 // defaults (the browser reads them too); persisted in company_settings.
 import type { BandOverrides } from "@/lib/bands";
+import { cleanRisk, DEFAULT_RISK, type RiskConfig } from "@/lib/risk";
 
 export type Severity = "critical" | "major" | "minor";
 export const SEVERITIES: Severity[] = ["critical", "major", "minor"];
@@ -26,6 +27,8 @@ export interface CompanySettings {
   groupLabel: string;
   /** Set when an admin finishes (or skips) the set-up wizard. */
   setupDone: boolean;
+  /** The quality risk score model: driver weights, entered factors, band cut-offs, visit frequency by band. */
+  risk: RiskConfig;
 }
 
 export const DEFAULT_SETTINGS: CompanySettings = {
@@ -41,6 +44,7 @@ export const DEFAULT_SETTINGS: CompanySettings = {
   sector: "banking",
   groupLabel: "Region",
   setupDone: false,
+  risk: DEFAULT_RISK,
 };
 
 /** English plural of a unit label: Branch → Branches, Agency → Agencies, Store → Stores. */
@@ -74,5 +78,6 @@ export function cleanSettings(raw: unknown): CompanySettings {
     sector: (["banking", "healthcare", "government", "higher_ed", "general"] as const).find((x) => x === o.sector) ?? d.sector,
     groupLabel: text(o.groupLabel, 30, d.groupLabel),
     setupDone: o.setupDone === true,
+    risk: cleanRisk(o.risk, (["banking", "healthcare", "government", "higher_ed", "general"] as const).find((x) => x === o.sector) ?? d.sector),
   };
 }

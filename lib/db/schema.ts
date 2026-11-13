@@ -365,6 +365,65 @@ export const inspectionEvents = pgTable("inspection_events", {
   note: text("note"),
 });
 
+/** A sampling plan: the population, the method, the seeded selection and its evaluation. */
+export const samplingPlans = pgTable("sampling_plans", {
+  id: text("id").primaryKey(),
+  companyId: text("company_id").notNull(),
+  ref: text("ref").notNull(),
+  name: text("name").notNull(),
+  templateId: text("template_id"),
+  unitId: text("unit_id"),
+  period: date("period"),
+  method: text("method").notNull().default("statistical"), // statistical | judgmental
+  confidence: doublePrecision("confidence"),
+  tdr: doublePrecision("tdr"),
+  edr: doublePrecision("edr"),
+  populationSize: integer("population_size").notNull(),
+  /** The listed items (id, stratum, value), or empty when only the size was given. */
+  population: jsonb("population").notNull().default(sql`'[]'::jsonb`),
+  populationHash: text("population_hash").notNull(),
+  stratify: boolean("stratify").notNull().default(false),
+  censusAbove: doublePrecision("census_above"),
+  sampleSize: integer("sample_size").notNull(),
+  seed: text("seed").notNull(),
+  selection: jsonb("selection").notNull().default(sql`'[]'::jsonb`),
+  allocation: jsonb("allocation").notNull().default(sql`'[]'::jsonb`),
+  status: text("status").notNull().default("selected"), // selected | evaluated
+  inspectionId: text("inspection_id"),
+  evaluation: jsonb("evaluation"),
+  createdBy: text("created_by").notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [uniqueIndex("sampling_plans_ref").on(t.companyId, t.ref)]);
+
+/** An inspection programme: which checklist, at which sites, how often, by whom, within what window. */
+export const programmes = pgTable("programmes", {
+  id: text("id").primaryKey(),
+  companyId: text("company_id").notNull(),
+  name: text("name").notNull(),
+  templateId: text("template_id").notNull(),
+  /** Empty = every active site. */
+  unitIds: text("unit_ids").array().notNull().default(sql`'{}'::text[]`),
+  /** Days between visits, or 0 for risk-based (the site's band sets it). */
+  everyDays: integer("every_days").notNull().default(30),
+  windowDays: integer("window_days").notNull().default(14),
+  assignees: text("assignees").array().notNull().default(sql`'{}'::text[]`),
+  startDate: date("start_date").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdBy: text("created_by").notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+/** Organisation-specific risk factors entered per site (0–100). */
+export const unitFactors = pgTable("unit_factors", {
+  companyId: text("company_id").notNull(),
+  unitId: text("unit_id").notNull(),
+  data: jsonb("data").notNull().default(sql`'{}'::jsonb`),
+  updatedAt: updatedAt(),
+  updatedBy: text("updated_by"),
+}, (t) => [primaryKey({ columns: [t.companyId, t.unitId] })]);
+
 /** Per-company counters for human references (REV-0001, ACT-0001). */
 export const counters = pgTable("counters", {
   companyId: text("company_id").notNull(),
@@ -376,5 +435,5 @@ export const counters = pgTable("counters", {
 export const TENANT_TABLES = [
   "companies", "company_settings", "members", "units", "areas", "checks", "natures", "monthly_stats", "reviews", "review_items",
   "review_events", "scorecards", "scorecard_entries", "actions", "action_events", "evidence", "audit_log", "imports", "risk_outbox", "counters",
-  "templates", "template_versions", "inspections", "inspection_events", "scorecard_versions",
+  "templates", "template_versions", "inspections", "inspection_events", "scorecard_versions", "sampling_plans", "programmes", "unit_factors",
 ] as const;

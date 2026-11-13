@@ -7,9 +7,10 @@ import { buildDataset } from "@/lib/dataset";
 import { loadSettings } from "@/lib/company";
 import { byUnit, lastActive, record, filterRows, recurringIssues, scLastActive, scMean, scRows, ALL } from "@/lib/metrics";
 import { classify } from "@/lib/bands";
+import { inspectionsBlock } from "@/lib/pulseInspections";
 
 export async function pulseFor(companyId: string) {
-  return withTenant(companyId, async (tx) => {
+  const base = await withTenant(companyId, async (tx) => {
     const settings = await loadSettings(tx, companyId);
     const d = await buildDataset(tx, companyId, settings);
     const li = lastActive(d);
@@ -41,4 +42,5 @@ export async function pulseFor(companyId: string) {
       recurringIssues: recurringIssues(d, settings.recurringMonths).length,
     };
   });
+  return { ...base, inspections: await inspectionsBlock(companyId) };
 }
