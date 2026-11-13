@@ -20,6 +20,9 @@ export const companies = pgTable("companies", {
   name: text("name").notNull(),
   kind: text("kind").notNull(), // institution | company | demo
   createdAt: createdAt(),
+  /** The plan the Pulsus Platform session last carried ({ standing, trialEndsAt }), cached for the REST API, which has no session. */
+  plan: jsonb("plan"),
+  planSeenAt: timestamp("plan_seen_at", { withTimezone: true }),
 });
 
 /** One row per company: labels, how instances are counted, colour bands, scorecard switch. */
@@ -42,6 +45,8 @@ export const members = pgTable("members", {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  /** The daily email of what needs this person (when the deployment sends email). They can turn it off. */
+  emailAlerts: boolean("email_alerts").notNull().default(true),
 }, (t) => [primaryKey({ columns: [t.companyId, t.email] })]);
 
 export const units = pgTable("units", {
@@ -50,6 +55,8 @@ export const units = pgTable("units", {
   name: text("name").notNull(),
   code: text("code"),
   region: text("region"),
+  /** The entity (hospital, agency, campus, subsidiary) the site belongs to, in a multi-entity group. */
+  entityId: text("entity_id"),
   sort: integer("sort").notNull().default(0),
   active: boolean("active").notNull().default(true),
 }, (t) => [uniqueIndex("units_company_name").on(t.companyId, t.name)]);
@@ -212,8 +219,16 @@ export const actions = pgTable("actions", {
   verifierEmail: text("verifier_email"),
   verifiedBy: text("verified_by"),
   verifiedAt: timestamp("verified_at", { withTimezone: true }),
-  sourceType: text("source_type").notNull().default("manual"), // manual | review_item | recurring | migrated
+  sourceType: text("source_type").notNull().default("manual"), // manual | review_item | recurring | migrated | inspection | issue_report | import | api
   sourceId: text("source_id"),
+  /** Root cause analysis: the 5 whys and the fishbone categories. */
+  rca: jsonb("rca"),
+  /** Days after closure when the effectiveness check falls due (0 = none). */
+  effectivenessDays: integer("effectiveness_days").notNull().default(0),
+  /** The effectiveness check: due date, status (pending | due | effective | ineffective), evidence. */
+  effectiveness: jsonb("effectiveness"),
+  /** How many times the finding came back and reopened the action. */
+  reopenCount: integer("reopen_count").notNull().default(0),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
   closedAt: timestamp("closed_at", { withTimezone: true }),
@@ -424,6 +439,73 @@ export const unitFactors = pgTable("unit_factors", {
   updatedBy: text("updated_by"),
 }, (t) => [primaryKey({ columns: [t.companyId, t.unitId] })]);
 
+/** An entity within a group: a hospital in a health system, an agency in a ministry, a campus in a university system. */
+export const entities = pgTable("entities", {
+  id: text("id").primaryKey(),
+  companyId: text("company_id").notNull(),
+  name: text("name").notNull(),
+  code: text("code"),
+  sort: integer("sort").notNull().default(0),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex("entities_company_name").on(t.companyId, t.name)]);
+
+/** A named set of sites for comparison (e.g. "Urban branches", "Surgical wards"). */
+export const siteGroups = pgTable("site_groups", {
+  id: text("id").primaryKey(),
+  companyId: text("company_id").notNull(),
+  name: text("name").notNull(),
+  unitIds: text("unit_ids").array().notNull().default(sql`'{}'::text[]`),
+  createdBy: text("created_by").notNull(),
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex("site_groups_company_name").on(t.companyId, t.name)]);
+
+/** The public "report an issue" link of a site (printed as a QR code). Rotating it retires the old link. */
+export const reportLinks = pgTable("report_links", {
+  companyId: text("company_id").notNull(),
+  unitId: text("unit_id").notNull(),
+  token: text("token").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdBy: text("created_by").notNull(),
+  createdAt: createdAt(),
+}, (t) => [primaryKey({ columns: [t.companyId, t.unitId] }), uniqueIndex("report_links_token").on(t.token)]);
+
+/** An observation, hazard or complaint raised by anyone from a site's link, with no sign-in. A supervisor triages it. */
+export const issueReports = pgTable("issue_reports", {
+  id: text("id").primaryKey(),
+  companyId: text("company_id").notNull(),
+  ref: text("ref").notNull(),
+  unitId: text("unit_id").notNull(),
+  category: text("category").notNull(), // observation | hazard | near_miss | complaint | other
+  description: text("description").notNull(),
+  location: text("location").notNull().default(""),
+  reporterName: text("reporter_name").notNull().default(""),
+  reporterContact: text("reporter_contact").notNull().default(""),
+  status: text("status").notNull().default("new"), // new | action | inspection | dismissed
+  triageNote: text("triage_note").notNull().default(""),
+  triagedBy: text("triaged_by"),
+  triagedAt: timestamp("triaged_at", { withTimezone: true }),
+  actionId: text("action_id"),
+  inspectionId: text("inspection_id"),
+  source: text("source").notNull().default("link"), // link | qr | api
+  createdAt: createdAt(),
+}, (t) => [uniqueIndex("issue_reports_ref").on(t.companyId, t.ref), index("issue_reports_status").on(t.companyId, t.status)]);
+
+/** An API key: only its SHA-256 is stored; the secret is shown once. */
+export const apiKeys = pgTable("api_keys", {
+  id: text("id").primaryKey(),
+  companyId: text("company_id").notNull(),
+  name: text("name").notNull(),
+  hint: text("hint").notNull(),
+  hash: text("hash").notNull(),
+  scopes: text("scopes").array().notNull().default(sql`'{}'::text[]`),
+  createdBy: text("created_by").notNull(),
+  createdAt: createdAt(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  replacedBy: text("replaced_by"),
+}, (t) => [uniqueIndex("api_keys_hash").on(t.hash)]);
+
 /** Per-company counters for human references (REV-0001, ACT-0001). */
 export const counters = pgTable("counters", {
   companyId: text("company_id").notNull(),
@@ -436,4 +518,5 @@ export const TENANT_TABLES = [
   "companies", "company_settings", "members", "units", "areas", "checks", "natures", "monthly_stats", "reviews", "review_items",
   "review_events", "scorecards", "scorecard_entries", "actions", "action_events", "evidence", "audit_log", "imports", "risk_outbox", "counters",
   "templates", "template_versions", "inspections", "inspection_events", "scorecard_versions", "sampling_plans", "programmes", "unit_factors",
+  "entities", "site_groups", "report_links", "issue_reports", "api_keys",
 ] as const;

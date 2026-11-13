@@ -11,6 +11,7 @@ const { sql } = await import("drizzle-orm");
 
 const ROLE = "quality_app";
 const LIVE_PICKERS = async () => [["lib/storage.ts", (await import("@/lib/storage")).vercelBlobToken]];
+const APP_ROLE_NAME = "quality_app";
 const COMPANY_IDS = ["acme", "globex"];
 const SYSTEM_USE = /\bsystemTx\b|db\/system/;
 const SYSTEM_ALLOWED = ["lib/backup.ts"];
@@ -247,4 +248,26 @@ test("the backup route refuses a backup token that is the live store's token", a
     for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
     Object.assign(process.env, saved);
   }
+});
+
+test("every company table has row-level security forced, a policy, app-role access, and is in the backup", async () => {
+  const { exportCompany } = await import("@/lib/backup");
+  const { gunzipSync } = await import("node:zlib");
+  const { db } = await connection();
+  const tables = (r) => (r.rows ?? r);
+  const list = tables(await db.execute(sql`
+    select c.relname as name, c.relrowsecurity as rls, c.relforcerowsecurity as forced,
+      (select count(*) from pg_policies p where p.schemaname = 'public' and p.tablename = c.relname)::int as policies,
+      has_table_privilege(${APP_ROLE_NAME}, c.oid, 'SELECT') as readable
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relkind = 'r'
+      and exists (select 1 from information_schema.columns k where k.table_schema = 'public' and k.table_name = c.relname and k.column_name = 'company_id')`));
+  assert.ok(list.length >= 10);
+  for (const t of list) {
+    assert.ok(t.rls && t.forced, `${t.name}: row-level security not forced`);
+    assert.ok(t.policies > 0, `${t.name}: no policy`);
+    assert.ok(t.readable, `${t.name}: the app role cannot read it`);
+  }
+  const doc = JSON.parse(gunzipSync((await exportCompany(COMPANY_IDS[0])).body).toString());
+  for (const t of list) assert.ok(t.name in doc.tables, `${t.name} is missing from the backup`);
 });

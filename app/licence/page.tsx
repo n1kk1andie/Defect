@@ -1,13 +1,21 @@
 // Shown only to a customer company whose plan isn't paid (its trial ended or
 // its account is suspended): proxy.ts sends them here. "View plan & billing"
 // goes to the company's billing page on Pulsus Platform.
-import { platformUrl } from "@/lib/platform-jwt";
+import { cookies } from "next/headers";
+import { platformSession, platformUrl, PLATFORM_COOKIE } from "@/lib/platform-jwt";
+import { cachePlan } from "@/lib/planCache";
 import { ShieldMark, Tagline } from "@/components/Brand";
 
 export const dynamic = "force-dynamic";
 
 export default async function LicencePage({ searchParams }: { searchParams: Promise<{ reason?: string }> }) {
   const { reason } = await searchParams;
+  // The proxy sends a lapsed company here without passing on its identity; record the lapse from its own
+  // verified session, so the REST API refuses its keys too (and lets them work again once it's paid).
+  try {
+    const s = await platformSession((await cookies()).get(PLATFORM_COOKIE)?.value);
+    if (s?.company?.plan) await cachePlan(s.company.id, s.company.plan);
+  } catch { /* an unknown or invalid company id: nothing to record */ }
   const suspended = reason === "suspended";
   return (
     <main id="main" style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>

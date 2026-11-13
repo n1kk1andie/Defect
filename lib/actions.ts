@@ -11,15 +11,19 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { withTenant, type Tx } from "@/lib/db/client";
-import { actionEvents, actions, evidence, members, reviewItems, reviews, units } from "@/lib/db/schema";
+import { actionEvents, actions, evidence, inspections, issueReports, members, reviewItems, reviews, units } from "@/lib/db/schema";
 import { record } from "@/lib/audit";
 import { nextRef } from "@/lib/refs";
 import { can, inScope, isSupervisor, verifyBlocker, type Actor } from "@/lib/roles";
 
 import type { ActionView } from "@/lib/actionRules";
 export type { ActionView };
-import { STATUS_LABEL, PRIORITIES, isOverdue, allowedSteps, type ActionStatus, type ActionPriority, type ActionStep } from "@/lib/actionRules";
+import { STATUS_LABEL, PRIORITIES, isOverdue, allowedSteps, cleanRca, effectivenessBlocker, type ActionStatus, type ActionPriority, type ActionStep, type ActionKind, type Effectiveness, type Rca } from "@/lib/actionRules";
 export { STATUS_LABEL, PRIORITIES, isOverdue, allowedSteps, type ActionStatus, type ActionPriority, type ActionStep };
+const KINDS: ActionKind[] = ["containment", "corrective", "preventive"];
+/** A pending effectiveness check reads "due" once its date has come. */
+const effectivenessNow = (e: Effectiveness | null, today = new Date().toISOString().slice(0, 10)): Effectiveness | null => (e && e.status === "pending" && e.due <= today ? { ...e, status: "due" } : e);
+const addDaysIso = (d: Date, n: number) => new Date(d.getTime() + n * 864e5).toISOString().slice(0, 10);
 type Result<T> = { ok: true; value: T } | { ok: false; error: string; status?: number };
 
 
@@ -53,6 +57,7 @@ async function view(tx: Tx, companyId: string, rows: (typeof actions.$inferSelec
       verifiedBy: r.verifiedBy, verifiedAt: r.verifiedAt?.toISOString() ?? null, submittedBy, sourceType: r.sourceType, sourceId: r.sourceId,
       createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(), closedAt: r.closedAt?.toISOString() ?? null,
       overdue: isOverdue({ status: r.status, dueDate: due }),
+      rca: (r.rca as Rca | null) ?? null, effectivenessDays: r.effectivenessDays, effectiveness: effectivenessNow(r.effectiveness as Effectiveness | null), reopenCount: r.reopenCount,
       history,
       evidence: files.filter((f) => f.entityId === r.id).map((f) => ({ id: f.id, name: f.name, size: f.size, contentType: f.contentType, uploadedBy: f.uploadedBy, uploadedAt: f.uploadedAt.toISOString() })),
     };
@@ -80,7 +85,7 @@ export async function getAction(a: Actor, id: string): Promise<ActionView | null
   });
 }
 
-interface ActionInput { kind?: unknown; unitId?: unknown; areaId?: unknown; title?: unknown; details?: unknown; rootCause?: unknown; priority?: unknown; ownerEmail?: unknown; ownerName?: unknown; dueDate?: unknown; verifierEmail?: unknown; sourceType?: unknown; sourceId?: unknown }
+interface ActionInput { rca?: unknown; effectivenessDays?: unknown; kind?: unknown; unitId?: unknown; areaId?: unknown; title?: unknown; details?: unknown; rootCause?: unknown; priority?: unknown; ownerEmail?: unknown; ownerName?: unknown; dueDate?: unknown; verifierEmail?: unknown; sourceType?: unknown; sourceId?: unknown }
 
 async function readFields(tx: Tx, a: Actor, input: ActionInput, fixedUnit?: string) {
   const unitId = fixedUnit ?? clean(input.unitId, 80);
@@ -103,8 +108,9 @@ async function readFields(tx: Tx, a: Actor, input: ActionInput, fixedUnit?: stri
   return {
     ok: true as const,
     value: {
-      kind: (input.kind === "preventive" ? "preventive" : "corrective") as ActionView["kind"], unitId, areaId: clean(input.areaId, 80) || null, title,
+      kind: (KINDS.find((k) => k === input.kind) ?? "corrective") as ActionView["kind"], unitId, areaId: clean(input.areaId, 80) || null, title,
       details: clean(input.details, 4000), rootCause: clean(input.rootCause, 2000), priority, ownerEmail, ownerName, dueDate, verifierEmail,
+      rca: cleanRca(input.rca), effectivenessDays: [0, 14, 30, 60, 90, 180].includes(Math.round(Number(input.effectivenessDays))) ? Math.round(Number(input.effectivenessDays)) : 0,
     },
   };
 }
@@ -124,6 +130,12 @@ export async function createAction(a: Actor, input: ActionInput, requestId?: str
       sourceType = "review_item"; sourceId = input.sourceId;
     } else if (input.sourceType === "recurring" && typeof input.sourceId === "string") {
       sourceType = "recurring"; sourceId = clean(input.sourceId, 200);
+    } else if (input.sourceType === "issue_report" && typeof input.sourceId === "string") {
+      const rep = (await tx.select().from(issueReports).where(and(eq(issueReports.companyId, a.tenant), eq(issueReports.id, input.sourceId))).limit(1))[0];
+      if (!rep) return { ok: false as const, error: "That report wasn't found.", status: 400 };
+      sourceType = "issue_report"; sourceId = rep.id;
+    } else if ((input.sourceType === "api" || input.sourceType === "import") && a.platformRole !== "staff") {
+      sourceType = String(input.sourceType); sourceId = typeof input.sourceId === "string" ? clean(input.sourceId, 200) || null : null;
     }
     const id = randomUUID();
     const ref = await nextRef(tx, a.tenant, "action", "ACT");
@@ -144,15 +156,18 @@ export async function editAction(a: Actor, id: string, input: ActionInput, reque
     if (r.status === "closed") return { ok: false as const, error: "This action is closed. Reopen it to change it.", status: 409 };
     const f = await readFields(tx, a, input, r.unitId);
     if (!f.ok) return { ok: false as const, error: f.error, status: 400 };
-    const keys = ["kind", "areaId", "title", "details", "rootCause", "priority", "ownerEmail", "ownerName", "dueDate", "verifierEmail"] as const;
+    const keys = ["kind", "areaId", "title", "details", "rootCause", "priority", "ownerEmail", "ownerName", "dueDate", "verifierEmail", "effectivenessDays"] as const;
     const before: Record<string, unknown> = {}, after: Record<string, unknown> = {};
     for (const k of keys) {
       const was = k === "dueDate" ? iso(r.dueDate) : (r as Record<string, unknown>)[k];
       if ((was ?? null) !== (f.value[k] ?? null)) { before[k] = was; after[k] = f.value[k]; }
     }
+    if (input.rca !== undefined && JSON.stringify(r.rca ?? null) !== JSON.stringify(f.value.rca)) { before.rca = r.rca; after.rca = f.value.rca; }
+    const patchValue = { ...f.value, ...(input.rca === undefined ? { rca: r.rca as Rca | null } : {}), ...(input.effectivenessDays === undefined ? { effectivenessDays: r.effectivenessDays } : {}) };
+    if (input.effectivenessDays === undefined) { delete after.effectivenessDays; delete before.effectivenessDays; }
     if (!Object.keys(after).length) return { ok: true as const, value: (await view(tx, a.tenant, [r]))[0] };
-    await tx.update(actions).set({ ...f.value, updatedAt: new Date() }).where(eq(actions.id, id));
-    const note = `Changed ${Object.keys(after).map((k) => ({ dueDate: "due date", ownerEmail: "owner", ownerName: "owner", rootCause: "root cause", areaId: "process area", verifierEmail: "verifier" } as Record<string, string>)[k] || k).filter((v, i, xs) => xs.indexOf(v) === i).join(", ")}`;
+    await tx.update(actions).set({ ...patchValue, updatedAt: new Date() }).where(eq(actions.id, id));
+    const note = `Changed ${Object.keys(after).map((k) => ({ dueDate: "due date", ownerEmail: "owner", ownerName: "owner", rootCause: "root cause", areaId: "process area", verifierEmail: "verifier", rca: "root cause analysis", effectivenessDays: "effectiveness check" } as Record<string, string>)[k] || k).filter((v, i, xs) => xs.indexOf(v) === i).join(", ")}`;
     await tx.insert(actionEvents).values({ companyId: a.tenant, actionId: id, kind: "edited", by: a.email, note });
     await record(tx, a.tenant, { actor: a.email, action: "action.edit", entityType: "action", entityId: id, summary: `${r.ref}: ${note}`, before, after, requestId });
     const fresh = (await tx.select().from(actions).where(eq(actions.id, id)).limit(1))[0];
@@ -195,6 +210,15 @@ export async function stepAction(a: Actor, id: string, step: ActionStep, input: 
       if (block) return { ok: false as const, error: block, status: 403 };
       next = "closed";
       Object.assign(patch, { verifiedBy: a.email, verifiedAt: now, closedAt: now });
+      if (r.effectivenessDays > 0) {
+        let templateId: string | null = null; const questionIds: string[] = [];
+        if (r.sourceType === "inspection" && r.sourceId) {
+          const [iid, qid] = r.sourceId.split(":");
+          templateId = (await tx.select({ t: inspections.templateId }).from(inspections).where(and(eq(inspections.companyId, a.tenant), eq(inspections.id, iid))).limit(1))[0]?.t ?? null;
+          if (qid) questionIds.push(qid);
+        }
+        patch.effectiveness = { days: r.effectivenessDays, due: addDaysIso(now, r.effectivenessDays), status: "pending", templateId, questionIds } satisfies Effectiveness;
+      }
     } else if (step === "return" || step === "reopen") {
       if (!isSupervisor(a)) return { ok: false as const, error: "A supervisor sends actions back.", status: 403 };
       if (step === "return" && r.status !== "awaiting_verification") return { ok: false as const, error: "Only an action awaiting verification can be sent back.", status: 409 };
@@ -202,6 +226,23 @@ export async function stepAction(a: Actor, id: string, step: ActionStep, input: 
       if (!note) return { ok: false as const, error: "Add a note saying what still needs doing.", status: 400 };
       next = "in_progress";
       Object.assign(patch, { verifiedBy: null, verifiedAt: null, closedAt: null });
+      if (step === "reopen") patch.reopenCount = r.reopenCount + 1;
+    } else if (step === "effective" || step === "ineffective") {
+      const eff = r.effectiveness as Effectiveness | null;
+      if (r.status !== "closed" || !eff || (eff.status !== "pending" && eff.status !== "due")) return { ok: false as const, error: "There's no effectiveness check waiting on this action.", status: 409 };
+      const block = effectivenessBlocker(a, current);
+      if (block) return { ok: false as const, error: block, status: 403 };
+      if (note.length < 10) return { ok: false as const, error: "Say what you checked (at least a sentence).", status: 400 };
+      const done: Effectiveness = { ...eff, status: step, checkedAt: now.toISOString(), by: a.email, note };
+      if (step === "effective") {
+        await tx.update(actions).set({ effectiveness: done, updatedAt: now }).where(eq(actions.id, id));
+        await tx.insert(actionEvents).values({ companyId: a.tenant, actionId: id, kind: "effectiveness", status: null, by: a.email, note: `Effective: ${note}` });
+        await record(tx, a.tenant, { actor: a.email, action: "action.effective", entityType: "action", entityId: id, summary: `${r.ref}: effectiveness check passed`, after: { effectiveness: "effective", note }, requestId });
+        const fresh0 = (await tx.select().from(actions).where(eq(actions.id, id)).limit(1))[0];
+        return { ok: true as const, value: (await view(tx, a.tenant, [fresh0]))[0] };
+      }
+      next = "in_progress";
+      Object.assign(patch, { effectiveness: done, verifiedBy: null, verifiedAt: null, closedAt: null, reopenCount: r.reopenCount + 1 });
     } else {
       return { ok: false as const, error: "Unknown step.", status: 400 };
     }

@@ -17,7 +17,7 @@ import { defaultRolesForPlatformRole, type Actor, type Role, type TenantKind } f
 import { adminEmails, findAdmin, INSTITUTION } from "@/institution";
 import { DEMO_COMPANY, personaFor } from "@/lib/demo/personas";
 import { members } from "@/lib/db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 /** The headers proxy.ts sets (and strips from every incoming request). */
 export const H = {
@@ -77,6 +77,8 @@ export const getActor = cache(async (): Promise<Actor | null> => {
 export async function resolveActor(info: RequestInfo): Promise<Actor> {
   return withTenant(info.tenant, async (tx) => {
     await ensureCompany(tx, info.tenant, info.tenantName, info.kind);
+    // Cache the plan the platform signed into this session, for the REST API (lib/planCache.ts).
+    if (info.kind === "company" && info.plan) { const v = JSON.stringify({ standing: info.plan.standing, trialEndsAt: info.plan.trialEndsAt ?? null }); await tx.execute(sql`update companies set plan = ${v}::jsonb, plan_seen_at = now() where company_id = ${info.tenant} and plan is distinct from ${v}::jsonb`); }
     let m = await findMember(tx, info.tenant, info.email);
     if (!m) {
       let roles: Role[] | null;

@@ -10,14 +10,14 @@ import { units } from "@/lib/db/schema";
 import { record } from "@/lib/audit";
 import { can, type Actor } from "@/lib/roles";
 import { ensureUnits, loadSettings, writeSettings } from "@/lib/company";
-import { cleanSettings, plural } from "@/lib/settings";
+import { cleanSettings, ENTITY_LABEL, plural } from "@/lib/settings";
 import { SECTORS, type Sector } from "@/lib/templates/model";
 import { libraryEntry } from "@/lib/templates/library";
 import { insertTemplate, publishIn } from "@/lib/templates/store";
 import { createScorecardIn, } from "@/lib/scorecards/store";
 import { scorecards } from "@/lib/db/schema";
 
-export interface SetupInput { sector?: unknown; unitLabel?: unknown; unitPlural?: unknown; groupLabel?: unknown; itemLabel?: unknown; locations?: unknown; templates?: unknown; scorecard?: unknown }
+export interface SetupInput { sector?: unknown; unitLabel?: unknown; unitPlural?: unknown; groupLabel?: unknown; entityLabel?: unknown; itemLabel?: unknown; locations?: unknown; templates?: unknown; scorecard?: unknown }
 
 const clean = (v: unknown, n: number) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 
@@ -45,7 +45,7 @@ export async function applySetup(a: Actor, input: SetupInput, requestId?: string
   const scorecardKey = clean(input.scorecard, 60);
   return withTenant(a.tenant, async (tx) => {
     const before = await loadSettings(tx, a.tenant);
-    const next = cleanSettings({ ...before, sector, unitLabel, unitPlural: clean(input.unitPlural, 30) || plural(unitLabel), groupLabel: clean(input.groupLabel, 30) || "Region", itemLabel: clean(input.itemLabel, 30) || before.itemLabel, setupDone: true, scorecard: !!scorecardKey || before.scorecard });
+    const next = cleanSettings({ ...before, sector, unitLabel, unitPlural: clean(input.unitPlural, 30) || plural(unitLabel), groupLabel: clean(input.groupLabel, 30) || "Region", entityLabel: clean(input.entityLabel, 30) || ENTITY_LABEL[sector] || before.entityLabel, itemLabel: clean(input.itemLabel, 30) || before.itemLabel, setupDone: true, scorecard: !!scorecardKey || before.scorecard });
     await writeSettings(tx, a.tenant, next, a.email);
     const ids = await ensureUnits(tx, a.tenant, locations.map((l) => l.name));
     for (const l of locations) if (l.group) await tx.update(units).set({ region: l.group }).where(eq(units.id, ids.get(l.name)!));
