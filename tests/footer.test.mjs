@@ -10,7 +10,7 @@ test("the footer reads the suite's two lines", () => {
   const brand = read("components/Brand.tsx");
   assert.ok(brand.includes("Pulsus Quality · {FOOTER_SUITE}"));
   assert.ok(brand.includes('"Part of the Pulsus Intelligence Suite"'));
-  assert.ok(brand.includes('"A product of Tumblehill Labs, a product studio of Tumblehill Holdings LLC"'));
+  assert.ok(brand.includes('"A product of Tumblehill Labs, a product studio of Tumblehill Holdings LLC."'));
   for (const f of ["components/Shell.tsx", "components/account/AccountFrame.tsx"]) assert.ok(read(f).includes("<FooterLines"), f);
 });
 
