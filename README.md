@@ -1,143 +1,43 @@
-# Pulsus Quality — Branch Defects & Operational Standard Tracker
+# Pulsus Quality
 
-A Next.js app for branch audit data, styled to match Pulsus Risk
-(`n1kk1andie/My-Risk`): Sora + IBM Plex Sans, brand red
-(`#E4012B`), card/hero language, RAG (red/amber/green) status, heatmaps and
-bottom-tab navigation. A top toggle switches between two datasets that share the
-same **Pulse / Heatmap / Register** screens.
+Branch and operational quality, inspections and corrective actions, for multi-site organisations. Part of the Pulsus suite. **Live. Signal. Clarity.**
 
-Data, uploads and admin auth are backed by a **proper server**: Next.js API
-routes with **Vercel Blob** persistence and server-side (scrypt + signed-cookie)
-authentication.
+- **Pulse:** defect rate, defects found, resolved and recurring, the trend, every branch and process area; or the Operational Standard scorecard against its target, with audit grades.
+- **Register:** the counts behind every rate (sortable, CSV/Excel) and each published defect, which supervisors resolve or turn into actions.
+- **History:** branch × month heat-maps of the defect, resolution and recurring rates, and branch × process area.
+- **Insights:** the branch watchlist, the resolution gap, recurring-issue detection (preventive actions, send to Pulsus Risk), systemic recurring, scorecard vs defects.
+- **Review:** inspectors key reviews against their checklist on a phone (saved on the device as they type); a different supervisor approves or returns them.
+- **Actions:** corrective and preventive actions with owner, due date, root cause and evidence, verified by someone who didn't raise, own or submit them.
+- **Report:** the executive report, printable to PDF, with PMAS to date.
+- **Settings:** the suite's grouped settings (plan and trial, company set-up, colour bands, people and roles, data and uploads, how it's measured, integrations, change history, approvals, appearance, about, help).
 
-## The two datasets
+## Architecture
 
-| Toggle | Headline metric | Shape |
-|---|---|---|
-| **Branch Defects** | Defect rate (lower is better) | branches × process areas × months |
-| **Operational Standard** | Operational Standard Score (higher is better) | branches × 9 scores × months |
+- Next.js 16 (App Router, `proxy.ts`), React 19, TypeScript.
+- Postgres via Drizzle (`lib/db/schema.ts`, migrations in `drizzle/`, embedded by `scripts/embed-migrations.mjs`). Neon in production; PGlite locally and in the tests.
+- **Tenancy:** every table carries `company_id`; row-level security admits only the transaction's company (`lib/db/client.ts withTenant`), as the `quality_app` role. The institution is tenant `_own`; the demo `_demo`.
+- **People:** the Pulsus Platform session (company members, or the institution's staff on its allow-list). Quality roles per member: admin, supervisor, inspector, branch manager, viewer, optionally scoped to units. No shared passwords.
+- **Change history:** every change, with before → after, hash-chained per company and append-only (`lib/audit.ts`, `lib/auditchain.ts`).
+- Evidence in private Blob storage, hashed (`lib/evidence.ts`).
+- The pure figures (`lib/metrics.ts`, `lib/bands.ts`, `lib/scorecard.ts`) are shared by the server and the browser.
 
-### The owner's own institution: `institution/`
-
-Everything that names or identifies this deployment's own institution — its
-name, email domain and default supervisor, named administrators, branch-name
-spellings, the bundled history workbooks (`institution/seed-*.json`) and their
-converters (`institution/scripts/`) — lives in `institution/` and nowhere else.
-It is read on the server only, and only for this deployment's own tenant: a
-Pulsus platform company gets neutral defaults, and a demo build does not compile
-the folder at all.
-
-### Screens (both datasets)
-
-- **Pulse** — headline hero, KPI cards, RAG-coloured monthly trend, and
-  breakdowns. The Operational Standard Pulse also shows an **Audit Grades by
-  Month** stacked bar (grades derived from the mixed-scale audit score — 2024's
-  1–5 scale and the 2025+ A–D scale).
-- **Heatmap** — Branch × Month, switchable across each dataset's metrics.
-- **Register** — per-branch (or per-process-area) table, sortable, with totals.
-- **Actions** (officers, supervisors, admins) — the corrective-action register.
-  A supervisor raises an action against a branch (optionally one process area)
-  with a priority, owner and due date — from **+ New action**, or **Raise action**
-  on any defect list. The branch's officers mark it in progress, then submit it
-  with a closure note and evidence files. A *different* supervisor verifies and
-  closes it, or sends it back with a note; a closed action can be reopened.
-  Overdue actions are flagged, officers see only their own branch, and every step
-  is kept in the action's audit trail.
-- **Settings** (admin) — download/upload the dataset workbook and change the
-  admin password.
-
-Global filters (year, branch, and — for Branch Defects — process area) apply
-across all tabs. The header ⤓ button exports the current filtered scope to CSV.
-
-Data-quality handling (see `lib/xlsx.ts` / `institution/scripts/`): the mislabeled `Month`
-column is dropped (month derived from `Period`), percentages are recomputed from
-raw counts, the overall Operational Standard Score is shown as untracked before
-May 2025, and empty future placeholder months are excluded from trends.
-
-## Backend
-
-- **`GET /api/data`** — the two datasets (from Blob if uploaded, else the bundled
-  seed) plus per-dataset `uploaded` flags. Rendered server-side on first paint.
-- **`GET /api/file?dataset=…`** — download the current workbook as `.xlsx`.
-- **`POST /api/upload`** (admin) — upload an `.xlsx` (raw body). The dataset type
-  is auto-detected from the headers, parsed server-side (SheetJS), and persisted
-  to Blob (`defects.json`/`opstd.json` + the workbook). `?reset=…` restores the
-  bundled seed.
-- **`POST /api/login` · `GET /api/login` · `POST /api/logout`** — sign in / status
-  / sign out. A valid password is exchanged for an httpOnly, signed session cookie.
-- **`POST /api/password`** (admin) — change the admin password (scrypt-hashed and
-  persisted to Blob; takes precedence over the fallback).
-- **`GET /api/actions` · `POST /api/actions`** — list the corrective actions the
-  session may see; `op` = `create` / `edit` (supervisor, admin), `start` /
-  `submit` (the branch's officers or a supervisor), `verify` / `return` /
-  `reopen` (supervisor, admin — never the submitter), `delete` (admin). Persisted
-  to Blob as `actions.json`; rules live in `lib/actions.ts`.
-
-Storage adapter (`lib/storage.ts`): **Vercel Blob** when `BLOB_READ_WRITE_TOKEN`
-is present (production), otherwise a local `./.data` folder for `next dev`.
-
-## Configuration
-
-Set these in Vercel (see `.env.example`):
-
-| Var | Purpose |
-|---|---|
-| `SESSION_SECRET` | **Required.** Signs the session cookie. `openssl rand -base64 32`. In production the app refuses to serve or sign anyone in without it. |
-| `ADMIN_PASSWORD` | Admin password, until one is set in-app. There is no built-in default. |
-| `SUPERVISOR_PASSWORD` · `OFFICER_PASSWORD` | Shared Supervisor / Officer sign-in passwords, until set in-app. No built-in default. |
-| `ADMIN_EMAILS` | **Optional.** Extra addresses that may unlock admin as themselves, unioned with the roster in `config/admins.ts`. |
-| `BLOB_READ_WRITE_TOKEN` | Injected automatically when you connect a Vercel Blob store. |
-
-There are no built-in passwords: sign-in fails closed. A role (Admin, Supervisor,
-Officer) with neither an in-app password nor its env var cannot sign in, and the
-sign-in says "Ask your administrator to set a password". A password changed in-app
-(Settings) is persisted as a scrypt hash and takes precedence over the env var.
-
-### Named administrators
-
-`institution/index.ts` (`ADMINS`) lists the people who may unlock admin with the account they
-are already signed in as, instead of typing the shared password — the admin
-sign-in offers them "Continue as <name>". The same roster, word for word, lives
-in the sibling Pulsus apps, so the same people are administrators everywhere. Edit the file and redeploy.
-
-Being on the roster is permission to *ask*, not admin: nothing is granted until
-the person presses the button, the address is read from their verified session
-rather than anything the browser sends, and `resolveRole()` still never returns
-`admin`, so signing in with Microsoft does not by itself make anyone one.
+Docs: [migration](docs/migration.md) · [platform feed](docs/platform-feed.md) · [Pulsus Risk contract](docs/risk-contract.md).
 
 ## Develop
 
-```bash
+```
 npm install
-cp .env.example .env.local        # set ADMIN_PASSWORD (no default); Blob token optional (uses ./.data)
-npm run dev                        # http://localhost:3000
-npm run build                      # production build
-npm run typecheck
+npm run dev                         # http://localhost:3000 (needs a platform session; or:)
+DEMO_MODE=1 npm run dev             # the demo, straight in
+npm test                            # unit and database tests (PGlite, row-level security on)
+DEMO_MODE=1 npm test
+A11Y_BASE=http://localhost:3652 npm run test:a11y   # axe, WCAG 2.2 AA, against a running demo build
 ```
 
-Sign in to Settings with the `ADMIN_PASSWORD` you set in `.env.local`.
+Change the schema in `lib/db/schema.ts`, then `npm run db:generate` and `node scripts/embed-migrations.mjs`.
 
-## Regenerating the seed from spreadsheets
+## The institution
 
-```bash
-pip install openpyxl
-python3 institution/scripts/convert.py       Branch_Defects_Consolidated.xlsx        > institution/seed-defects.json
-python3 institution/scripts/convert_opstd.py Operational_Standards_Consolidated.xlsx > institution/seed-opstd.json
-```
+Everything that identifies the owner's own institution lives in `institution/` (server only, its own tenant only). A demo build aliases it to `demo-institution/`.
 
-## Structure
-
-```
-app/
-  layout.tsx · page.tsx · globals.css     # shell, fonts, server-loaded initial data
-  api/{data,file,upload,login,logout,password,actions}/route.ts
-components/TrackerApp.tsx                  # client shell; mounts the render engine
-lib/
-  engine.js                               # UI rendering (Pulse/Heatmap/Register/Settings)
-  storage.ts · auth.ts · data.ts · xlsx.ts
-  actions.ts                              # corrective actions: lifecycle + permissions
-institution/                               # the owner's own institution (server-only, own tenant only)
-  index.ts                                # name, email domain, supervisors, admin roster, key names
-  data.ts · seed-defects.json · seed-opstd.json
-  scripts/convert.py · convert_opstd.py   # xlsx → seed JSON
-```
+© 2026 Tumblehill Holdings LLC

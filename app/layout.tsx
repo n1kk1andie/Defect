@@ -1,42 +1,33 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { BackToCommandCenter } from "@/components/BackToCommandCenter";
 
 export const metadata: Metadata = {
+  title: "Pulsus Quality",
+  description: "Pulsus Quality: branch and operational quality, inspections and corrective actions. Live. Signal. Clarity.",
   applicationName: "Pulsus Quality",
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, statusBarStyle: "default", title: "Pulsus Quality" },
-  icons: { icon: "/pulsus-quality-icon.png", shortcut: "/pulsus-quality-icon.png", apple: "/pulsus-quality-icon.png" },
-  title: "Pulsus Quality — Branch Defects & Operational Standard",
-  description: "Pulsus Quality branch audit defects and operational standard tracker.",
+  icons: { icon: "/pulsus-quality-icon.png", apple: "/pulsus-quality-icon.png" },
+  robots: { index: false, follow: false },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  themeColor: [{ media: "(prefers-color-scheme: light)", color: "#F6EFE4" }, { media: "(prefers-color-scheme: dark)", color: "#0A0F2C" }],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Day or night before first paint: the visitor's choice ("pz-theme", shared with Pulsus Platform), else the device's. */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem("pz-theme");if(t!=="dark"&&t!=="light")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;}catch(e){}})();` }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
-          rel="stylesheet"
-        />
+        <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
       </head>
-      <body>
-        <BackToCommandCenter />
-        {children}
-        <footer style={{ textAlign: "center", fontSize: "10.5px", lineHeight: 1.5, color: "#B7ADA8", padding: "18px 16px calc(96px + env(safe-area-inset-bottom))" }}>
-          <div style={{ fontWeight: 600, color: "#8A7F7A" }}>Live. <span style={{ color: "#D40109" }}>Signal.</span> Clarity.</div>
-          <div>Pulsus Quality · Tumblehill Labs, a studio of Tumblehill Holdings</div>
-          <div>© 2026 Tumblehill Holdings LLC</div>
-        </footer>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

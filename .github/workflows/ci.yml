@@ -1,0 +1,76 @@
+# Checks on every pull request and every push to the live and demo branches:
+# the build and the test suite in live and demo mode, the accessibility check
+# (axe, WCAG 2.2 AA) against a running demo build, and a dependency audit.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [claude/build-tracker-xq65z0, claude/demo-environment]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and tests (${{ matrix.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [live, demo]
+    env:
+      DEMO_MODE: ${{ matrix.mode == 'demo' && '1' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
+      - name: Tests
+        run: npm test
+
+  a11y:
+    name: Accessibility (axe, WCAG 2.2 AA)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DEMO_MODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm install --no-save playwright@1.63.0 && npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Start the demo build
+        run: |
+          (npx next start -p 3652 > server.log 2>&1 &)
+          for i in $(seq 1 60); do curl -sf http://localhost:3652/api/health > /dev/null && break; sleep 1; done
+      - name: axe
+        run: A11Y_BASE=http://localhost:3652 npm run test:a11y
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: npm audit (runtime dependencies, fail on high)
+        run: npm audit --omit=dev --audit-level=high
