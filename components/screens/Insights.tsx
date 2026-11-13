@@ -11,8 +11,10 @@ import { RaiseAction } from "@/components/screens/RaiseAction";
 import { byUnit, monthLabel, num, pct, pearson, recurringIssues, resolutionGap, scMean, scRows, score, systemicRecurring, watchlist, type RecurringIssue } from "@/lib/metrics";
 import { can } from "@/lib/roles";
 import { Icon } from "@/components/icons";
+import Link from "next/link";
+import type { InspectionStats } from "@/lib/inspectionStats";
 
-export function Insights() {
+export function Insights({ inspections }: { inspections?: InspectionStats }) {
   const app = useApp();
   const { data, settings, filters, band, actor } = app;
   const f = { year: filters.year, unit: -1, area: -1 };
@@ -96,6 +98,7 @@ export function Insights() {
           </div>
         </div>
       )}
+      {inspections && inspections.total > 0 && <InspectionInsights s={inspections} />}
       {prevent && <RaiseAction onClose={() => setPrevent(null)} preset={{ kind: "preventive", unitId: data.units[prevent.unit]?.id, areaId: data.areas[prevent.area]?.id, title: `Stop “${prevent.nature}” recurring`, rootCause: `Recurring: ${prevent.nature} at ${prevent.unitName} (${prevent.areaName}) for ${prevent.streak} months running, ${prevent.defects} defects.`, priority: "high", sourceType: "recurring", sourceId: `${data.units[prevent.unit]?.id}|${data.areas[prevent.area]?.id}|${prevent.nature}` }} />}
       {risk && <SendToRisk issue={risk} onClose={() => setRisk(null)} />}
     </>
@@ -127,5 +130,48 @@ function SendToRisk({ issue, onClose }: { issue: RecurringIssue; onClose: () => 
       <label className="field"><span>Description</span><textarea className="textarea" value={note} onChange={(e) => setNote(e.target.value)} /></label>
       <Msg kind={res?.kind}>{res?.text}</Msg>
     </Sheet>
+  );
+}
+
+/** What inspections say: the questions that fail most, and the sites and templates by score. */
+function InspectionInsights({ s }: { s: InspectionStats }) {
+  const { settings } = useApp();
+  const tone = (v: number | null) => (v == null ? "none" : v >= 95 ? "worldClass" : v >= 90 ? "strong" : v >= 85 ? "healthy" : v >= 80 ? "watch" : v >= 70 ? "attention" : "escalate");
+  const max = Math.max(1, ...s.questions.map((q) => q.fails));
+  return (
+    <div className="stack mt2">
+      <div className="row between wrap"><h2 className="h2" style={{ fontSize: 19 }}>Inspections</h2><span className="sub">{s.total} approved since {monthLabel(s.since)} · <Link href="/inspect">all inspections</Link></span></div>
+      <div className="grid g-2-1">
+        <Card title="Most-failed questions" sub="Across every approved inspection and sampled file, by how often each question failed">
+          {s.questions.length ? (
+            <ol className="list" aria-label="Most-failed questions">
+              {s.questions.map((q, i) => (
+                <li key={i} style={{ alignItems: "flex-start" }}>
+                  <span className={`rank${i === 0 ? " first" : ""}`} aria-hidden="true">{i + 1}</span>
+                  <span className="grow" style={{ minWidth: 0 }}>
+                    <strong>{q.label}</strong>{q.critical && <span className="pill sm" data-band="escalate" style={{ marginLeft: 6 }}>Critical</span>}
+                    <span className="sub" style={{ display: "block", fontSize: 12.5 }}>{q.template} · failed {q.fails} of {q.asked} ({pct(q.rate)}) · {q.sites.slice(0, 4).join(", ")}{q.sites.length > 4 ? "…" : ""}</span>
+                    <span className="bar" style={{ display: "block", marginTop: 6, maxWidth: 360 }} aria-hidden="true"><i style={{ width: `${(q.fails / max) * 100}%`, background: q.critical ? "var(--b-escalate)" : "var(--b-attention)" }} /></span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : <Empty icon="check" title="Nothing has failed" />}
+        </Card>
+        <Card title={`${settings.unitPlural} by inspection score`} sub="Lowest average first">
+          <ol className="list" aria-label={`${settings.unitPlural} by inspection score`}>
+            {s.sites.map((x, i) => (
+              <li key={x.unitId}><span className={`rank${i === 0 ? " first" : ""}`} aria-hidden="true">{i + 1}</span><span className="grow"><strong>{x.name}</strong><span className="sub" style={{ display: "block", fontSize: 12.5 }}>{x.n} inspections · {x.failed} failed{x.critical ? ` · ${x.critical} critical` : ""}</span></span><BandPill band={tone(x.avg)}>{x.avg == null ? "—" : `${x.avg.toFixed(1)}%`}</BandPill></li>
+            ))}
+          </ol>
+        </Card>
+      </div>
+      <Card title="By template" flush>
+        <div className="tablewrap" tabIndex={0} role="region" aria-label="Inspection results by template">
+          <table className="t stack"><thead><tr><th scope="col">Template</th><th scope="col" className="num">Inspections</th><th scope="col" className="num">Average score</th><th scope="col" className="num">Passed</th></tr></thead>
+            <tbody>{s.templates.map((t) => <tr key={t.id}><td data-label="Template">{t.name}</td><td data-label="Inspections" className="num">{t.n}</td><td data-label="Average score" className="num"><BandPill band={tone(t.avg)}>{t.avg == null ? "—" : `${t.avg.toFixed(1)}%`}</BandPill></td><td data-label="Passed" className="num">{pct(t.passRate)}</td></tr>)}</tbody></table>
+        </div>
+      </Card>
+    </div>
   );
 }

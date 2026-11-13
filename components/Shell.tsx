@@ -14,14 +14,18 @@ import { ROLE_INFO, isAdmin } from "@/lib/roles";
 import { PERSONAS } from "@/lib/demo/personas";
 import DemoGuard from "@/components/DemoGuard";
 
-export const NAV: { href: string; label: string; icon: IconName; badge?: "approvals" | "verify" }[] = [
+type Badge = "approvals" | "verify" | "inspections";
+export const NAV: { href: string; label: string; icon: IconName; badge?: Badge; build?: boolean }[] = [
   { href: "/", label: "Pulse", icon: "pulse" },
+  { href: "/inspect", label: "Inspect", icon: "clipboard", badge: "inspections" },
+  { href: "/review", label: "Review", icon: "review", badge: "approvals" },
+  { href: "/actions", label: "Actions", icon: "actions", badge: "verify" },
   { href: "/register", label: "Register", icon: "register" },
   { href: "/history", label: "History", icon: "history" },
   { href: "/insights", label: "Insights", icon: "insights" },
-  { href: "/review", label: "Review", icon: "review", badge: "approvals" },
-  { href: "/actions", label: "Actions", icon: "actions", badge: "verify" },
   { href: "/report", label: "Report", icon: "report" },
+  { href: "/templates", label: "Templates", icon: "layers", build: true },
+  { href: "/scorecards", label: "Scorecards", icon: "target", build: true },
   { href: "/settings", label: "Settings", icon: "settings" },
 ];
 
@@ -120,15 +124,16 @@ export function Shell({ children }: { children: ReactNode }) {
   const app = useApp();
   const path = usePathname() || "/";
   const on = (href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(href + "/"));
-  const current = [...NAV, { href: "/more", label: "More" }].find((n) => on(n.href))?.label || "Pulse";
+  const current = [...NAV, { href: "/more", label: "More" }, { href: "/setup", label: "Set up" }].find((n) => on(n.href))?.label || "Pulse";
   const li = lastActive(app.data);
   const latest = li >= 0 ? monthLabel(app.data.periods[li]) : null;
   const modeLabel = app.filters.mode === "standard" && app.data.scorecard ? app.data.scorecard.name : `${app.settings.unitLabel} Defects`;
   const context = ["Pulse", "Register", "History"].includes(current) ? `${modeLabel}${latest ? ` · latest data ${latest}` : ""}` : app.actor.tenantName;
-  const badge = (b?: "approvals" | "verify") => (b === "approvals" ? app.counts.awaitingApproval : b === "verify" ? app.counts.awaitingVerification : 0);
-  const main = NAV.filter((n) => n.href !== "/settings");
-  const tabs = [NAV[0], NAV.find((n) => n.href === "/review")!, NAV.find((n) => n.href === "/actions")!, NAV.find((n) => n.href === "/insights")!, { href: "/more", label: "More", icon: "more" as IconName }];
-  const moreOn = ["/register", "/history", "/report", "/settings", "/more"].some(on);
+  const badge = (b?: Badge) => (b === "approvals" ? app.counts.awaitingApproval : b === "verify" ? app.counts.awaitingVerification : b === "inspections" ? app.counts.awaitingInspections : 0);
+  const main = NAV.filter((n) => n.href !== "/settings" && !n.build);
+  const build = NAV.filter((n) => n.build && (n.href === "/templates" || isAdmin(app.actor)));
+  const tabs = [NAV[0], NAV.find((n) => n.href === "/inspect")!, NAV.find((n) => n.href === "/actions")!, NAV.find((n) => n.href === "/insights")!, { href: "/more", label: "More", icon: "more" as IconName }];
+  const moreOn = ["/register", "/history", "/report", "/review", "/templates", "/scorecards", "/settings", "/more"].some(on);
   const initial = (app.actor.name || app.actor.email).trim().charAt(0).toUpperCase();
   return (
     <div className="shell">
@@ -153,6 +158,8 @@ export function Shell({ children }: { children: ReactNode }) {
               </Link>
             );
           })}
+          <span className="nav-label">Build</span>
+          {build.map((n) => <Link key={n.href} href={n.href} aria-current={on(n.href) ? "page" : undefined}><Icon name={n.icon} /><span>{n.label}</span></Link>)}
           <span className="nav-label">Organisation</span>
           <Link href="/settings" aria-current={on("/settings") ? "page" : undefined}><Icon name="settings" /><span>Settings</span></Link>
           {!app.demo && <a href={app.platformUrl} target="_top"><Icon name="globe" /><span>Back to Pulsus</span></a>}
@@ -186,6 +193,12 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <TrialBanner />
+        {isAdmin(app.actor) && app.actor.kind === "company" && !app.settings.setupDone && !path.startsWith("/setup") && (
+          <div className="trialbanner" role="region" aria-label="Set up"><div className="trialbanner-in" style={{ background: "var(--info-tint)", color: "var(--info-ink)", borderColor: "transparent" }}>
+            <p>Welcome. Set up in a few minutes: your sector, what you call your sites, your locations, and starter checklists.</p>
+            <Link className="btn primary sm" href="/setup">Start set-up</Link>
+          </div></div>
+        )}
         <main id="main" className="main" tabIndex={-1}>{children}</main>
         <footer className="foot">
           <span>Pulsus Quality · {app.actor.tenantName}{app.demo ? " (fictional sample data)" : ""}</span>
@@ -195,7 +208,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <nav className="tabbar" aria-label="Main">
         {tabs.map((n) => {
           const active = n.href === "/more" ? moreOn : on(n.href);
-          const count = badge((n as { badge?: "approvals" | "verify" }).badge);
+          const count = badge((n as { badge?: Badge }).badge);
           return (
             <Link key={n.href} href={n.href} aria-current={active ? "page" : undefined}>
               <Icon name={n.icon} />

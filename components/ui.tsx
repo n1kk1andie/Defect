@@ -89,9 +89,9 @@ export function Select({ label, value, onChange, options, hideLabel = true, id }
   );
 }
 
-export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
+export function Field({ label, children, hint, className = "" }: { label: string; children: ReactNode; hint?: string; className?: string }) {
   return (
-    <label className="field">
+    <label className={`field ${className}`}>
       <span>{label}</span>
       {children}
       {hint && <small className="sub" style={{ display: "block", marginTop: 4 }}>{hint}</small>}

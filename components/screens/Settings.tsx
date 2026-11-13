@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 // Settings: one organisation, grouped, drill-down (the Pulsus suite standard).
 // A menu of groups; each row shows its current state in one line and opens its
 // own page with a Back control and a deep link (#settings-<id>). Viewers see
@@ -6,6 +7,7 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, useApp } from "@/components/app-context";
 import { BandPill, Card, Empty, Field, fmtDate, fmtDateTime, Msg, PageHead } from "@/components/ui";
+import { SECTOR_INFO } from "@/lib/templates/model";
 import { Icon, type IconName } from "@/components/icons";
 import { BANDS, CUT_KEYS, FAMILIES, cutoffsFor, legend, type Cutoffs, type FamilyKey, AUDIT_GRADES } from "@/lib/bands";
 import { ROLES, ROLE_INFO, can, isAdmin, type Role } from "@/lib/roles";
@@ -174,6 +176,7 @@ function SetupPage() {
   );
   return (
     <div className="stack">
+      <Card title="Set-up wizard" sub={`Sector: ${SECTOR_INFO[settings.sector].label}. Choose a sector, name your sites, add locations by pasting a list, and pick starter checklists and a scorecard. It only adds.`} actions={<Link className="btn sm primary" href="/setup"><Icon name="play" />Open the wizard</Link>}><span className="sub">Checklists are built under <Link href="/templates">Templates</Link>; the monthly score under <Link href="/scorecards">Scorecards</Link>.</span></Card>
       <Card title="Labels" sub="What your company calls things. Every screen follows them.">
         <div className="grid g4" style={{ gap: 0, columnGap: 12 }}>
           <Field label="A unit is a"><input className="input" value={labels.unitLabel} onChange={(e) => setLabels({ ...labels, unitLabel: e.target.value })} /></Field>
@@ -358,8 +361,8 @@ function DataPage({ s }: { s: SettingsData }) {
       <Card title="Upload a workbook" sub="The consolidated Branch Defects or Operational Standards workbook. It replaces the imported history of that kind after you confirm; published reviews are kept.">
         <div className="row wrap">
           <label className="btn"><Icon name="upload" />Choose a workbook (.xlsx)<input type="file" accept=".xlsx" className="sr" onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; run(async () => { const fd = new FormData(); fd.append("file", f); const r = await api<{ preview: UploadPreview }>("/api/import", "POST", fd); setUp(r.preview); setUpOk(false); }); e.target.value = ""; }} /></label>
-          <a className="btn ghost" href="/api/templates?what=defects"><Icon name="download" />Branch Defects template</a>
-          <a className="btn ghost" href="/api/templates?what=opstd"><Icon name="download" />Operational Standards template</a>
+          <a className="btn ghost" href="/api/workbooks?what=defects"><Icon name="download" />Branch Defects template</a>
+          <a className="btn ghost" href="/api/workbooks?what=opstd"><Icon name="download" />Operational Standards template</a>
         </div>
         {up && (
           <div className="mt">
