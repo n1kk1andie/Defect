@@ -1,48 +1,39 @@
-// Pluggable storage for persisted objects (uploaded datasets + admin credential).
+// Private object storage: Vercel Blob in production (BLOB_READ_WRITE_TOKEN, or
+// a connected store's token under another name), the local disk (.data/blob)
+// in development and the tests. Since the move to Postgres it holds only
+// evidence files and photos, plus the legacy JSON the migrator reads.
 //
-// Driver is chosen by env:
-//   BLOB_READ_WRITE_TOKEN present -> vercel-blob  (production on Vercel)
-//   (none)                        -> local-fs     (./.data, dev only)
-//
-// Vercel's filesystem is read-only/ephemeral, so uploads must go to object storage
-// (Vercel Blob) to survive cold starts. Blobs are PRIVATE; reads use a short-lived
-// presigned GET URL.
-//
-// A Pulsus company's objects live under its own folder (companies/<id>/), so no
-// request made with a company session can read or write another's — or this
-// deployment's own — data.
-import { currentScope } from "@/lib/company";
+// A demo deployment prefixes every key with "demo/", so a demo handed the
+// wrong token could still never touch a production key.
 
 export interface StorageDriver {
   name: "vercel-blob" | "local-fs";
   read(key: string): Promise<Buffer | null>;
   write(key: string, buf: Buffer, contentType?: string): Promise<void>;
   remove(key: string): Promise<void>;
+  list(prefix: string): Promise<string[]>;
 }
 
-/** Vercel Blob R/W token — normally BLOB_READ_WRITE_TOKEN, but a connected store
- *  can expose it under another name; the value always starts with "vercel_blob_rw_". */
+/** Vercel Blob R/W token — normally BLOB_READ_WRITE_TOKEN; a connected store's value always starts "vercel_blob_rw_". */
 export function vercelBlobToken(): string | undefined {
   if (process.env.BLOB_READ_WRITE_TOKEN) return process.env.BLOB_READ_WRITE_TOKEN;
-  for (const v of Object.values(process.env)) {
-    if (typeof v === "string" && v.startsWith("vercel_blob_rw_")) return v;
-  }
+  for (const v of Object.values(process.env)) if (typeof v === "string" && v.startsWith("vercel_blob_rw_")) return v;
   return undefined;
 }
+
+const demo = () => (process.env.DEMO_MODE || "").trim() === "1";
+export const storageKey = (key: string) => (demo() ? `demo/${key}` : key);
 
 const vercelDriver: StorageDriver = {
   name: "vercel-blob",
   async read(key) {
-    const { issueSignedToken, presignUrl } = await import("@vercel/blob");
-    const token = vercelBlobToken();
+    const { get } = await import("@vercel/blob");
     try {
-      const signed = await issueSignedToken({ pathname: key, operations: ["get"], token });
-      const { presignedUrl } = await presignUrl(signed, { operation: "get", pathname: key, access: "private" });
-      const res = await fetch(presignedUrl, { cache: "no-store" });
-      if (!res.ok) return null;
-      return Buffer.from(await res.arrayBuffer());
+      const r = await get(key, { access: "private", token: vercelBlobToken() });
+      if (!r || !r.stream) return null;
+      return Buffer.from(await new Response(r.stream).arrayBuffer());
     } catch {
-      return null; // nothing stored yet
+      return null;
     }
   },
   async write(key, buf, contentType = "application/octet-stream") {
@@ -53,46 +44,67 @@ const vercelDriver: StorageDriver = {
     const { del } = await import("@vercel/blob");
     try { await del(key, { token: vercelBlobToken() }); } catch { /* already gone */ }
   },
+  async list(prefix) {
+    const { list } = await import("@vercel/blob");
+    const out: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const r = await list({ prefix, cursor, token: vercelBlobToken(), limit: 1000 });
+      out.push(...r.blobs.map((b) => b.pathname));
+      cursor = r.hasMore ? r.cursor : undefined;
+    } while (cursor && out.length < 20000);
+    return out;
+  },
 };
 
-function localDir(): string {
-  return process.env.DATA_DIR || ".data";
-}
+const localDir = () => process.env.DATA_DIR || ".data/blob";
 const localDriver: StorageDriver = {
   name: "local-fs",
   async read(key) {
-    const fs = await import("node:fs/promises");
-    const path = await import("node:path");
+    const fs = await import("node:fs/promises"), path = await import("node:path");
     try { return await fs.readFile(path.join(localDir(), key)); } catch { return null; }
   },
   async write(key, buf) {
-    const fs = await import("node:fs/promises");
-    const path = await import("node:path");
-    await fs.mkdir(path.dirname(path.join(localDir(), key)), { recursive: true });
-    await fs.writeFile(path.join(localDir(), key), buf);
+    const fs = await import("node:fs/promises"), path = await import("node:path");
+    const p = path.join(localDir(), key);
+    await fs.mkdir(path.dirname(p), { recursive: true });
+    await fs.writeFile(p, buf);
   },
   async remove(key) {
-    const fs = await import("node:fs/promises");
-    const path = await import("node:path");
+    const fs = await import("node:fs/promises"), path = await import("node:path");
     try { await fs.unlink(path.join(localDir(), key)); } catch { /* already gone */ }
+  },
+  async list(prefix) {
+    const fs = await import("node:fs/promises"), path = await import("node:path");
+    const root = localDir();
+    const out: string[] = [];
+    async function walk(dir: string) {
+      let ents: import("node:fs").Dirent[] = [];
+      try { ents = await fs.readdir(dir, { withFileTypes: true }); } catch { return; }
+      for (const e of ents) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) await walk(p);
+        else out.push(path.relative(root, p).split(path.sep).join("/"));
+      }
+    }
+    await walk(root);
+    return out.filter((k) => k.startsWith(prefix));
   },
 };
 
+/** The driver, with demo key namespacing applied. */
 export function getStorage(): StorageDriver {
   const base = vercelBlobToken() ? vercelDriver : localDriver;
-  const scope = currentScope();
-  if (!scope) return base;
   return {
     name: base.name,
-    read: (key) => base.read(scope + key),
-    write: (key, buf, contentType) => base.write(scope + key, buf, contentType),
-    remove: (key) => base.remove(scope + key),
+    read: (k) => base.read(storageKey(k)),
+    write: (k, b, t) => base.write(storageKey(k), b, t),
+    remove: (k) => base.remove(storageKey(k)),
+    list: async (p) => (await base.list(storageKey(p))).map((k) => (demo() ? k.replace(/^demo\//, "") : k)),
   };
 }
 
-/** Whether writes will actually persist. Local dev writes to disk fine; on Vercel the
- *  serverless filesystem is read-only, so a connected Blob store (its token) is required.
- *  Used to fail writes with a clear message instead of a raw read-only-filesystem 500. */
+/** Whether writes persist: on a hosted deployment a Blob store is required. */
 export function storageIsDurable(): boolean {
   return !!vercelBlobToken() || !process.env.VERCEL;
 }

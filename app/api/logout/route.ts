@@ -1,10 +1,13 @@
+// Sign out: clear the Pulsus session cookie here and on the shared .pulsus.tech
+// domain (where the platform set it), plus the demo persona.
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { SESSION_COOKIE } from "@/lib/auth";
 
-export const dynamic = "force-dynamic";
-
-export async function POST() {
-  cookies().delete(SESSION_COOKIE);
-  return NextResponse.json({ ok: true });
+export async function POST(req: Request) {
+  const res = NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
+  const host = (req.headers.get("host") || "").split(":")[0];
+  for (const name of ["exec_auth", "pq_persona"]) {
+    res.cookies.set(name, "", { path: "/", maxAge: 0 });
+    if (host.endsWith(".pulsus.tech")) res.cookies.set(name, "", { path: "/", maxAge: 0, domain: ".pulsus.tech" });
+  }
+  return res;
 }

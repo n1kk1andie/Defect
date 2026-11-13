@@ -1,57 +1,43 @@
-import { NextRequest, NextResponse } from "next/server";
-import { loadDatasets } from "@/lib/data";
-import { buildWorkbook, type Dataset } from "@/lib/xlsx";
-import { currentCompany } from "@/lib/company";
-import { loadProgram } from "@/lib/program";
+// Exports: ?what=register|history|actions|changes &format=csv|xlsx, scoped by
+// the same filters as the screen (year, unit, area, group, metric). Each export
+// is recorded in the change history.
+import { actorOr, json } from "@/lib/api";
+import { getDataset } from "@/lib/dataset";
+import { getSettings } from "@/lib/company";
+import { listActions } from "@/lib/actions";
+import { actionsTable, historyTable, registerTable } from "@/lib/exports";
+import { buildXlsx, toCsv } from "@/lib/workbook";
+import { history } from "@/lib/audit";
+import { withTenant } from "@/lib/db/client";
+import { record } from "@/lib/audit";
+import { can, inScope } from "@/lib/roles";
+import type { MetricKey } from "@/lib/metrics";
 
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 
-// Filtered Excel export: GET /api/export?dataset=defects|opstd&from=ISO&to=ISO&branch=&area=
-// `from`/`to` are inclusive ISO period dates (YYYY-MM-DD); branch/area are dataset indices
-// (-1 = all). Rows outside the range or scope are dropped before the workbook is built.
-export async function GET(req: NextRequest) {
-  const sp = req.nextUrl.searchParams;
-  const type = sp.get("dataset");
-  if (type !== "defects" && type !== "opstd") return NextResponse.json({ error: "Unknown dataset." }, { status: 400 });
-  const company = currentCompany();
-  if (company && type !== "defects") return NextResponse.json({ error: "Unknown dataset." }, { status: 400 });
-
-  const from = sp.get("from") || "";
-  const to = sp.get("to") || "";
-  const branch = parseInt(sp.get("branch") || "-1", 10);
-  const area = parseInt(sp.get("area") || "-1", 10);
-
-  const ds = await loadDatasets();
-  const payload = type === "defects" ? ds.defects : ds.opstd;
-  const periods: string[] = payload.periods;
-  const inRange = (pIdx: number) => {
-    const iso = periods[pIdx];
-    return (!from || iso >= from) && (!to || iso <= to);
-  };
-
-  let filtered: any;
-  if (type === "defects") {
-    const rows = payload.rows.filter(
-      (r: number[]) => inRange(r[0]) && (branch < 0 || r[1] === branch) && (area < 0 || r[2] === area),
-    );
-    filtered = { ...payload, rows };
-  } else {
-    const keep: boolean[] = payload.rows.map((r: any[]) => inRange(r[0]) && (branch < 0 || r[1] === branch));
-    const rows = payload.rows.filter((_: any, i: number) => keep[i]);
-    const auditRaw = (payload.auditRaw || []).filter((_: any, i: number) => keep[i]);
-    filtered = { ...payload, rows, auditRaw };
-  }
-
-  const labels = company ? { unit: (await loadProgram()).unitLabel, sheet: "Quality reviews" } : undefined;
-  const buf = buildWorkbook(type as Dataset, filtered, labels);
-  const tag = (from ? from.slice(0, 7) : "start") + "_to_" + (to ? to.slice(0, 7) : "end");
-  const name = (company ? "Quality_reviews_" : type === "defects" ? "Branch_Defects_" : "Operational_Standards_") + tag + ".xlsx";
-  return new NextResponse(new Uint8Array(buf), {
-    headers: {
-      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="${name}"`,
-      "Cache-Control": "no-store",
-    },
-  });
+export async function GET(req: Request) {
+  const g = await actorOr(); if ("response" in g) return g.response;
+  const a = g.actor;
+  const q = new URL(req.url).searchParams;
+  const what = q.get("what") || "register";
+  const format = q.get("format") === "xlsx" ? "xlsx" : "csv";
+  const settings = await getSettings(a.tenant);
+  const d = await getDataset(a.tenant);
+  // A person scoped to some units exports only those.
+  if (a.unitIds.length) { const keep = new Set(d.units.map((u, i) => (inScope(a, u.id) ? i : -1)).filter((i) => i >= 0)); d.rows = d.rows.filter((r) => keep.has(r[1])); }
+  const f = { year: q.get("year") || "all", unit: Number(q.get("unit") ?? -1), area: Number(q.get("area") ?? -1) };
+  let table;
+  if (what === "register") table = registerTable(d, f, q.get("group") === "area" ? "area" : "unit", settings.unitLabel);
+  else if (what === "history") table = historyTable(d, f, (["defectRate", "resolutionRate", "recurringRate"].includes(q.get("metric") || "") ? q.get("metric") : "defectRate") as MetricKey, settings.unitLabel);
+  else if (what === "actions") table = actionsTable(await listActions(a), (id) => d.areas.find((x) => x.id === id)?.name ?? "", settings.unitLabel);
+  else if (what === "changes") {
+    if (!can.manage(a)) return json({ error: "Admins export the change history." }, 403);
+    const h = await history(a.tenant, { limit: 2000 });
+    table = { name: "Change history", header: ["#", "When", "Who", "What", "Record", "Summary"], rows: h.map((x) => [x.seq, x.at, x.actor, x.action, `${x.entityType}${x.entityId ? ":" + x.entityId : ""}`, x.summary]) };
+  } else return json({ error: "Unknown export." }, 400);
+  await withTenant(a.tenant, (tx) => record(tx, a.tenant, { actor: a.email, action: "export", entityType: what, summary: `Exported ${table.name} (${format.toUpperCase()}, ${table.rows.length} rows)`, requestId: g.requestId }));
+  const stamp = new Date().toISOString().slice(0, 10);
+  const file = `pulsus-quality-${what}-${stamp}.${format}`;
+  const bytes = format === "xlsx" ? new Uint8Array(await buildXlsx([table])) : new TextEncoder().encode(toCsv(table.header, table.rows));
+  return new Response(bytes, { headers: { "Content-Type": format === "xlsx" ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${file}"`, "Cache-Control": "no-store" } });
 }
