@@ -38,6 +38,7 @@ const SCREENS = [
   { name: "settings: bands", path: "/settings#settings-bands", persona: ADMIN },
   { name: "settings: people", path: "/settings#settings-people", persona: ADMIN },
   { name: "settings: data", path: "/settings#settings-data", persona: ADMIN },
+  { name: "more", path: "/more" },
   { name: "sign-in", path: "/login" },
 ];
 

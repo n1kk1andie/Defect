@@ -1,6 +1,6 @@
 "use client";
-// The frame around Pulsus Quality's own sign-in and sign-up pages: the poster
-// look — cream paper, the wordmark, a big two-line headline — with the form on
+// The frame around Pulsus Quality's own sign-in and sign-up pages: the family
+// look — the family paper, the wordmark, a big two-line headline — with the form on
 // a white card beside it (stacked on a phone).
 import type { ReactNode } from "react";
 import { Tagline, Wordmark } from "@/components/Brand";
@@ -11,7 +11,7 @@ export function AccountFrame({ title, sub, children }: { title: string; sub?: Re
     <main id="main" className="acct">
       <section className="acct-hero" aria-label="Pulsus Quality">
         <Wordmark size={0.9} />
-        <h1 className="headline" style={{ marginTop: 28 }}>Know where quality stands.<span className="accent">Every day.</span></h1>
+        <h1 className="headline" style={{ marginTop: 28, fontSize: "clamp(28px,4vw,40px)", lineHeight: 1.1 }}>Know where quality stands. <span className="accent">Every day.</span></h1>
         <p className="lede">Branch reviews, defects and corrective actions across every location, signed off and evidenced, in one view.</p>
         <ul className="list" style={{ maxWidth: 420 }}>
           {[["eye", "See hidden issues", "Defect, resolution and recurring rates by branch and process."], ["repeat", "Catch what keeps coming back", "Recurring issues found before they escalate."], ["actions", "Close with confidence", "Actions verified by someone other than whoever raised them."]].map(([i, t, s]) => (
