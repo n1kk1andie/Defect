@@ -13,11 +13,13 @@ import { BANDS, type BandKey } from "@/lib/bands";
 import { DRIVER_INFO, DRIVER_KEYS, why, type RiskConfig } from "@/lib/risk";
 import type { RiskBoard } from "@/lib/riskScore";
 import { can } from "@/lib/roles";
+import { RiskFeed } from "@/components/screens/RiskFeed";
+import type { OutboxRow } from "@/lib/riskLink";
 
 type Site = RiskBoard["sites"][number];
 const bandLabel = (b: string) => BANDS.find((x) => x.key === b)?.label ?? "No data";
 
-export function Risk({ board }: { board: RiskBoard }) {
+export function Risk({ board, proposals = [], connected = false }: { board: RiskBoard; proposals?: OutboxRow[]; connected?: boolean }) {
   const app = useApp();
   const [open, setOpen] = useState<Site | null>(null);
   const [model, setModel] = useState(false);
@@ -73,6 +75,9 @@ export function Risk({ board }: { board: RiskBoard }) {
           ) : <Empty icon="check" title="Nothing on the watchlist" />}
         </Card>
       </div>
+      <Card className="mt2" title="Sent to Pulsus Risk" sub={`${connected ? "Proposed to Risk's review queue" : "Stored here until Risk's intake is connected"}: a ${U.toLowerCase()} entering Attention or Escalate, a critical failure, a sampled control not effective. Each is proposed once; a Risk Officer accepts or rejects it.`}>
+        <RiskFeed rows={proposals.filter((p) => p.rule)} empty="Nothing has needed proposing yet." />
+      </Card>
       {open && <SiteSheet s={open} cfg={board.config} onClose={() => setOpen(null)} />}
       {model && <ModelSheet board={board} onClose={() => setModel(false)} />}
     </>

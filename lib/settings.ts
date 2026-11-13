@@ -25,6 +25,8 @@ export interface CompanySettings {
   sector: "banking" | "healthcare" | "government" | "higher_ed" | "general";
   /** What groups sites: Region, Hospital, Agency, Faculty… */
   groupLabel: string;
+  /** In a multi-entity group, what each entity is called: Hospital, Agency, Campus, Subsidiary… */
+  entityLabel: string;
   /** Set when an admin finishes (or skips) the set-up wizard. */
   setupDone: boolean;
   /** The quality risk score model: driver weights, entered factors, band cut-offs, visit frequency by band. */
@@ -43,6 +45,7 @@ export const DEFAULT_SETTINGS: CompanySettings = {
   scorecard: true,
   sector: "banking",
   groupLabel: "Region",
+  entityLabel: "Entity",
   setupDone: false,
   risk: DEFAULT_RISK,
 };
@@ -53,6 +56,9 @@ export function plural(w: string): string {
   if (/[^aeiou]y$/i.test(w)) return w.slice(0, -1) + "ies";
   return w + "s";
 }
+
+/** What an entity is usually called in each sector (editable). */
+export const ENTITY_LABEL: Record<string, string> = { banking: "Entity", healthcare: "Hospital", government: "Agency", higher_ed: "Campus", general: "Business unit" };
 
 const text = (v: unknown, max: number, d: string) => { const s = String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max); return s || d; };
 
@@ -77,6 +83,7 @@ export function cleanSettings(raw: unknown): CompanySettings {
     scorecard: o.scorecard !== false,
     sector: (["banking", "healthcare", "government", "higher_ed", "general"] as const).find((x) => x === o.sector) ?? d.sector,
     groupLabel: text(o.groupLabel, 30, d.groupLabel),
+    entityLabel: text(o.entityLabel, 30, ENTITY_LABEL[String(o.sector)] ?? d.entityLabel),
     setupDone: o.setupDone === true,
     risk: cleanRisk(o.risk, (["banking", "healthcare", "government", "higher_ed", "general"] as const).find((x) => x === o.sector) ?? d.sector),
   };

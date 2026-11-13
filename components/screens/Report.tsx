@@ -13,8 +13,9 @@ import { auditGrade, gradeBand, AUDIT_POINTS, opStdRating, ratingBand } from "@/
 import { byCategory, byUnit, filterRows, monthLabel, monthShort, num, pct, pmasToDate, record, scLastActive, score, topRecurring, trend, watchlist } from "@/lib/metrics";
 import type { ActionView } from "@/lib/actionRules";
 import { Icon } from "@/components/icons";
+import { SavedReports, type SavedReportsData } from "@/components/screens/ReportBuilder";
 
-export function Report({ actions }: { actions: ActionView[] }) {
+export function Report({ actions, saved }: { actions: ActionView[]; saved?: SavedReportsData }) {
   const app = useApp();
   const { data, settings, filters, band, actor } = app;
   const f = { year: filters.year, unit: filters.unit, area: -1 };
@@ -46,6 +47,7 @@ export function Report({ actions }: { actions: ActionView[] }) {
         <a className="btn primary" href="/api/committee" target="_blank" rel="noreferrer"><Icon name="report" />PDF</a>
         <a className="btn" href="/api/committee?format=xlsx"><Icon name="download" />Excel</a>
       </div>
+      {saved && <SavedReports data={saved} />}
       <div className="stack">
         <div className="grid g4">
           <div className="stat"><div className="stat-v tone" data-band={band("resolutionRate", rec.resolutionRate)} style={{ fontSize: 32 }}>{pct(rec.resolutionRate)}</div><div className="stat-l">Defects resolved</div></div>

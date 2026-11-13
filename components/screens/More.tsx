@@ -16,11 +16,13 @@ const BLURB: Record<string, string> = {
   "/schedule": "My schedule, the calendar and programmes",
   "/sampling": "Sampling plans for file and record reviews",
   "/risk": "Risk scores, league table and watchlist",
+  "/issues": "Issues reported from site QR codes and links",
+  "/compare": "Entities, regions and groups side by side",
   "/review": "Monthly reviews and approvals",
   "/templates": "Checklists and the template library",
   "/scorecards": "Design the scorecard",
   "/actions": "Corrective and preventive actions",
-  "/report": "The executive report",
+  "/report": "The executive report, committee pack and saved reports",
   "/settings": "Company set-up, people, bands, data",
 };
 

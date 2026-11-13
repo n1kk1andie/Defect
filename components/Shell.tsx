@@ -14,13 +14,15 @@ import { ROLE_INFO, isAdmin } from "@/lib/roles";
 import { PERSONAS } from "@/lib/demo/personas";
 import DemoGuard from "@/components/DemoGuard";
 
-type Badge = "approvals" | "verify" | "inspections";
+type Badge = "approvals" | "verify" | "inspections" | "issues";
 export const NAV: { href: string; label: string; icon: IconName; badge?: Badge; build?: boolean }[] = [
   { href: "/", label: "Pulse", icon: "pulse" },
   { href: "/inspect", label: "Inspect", icon: "clipboard", badge: "inspections" },
   { href: "/schedule", label: "Schedule", icon: "calendar" },
   { href: "/sampling", label: "Sampling", icon: "hash" },
   { href: "/risk", label: "Risk", icon: "alert" },
+  { href: "/issues", label: "Issues", icon: "flag", badge: "issues" },
+  { href: "/compare", label: "Compare", icon: "compare" },
   { href: "/review", label: "Review", icon: "review", badge: "approvals" },
   { href: "/actions", label: "Actions", icon: "actions", badge: "verify" },
   { href: "/register", label: "Register", icon: "register" },
@@ -132,11 +134,11 @@ export function Shell({ children }: { children: ReactNode }) {
   const latest = li >= 0 ? monthLabel(app.data.periods[li]) : null;
   const modeLabel = app.filters.mode === "standard" && app.data.scorecard ? app.data.scorecard.name : `${app.settings.unitLabel} Defects`;
   const context = ["Pulse", "Register", "History"].includes(current) ? `${modeLabel}${latest ? ` · latest data ${latest}` : ""}` : app.actor.tenantName;
-  const badge = (b?: Badge) => (b === "approvals" ? app.counts.awaitingApproval : b === "verify" ? app.counts.awaitingVerification : b === "inspections" ? app.counts.awaitingInspections : 0);
+  const badge = (b?: Badge) => (b === "approvals" ? app.counts.awaitingApproval : b === "verify" ? app.counts.awaitingVerification : b === "inspections" ? app.counts.awaitingInspections : b === "issues" ? app.counts.newIssues : 0);
   const main = NAV.filter((n) => n.href !== "/settings" && !n.build);
   const build = NAV.filter((n) => n.build && (n.href === "/templates" || isAdmin(app.actor)));
   const tabs = [NAV[0], NAV.find((n) => n.href === "/inspect")!, NAV.find((n) => n.href === "/actions")!, NAV.find((n) => n.href === "/risk")!, { href: "/more", label: "More", icon: "more" as IconName }];
-  const moreOn = ["/register", "/history", "/insights", "/report", "/review", "/schedule", "/sampling", "/templates", "/scorecards", "/settings", "/more"].some(on);
+  const moreOn = ["/issues", "/compare", "/register", "/history", "/insights", "/report", "/review", "/schedule", "/sampling", "/templates", "/scorecards", "/settings", "/more"].some(on);
   const initial = (app.actor.name || app.actor.email).trim().charAt(0).toUpperCase();
   return (
     <div className="shell">

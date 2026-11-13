@@ -60,13 +60,35 @@ export async function getPlan(a: Actor, id: string): Promise<{ plan: PlanView; p
   });
 }
 
-export interface PlanInput { name?: unknown; templateId?: unknown; unitId?: unknown; period?: unknown; method?: unknown; confidence?: unknown; tdr?: unknown; edr?: unknown; population?: unknown; populationSize?: unknown; stratify?: unknown; censusAbove?: unknown; size?: unknown; seed?: unknown }
+export interface PlanInput { items?: unknown; source?: unknown; name?: unknown; templateId?: unknown; unitId?: unknown; period?: unknown; method?: unknown; confidence?: unknown; tdr?: unknown; edr?: unknown; population?: unknown; populationSize?: unknown; stratify?: unknown; censusAbove?: unknown; size?: unknown; seed?: unknown }
+
+/** Items mapped from an uploaded file in the browser: re-checked here (ids unique, at most 50,000). */
+export function cleanItems(raw: unknown[]): PopItem[] {
+  const out: PopItem[] = [], seen = new Set<string>();
+  for (const x of raw) {
+    if (out.length >= 50000) break;
+    const o = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+    const id = String(o.id ?? "").trim().slice(0, 80);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const it: PopItem = { id };
+    if (typeof o.stratum === "string" && o.stratum.trim()) it.stratum = o.stratum.trim().slice(0, 60);
+    const v = Number(o.value);
+    if (o.value !== undefined && o.value !== null && o.value !== "" && Number.isFinite(v)) it.value = v;
+    const row = Number(o.row);
+    if (Number.isInteger(row) && row > 0) it.row = row;
+    if (typeof o.label === "string" && o.label.trim()) it.label = o.label.trim().slice(0, 120);
+    out.push(it);
+  }
+  return out;
+}
 
 /** Work out a plan from its inputs (shared by the preview and the save). */
 export function planFrom(input: PlanInput): { ok: true; value: { items: PopItem[]; listed: boolean; size: number; method: "statistical" | "judgmental"; confidence: number | null; tdr: number | null; edr: number | null; seed: string; stratify: boolean; censusAbove: number | null; note: string } } | { ok: false; error: string } {
   const text = typeof input.population === "string" ? input.population : "";
-  const listed = text.trim().length > 0;
-  let items = listed ? parsePopulation(text) : numbered(Number(input.populationSize) || 0, "ITEM");
+  const uploaded = Array.isArray(input.items) ? cleanItems(input.items) : null;
+  const listed = uploaded ? uploaded.length > 0 : text.trim().length > 0;
+  let items = uploaded && uploaded.length ? uploaded : listed ? parsePopulation(text) : numbered(Number(input.populationSize) || 0, "ITEM");
   if (!items.length) return { ok: false, error: "Paste the population (one id per line), or give its size." };
   const method = input.method === "judgmental" ? "judgmental" : "statistical";
   const stratify = !!input.stratify && listed && items.some((i) => i.stratum);
@@ -142,6 +164,12 @@ export async function startPlanInspection(a: Actor, id: string, requestId?: stri
 
 /** Enter the deviations found (for a plan reviewed outside an inspection). */
 export async function evaluatePlan(a: Actor, id: string, deviations: unknown, requestId?: string): Promise<Result<PlanView>> {
+  const res = await evaluateEntered(a, id, deviations, requestId);
+  if (res.ok) { try { const { afterPlanEvaluated } = await import("@/lib/automation"); await afterPlanEvaluated(a.tenant, id); } catch (e) { console.error("automation after evaluation", e); } }
+  return res;
+}
+
+async function evaluateEntered(a: Actor, id: string, deviations: unknown, requestId?: string): Promise<Result<PlanView>> {
   if (!can.buildTemplates(a)) return { ok: false, error: "Supervisors and admins evaluate samples.", status: 403 };
   const d = Math.round(Number(deviations));
   return withTenant(a.tenant, async (tx) => {

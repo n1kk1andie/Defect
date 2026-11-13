@@ -2,12 +2,12 @@
 // Actions: the corrective and preventive action register. Assign and
 // prioritise, set due dates, track progress across branches, and close the
 // loop with evidence, verified by someone other than whoever raised it.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api, useApp } from "@/components/app-context";
 import { BandPill, Card, Empty, fmtDate, fmtDateTime, Msg, PageHead, Seg, Sheet, Stat } from "@/components/ui";
 import { RaiseAction } from "@/components/screens/RaiseAction";
-import { allowedSteps, STATUS_LABEL, type ActionStep, type ActionView } from "@/lib/actionRules";
+import { allowedSteps, EFFECT_LABEL, FISHBONE, KIND_LABEL, STATUS_LABEL, effectivenessBlocker, type ActionStep, type ActionView } from "@/lib/actionRules";
 import { can, verifyBlocker } from "@/lib/roles";
 import { Icon } from "@/components/icons";
 
@@ -73,7 +73,7 @@ export function Actions({ actions }: { actions: ActionView[] }) {
                     <tr key={a.id} className="clickable" onClick={() => setOpenId(a.id)}>
                       <td data-label="ID"><button type="button" className="linkbtn" style={{ textDecoration: "none", fontWeight: 800, color: "var(--ink)" }} onClick={(e) => { e.stopPropagation(); setOpenId(a.id); }}>{a.ref}</button></td>
                       <td data-label={settings.unitLabel}>{a.unitName}</td>
-                      <td data-label="Issue" style={{ maxWidth: 280 }}>{a.title}{a.kind === "preventive" && <span className="sub"> · preventive</span>}</td>
+                      <td data-label="Issue" style={{ maxWidth: 280 }}>{a.title}{a.kind !== "corrective" && <span className="sub"> · {a.kind}</span>}{a.reopenCount > 0 && <span className="sub"> · reopened {a.reopenCount}×</span>}{a.effectiveness && a.status === "closed" && <div><BandPill band={EFF_BAND[a.effectiveness.status]}>{EFFECT_LABEL[a.effectiveness.status]}</BandPill></div>}</td>
                       <td data-label="Priority"><BandPill band={PRI_BAND[a.priority]}>{a.priority[0].toUpperCase() + a.priority.slice(1)}</BandPill></td>
                       <td data-label="Status"><StatusPill a={a} /></td>
                       <td data-label="Due" style={{ whiteSpace: "nowrap" }}>{a.status === "closed" ? "—" : fmtDate(a.dueDate)}</td>
@@ -97,7 +97,8 @@ export function Actions({ actions }: { actions: ActionView[] }) {
   );
 }
 
-const STEP_LABEL: Record<ActionStep, string> = { start: "Start work", submit: "Submit for verification", verify: "Verify and close", return: "Send back", reopen: "Reopen" };
+const STEP_LABEL: Record<ActionStep, string> = { start: "Start work", submit: "Submit for verification", verify: "Verify and close", return: "Send back", reopen: "Reopen", effective: "It worked", ineffective: "It didn't work: reopen" };
+const EFF_BAND = { pending: "watch", due: "attention", effective: "worldClass", ineffective: "escalate" } as const;
 
 function ActionSheet({ a, onClose }: { a: ActionView; onClose: () => void }) {
   const app = useApp();
@@ -126,11 +127,12 @@ function ActionSheet({ a, onClose }: { a: ActionView; onClose: () => void }) {
     setBusy(false);
     if (file.current) file.current.value = "";
   };
-  const needsNote = steps.includes("submit") || steps.includes("return") || steps.includes("reopen");
+  const needsNote = steps.includes("submit") || steps.includes("return") || steps.includes("reopen") || steps.includes("effective");
+  const effBlock = a.status === "closed" && a.effectiveness && (a.effectiveness.status === "pending" || a.effectiveness.status === "due") ? effectivenessBlocker(actor, a) : null;
   const canAddEvidence = a.status !== "closed" && (can.workActions(actor) || a.ownerEmail === actor.email);
   return (
     <>
-      <Sheet title={<>{a.ref} <span className="sub" style={{ fontSize: 14 }}>· {a.kind === "preventive" ? "Preventive" : "Corrective"}</span></>} sub={`${a.unitName} · ${app.areaName(a.areaId)}`} onClose={onClose}
+      <Sheet title={<>{a.ref} <span className="sub" style={{ fontSize: 14 }}>· {KIND_LABEL[a.kind]}</span></>} sub={`${a.unitName} · ${app.areaName(a.areaId)}`} onClose={onClose}
         footer={<>
           {can.planActions(actor) && a.status !== "closed" && <button className="btn" onClick={() => setEdit(true)}>Change plan</button>}
           {steps.map((s) => <button key={s} className={`btn ${s === "verify" || s === "submit" ? "primary" : ""}`} disabled={busy} onClick={() => step(s)}>{STEP_LABEL[s]}</button>)}
@@ -143,10 +145,16 @@ function ActionSheet({ a, onClose }: { a: ActionView; onClose: () => void }) {
           <dt>Raised by</dt><dd>{a.raisedBy} · {fmtDate(a.createdAt)}</dd>
           {a.verifierEmail && <><dt>Verifier</dt><dd>{a.verifierEmail}</dd></>}
           {a.verifiedBy && <><dt>Verified by</dt><dd>{a.verifiedBy} · {fmtDate(a.verifiedAt)}</dd></>}
-          {a.sourceType !== "manual" && <><dt>Source</dt><dd>{a.sourceType === "review_item" ? "A defect in a published review" : a.sourceType === "recurring" ? "A recurring issue" : "Previous version"}</dd></>}
+          {a.sourceType !== "manual" && <><dt>Source</dt><dd>{({ review_item: "A defect in a published review", recurring: "A recurring issue", inspection: "A failed question in an inspection", issue_report: "A reported issue", import: "Bulk import", api: "The API", migrated: "Previous version" } as Record<string, string>)[a.sourceType] ?? a.sourceType}</dd></>}
+          {a.reopenCount > 0 && <><dt>Reopened</dt><dd>{a.reopenCount} time{a.reopenCount === 1 ? "" : "s"}: the finding came back after closure</dd></>}
+          {a.effectivenessDays > 0 && <><dt>Effectiveness</dt><dd>{a.effectiveness ? <><BandPill band={EFF_BAND[a.effectiveness.status]}>{EFFECT_LABEL[a.effectiveness.status]}</BandPill> <span className="sub">{a.effectiveness.status === "pending" || a.effectiveness.status === "due" ? `check on ${fmtDate(a.effectiveness.due)}${a.effectiveness.questionIds?.length ? ", by re-inspecting the failed question" : ""}` : `${a.effectiveness.by ?? ""} · ${fmtDate(a.effectiveness.checkedAt ?? null)}${a.effectiveness.note ? ` · ${a.effectiveness.note}` : ""}`}</span></> : `Checked ${a.effectivenessDays} days after closure`}</dd></>}
         </dl>
         {a.details && <><div className="eyebrow mt2">Details</div><p style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{a.details}</p></>}
         {a.rootCause && <><div className="eyebrow mt">Root cause</div><p style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{a.rootCause}</p></>}
+        {a.rca && (a.rca.whys.length > 0 || Object.keys(a.rca.fishbone).length > 0) && <>
+          {a.rca.whys.length > 0 && <><div className="eyebrow mt">5 whys</div><ol className="whys-read">{a.rca.whys.map((w, i) => <li key={i}><span className="sub">Why {i + 1}?</span> {w}</li>)}</ol></>}
+          {Object.keys(a.rca.fishbone).length > 0 && <><div className="eyebrow mt">Fishbone</div><dl className="kv">{FISHBONE.filter((c) => a.rca!.fishbone[c.key]?.length).map((c) => <Fragment key={c.key}><dt>{c.label}</dt><dd>{a.rca!.fishbone[c.key].join("; ")}</dd></Fragment>)}</dl></>}
+        </>}
         {a.closureNote && <><div className="eyebrow mt">What was done</div><p style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{a.closureNote}</p></>}
         <div className="eyebrow mt2">Evidence</div>
         {a.evidence.length ? <ul className="list">{a.evidence.map((e) => (
@@ -159,15 +167,16 @@ function ActionSheet({ a, onClose }: { a: ActionView; onClose: () => void }) {
           </label>
         )}
         {needsNote && (
-          <label className="field"><span>{steps.includes("submit") ? "What was done (for the verifier)" : "Note"}</span>
-            <textarea className="textarea" value={note} onChange={(e) => setNote(e.target.value)} placeholder={steps.includes("submit") ? "What was fixed, and the evidence attached" : "What still needs doing"} /></label>
+          <label className="field"><span>{steps.includes("submit") ? "What was done (for the verifier)" : steps.includes("effective") ? "What you checked" : "Note"}</span>
+            <textarea className="textarea" value={note} onChange={(e) => setNote(e.target.value)} placeholder={steps.includes("submit") ? "What was fixed, and the evidence attached" : steps.includes("effective") ? "What you looked at to see whether the fix held" : "What still needs doing"} /></label>
         )}
         {block && a.status === "awaiting_verification" && actor.roles.some((r) => r === "admin" || r === "supervisor") && <Msg kind="info">{block}</Msg>}
+        {effBlock && actor.roles.some((r) => r === "admin" || r === "supervisor") && <Msg kind="info">{effBlock}</Msg>}
         <Msg kind={msg?.kind}>{msg?.text}</Msg>
         <div className="eyebrow mt2">History</div>
         <ol className="timeline mt">
           {a.history.slice().reverse().map((h, i) => (
-            <li key={i}><strong>{h.kind === "edited" ? "Plan changed" : h.status ? STATUS_LABEL[h.status as keyof typeof STATUS_LABEL] ?? h.status : h.kind}</strong> · {h.by}<br /><span className="sub">{fmtDateTime(h.at)}</span>{h.note && <div style={{ marginTop: 2 }}>{h.note}</div>}</li>
+            <li key={i}><strong>{h.kind === "edited" ? "Plan changed" : h.kind === "effectiveness" ? "Effectiveness check" : h.kind === "comment" ? "Note" : h.status ? STATUS_LABEL[h.status as keyof typeof STATUS_LABEL] ?? h.status : h.kind}</strong> · {h.by}<br /><span className="sub">{fmtDateTime(h.at)}</span>{h.note && <div style={{ marginTop: 2 }}>{h.note}</div>}</li>
           ))}
         </ol>
         <p className="sub">Every change is also kept in the tamper-evident change history.</p>

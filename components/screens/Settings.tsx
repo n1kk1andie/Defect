@@ -19,20 +19,25 @@ import type { HistoryRow } from "@/lib/audit";
 import type { PlanSummary } from "@/lib/migrator";
 import type { UploadPreview } from "@/lib/imports";
 import type { ScorecardDef } from "@/lib/scorecard";
+import type { OutboxRow } from "@/lib/riskLink";
+import { RiskFeed } from "@/components/screens/RiskFeed";
+import { Developer } from "@/components/screens/Developer";
+import { BulkImport } from "@/components/screens/BulkImport";
 
 export interface SettingsData {
   members: MemberRow[];
   history: HistoryRow[];
   historyCount: number;
   imports: { id: string; kind: string; status: string; createdBy: string; createdAt: string; committedBy: string | null; committedAt: string | null }[];
-  outbox: { id: string; title: string; severity: string; recordRef: string; status: string; createdBy: string; createdAt: string }[];
+  outbox: OutboxRow[];
+  automation: { keys: number; webhooks: number; email: boolean; turnstile: boolean; cron: boolean };
   database: { applied: string[]; pending: string[]; kind: string; isolation: string } | null;
   legacyAvailable: boolean;
   scorecard: ScorecardDef | null;
   riskConnected: boolean;
 }
 
-type ItemId = "plan" | "setup" | "bands" | "people" | "data" | "measured" | "integrations" | "history" | "approvals" | "appearance" | "about" | "help";
+type ItemId = "plan" | "setup" | "bands" | "people" | "data" | "bulk" | "measured" | "integrations" | "api" | "history" | "approvals" | "appearance" | "about" | "help";
 interface Item { id: ItemId; title: string; icon: IconName; summary: string; admin?: boolean }
 
 export function Settings({ s }: { s: SettingsData }) {
@@ -58,10 +63,12 @@ export function Settings({ s }: { s: SettingsData }) {
     ] },
     { title: "Data", items: [
       { id: "data", title: "Data and uploads", icon: "upload", summary: lastImport ? `Last import ${fmtDate(lastImport.committedAt)} by ${lastImport.committedBy}` : s.legacyAvailable ? "Previous version's data ready to import" : "Templates, workbook upload, imports", admin: true },
+      { id: "bulk", title: "Bulk import", icon: "upload", summary: "Locations, people and actions from a spreadsheet, with column mapping and a preview", admin: true },
       { id: "measured", title: "How it's measured", icon: "target", summary: `${settings.instanceBasis === "check" ? "Each check performed" : `Each ${settings.itemLabel.toLowerCase()}`} is a possible instance · recurring after ${settings.recurringMonths} months` },
     ] },
     { title: "Connections", items: [
       { id: "integrations", title: "Integrations", icon: "link", summary: `Pulsus Platform feed · Pulsus Risk ${s.riskConnected ? "connected" : "proposals stored until Risk connects"} (${s.outbox.length})` },
+      { id: "api", title: "API keys and webhooks", icon: "key", summary: `${s.automation.keys} API key${s.automation.keys === 1 ? "" : "s"} · ${s.automation.webhooks} webhook${s.automation.webhooks === 1 ? "" : "s"} (Slack, Teams or your own)`, admin: true },
     ] },
     { title: "Governance", items: [
       { id: "history", title: "Change history", icon: "scroll", summary: `${s.historyCount.toLocaleString("en-US")} entries, hash-chained`, admin: true },
@@ -114,6 +121,8 @@ function Page({ id, s }: { id: ItemId; s: SettingsData }) {
     case "bands": return <BandsPage history={s.history} />;
     case "people": return <PeoplePage members={s.members} />;
     case "data": return <DataPage s={s} />;
+    case "bulk": return <BulkImport />;
+    case "api": return <Developer />;
     case "measured": return <MeasuredPage scorecard={s.scorecard} />;
     case "integrations": return <IntegrationsPage s={s} />;
     case "history": return <HistoryPage s={s} />;
@@ -422,16 +431,36 @@ function MeasuredPage({ scorecard }: { scorecard: ScorecardDef | null }) {
 }
 
 function IntegrationsPage({ s }: { s: SettingsData }) {
+  const { actor, demo } = useApp();
+  const [run, setRun] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const now = async () => {
+    setBusy(true); setRun(null);
+    try {
+      const j = await api<{ result: { bands: { changed: number; proposed: number }; overdue: number; effectivenessDue: number; reports: number; retried: number; error?: string } }>("/api/automation", "POST");
+      const r = j.result;
+      setRun(r.error ? `Something went wrong: ${r.error}` : `Done: ${r.bands.changed} band change${r.bands.changed === 1 ? "" : "s"}, ${r.bands.proposed} proposed to Risk, ${r.overdue} overdue alert${r.overdue === 1 ? "" : "s"} sent, ${r.effectivenessDue} effectiveness check${r.effectivenessDue === 1 ? "" : "s"} now due, ${r.reports} scheduled report${r.reports === 1 ? "" : "s"} run, ${r.retried} retried.`);
+    } catch (e) { setRun((e as Error).message); }
+    setBusy(false);
+  };
   return (
     <div className="stack">
       <Card title="Pulsus Platform" sub="The company brief and the Quality driver read these">
-        <dl className="kv"><dt>/api/data</dt><dd>The dataset in its original row shapes (kept unchanged for the brief).</dd><dt>/api/pulse</dt><dd>A quality summary (defect, resolution and recurring rates, Operational Standard, branches below standard, open and overdue actions, recurring issues) under the suite's service grant for quality.pulse.</dd></dl>
+        <dl className="kv"><dt>/api/data</dt><dd>The dataset in its original row shapes (kept unchanged for the brief).</dd><dt>/api/pulse</dt><dd>A quality summary (defect, resolution and recurring rates, Operational Standard, branches below standard, open and overdue actions, recurring issues) and the inspections block (results, sampling, risk bands, visits) under the suite's service grant for quality.pulse.</dd></dl>
       </Card>
       <Card title="Pulsus Risk" sub={s.riskConnected ? "Connected: proposals go to Risk's review queue" : "Risk's intake isn't connected yet: proposals are stored here and sent once it is"}>
-        <p style={{ marginTop: 0 }}>A supervisor can send a serious or recurring defect to Pulsus Risk as a proposed issue. A Risk Officer accepts or rejects it there; nothing enters Risk unreviewed.</p>
-        {s.outbox.length ? <ul className="list">{s.outbox.map((o) => <li key={o.id}><span className="grow"><strong>{o.title}</strong><br /><span className="sub">{o.severity} · {o.createdBy} · {fmtDateTime(o.createdAt)}</span></span><span className={`status ${o.status === "sent" ? "st-closed" : o.status === "failed" ? "st-open" : "st-draft"}`}>{o.status === "stubbed" ? "Waiting for Risk" : o.status}</span></li>)}</ul> : <p className="sub">Nothing proposed yet. Send one from Insights → Recurring issues.</p>}
+        <p style={{ marginTop: 0 }}>Proposed to Risk automatically: a site entering Attention or Escalate (a KRI breach), a critical failure in an approved inspection (a finding), and a sampled control found not effective (a KRI breach). A supervisor can also send a recurring issue from Insights. Each is proposed once; a Risk Officer accepts or rejects it, and the answer shows here.</p>
+        <RiskFeed rows={s.outbox} empty="Nothing proposed yet." />
       </Card>
-      <Card title="API keys and webhooks" sub="Inbound REST API and webhooks out arrive in the next milestone, with inspections and scheduling."><p className="sub" style={{ margin: 0 }}>Until then, data comes in through workbook upload and reviews.</p></Card>
+      <Card title="Scheduled checks" sub={s.automation.cron ? "Run daily by the scheduler, and at most every ten minutes when someone opens Quality." : "Run at most every ten minutes when someone opens Quality, and daily once the scheduler's secret (CRON_SECRET) is set."}>
+        <p style={{ marginTop: 0 }}>Band changes (alerts and proposals to Risk), overdue-action alerts, effectiveness checks falling due, scheduled reports{s.automation.email ? " (emailed)" : " (kept to download: email isn't set up)"}, and retries of anything that failed to send.</p>
+        {isAdmin(actor) && <button className="btn" disabled={busy || demo} onClick={now}><Icon name="play" />{busy ? "Running…" : "Run the checks now"}</button>}
+        {demo && <p className="sub">The demo doesn't send alerts or emails.</p>}
+        {run && <Msg kind="info">{run}</Msg>}
+      </Card>
+      <Card title="Report an issue" sub={s.automation.turnstile ? "Protected by Cloudflare Turnstile" : "Protected by a hidden trap field and a per-phone limit; add TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY to check every report is from a person"}>
+        <p className="sub" style={{ margin: 0 }}>Each site has a public link and QR poster under <Link href="/issues?tab=links">Issues</Link>.</p>
+      </Card>
     </div>
   );
 }
