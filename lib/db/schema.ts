@@ -159,7 +159,24 @@ export const scorecards = pgTable("scorecards", {
   active: boolean("active").notNull().default(true),
   createdAt: createdAt(),
   createdBy: text("created_by"),
+  /** The designer's working copy; publishing freezes it as the next version. */
+  draft: jsonb("draft"),
+  dirty: boolean("dirty").notNull().default(false),
+  origin: text("origin").notNull().default("custom"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }),
+  updatedBy: text("updated_by"),
 });
+
+/** Published scorecard versions: immutable (a trigger refuses updates). */
+export const scorecardVersions = pgTable("scorecard_versions", {
+  id: text("id").primaryKey(),
+  companyId: text("company_id").notNull(),
+  scorecardId: text("scorecard_id").notNull(),
+  version: integer("version").notNull(),
+  definition: jsonb("definition").notNull(),
+  publishedBy: text("published_by").notNull(),
+  publishedAt: timestamp("published_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("scorecard_versions_v").on(t.companyId, t.scorecardId, t.version)]);
 
 /** A unit's scorecard for one month: measure values (0–100) and the raw audit score. */
 export const scorecardEntries = pgTable("scorecard_entries", {
@@ -274,6 +291,80 @@ export const riskOutbox = pgTable("risk_outbox", {
   response: jsonb("response"),
 });
 
+/** A checklist template a company built, imported or added from the library. The draft is edited; publishing freezes a version. */
+export const templates = pgTable("templates", {
+  id: text("id").primaryKey(),
+  companyId: text("company_id").notNull(),
+  name: text("name").notNull(),
+  sector: text("sector").notNull().default("general"),
+  category: text("category").notNull().default(""),
+  status: text("status").notNull().default("draft"), // draft | published | archived
+  draft: jsonb("draft").notNull(),
+  /** The latest published version (0 = never published). */
+  version: integer("version").notNull().default(0),
+  /** Whether the draft differs from the latest published version. */
+  dirty: boolean("dirty").notNull().default(true),
+  origin: text("origin").notNull().default("custom"), // custom | library:<key> | import | migrated | copy:<id>
+  createdBy: text("created_by").notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+  updatedBy: text("updated_by"),
+}, (t) => [index("templates_company").on(t.companyId, t.status)]);
+
+/** Published template versions: immutable (a trigger refuses updates). Inspections keep the version they were started on. */
+export const templateVersions = pgTable("template_versions", {
+  id: text("id").primaryKey(),
+  companyId: text("company_id").notNull(),
+  templateId: text("template_id").notNull(),
+  version: integer("version").notNull(),
+  definition: jsonb("definition").notNull(),
+  sha256: text("sha256").notNull(),
+  publishedBy: text("published_by").notNull(),
+  publishedAt: timestamp("published_at", { withTimezone: true }).notNull().defaultNow(),
+  note: text("note").notNull().default(""),
+}, (t) => [uniqueIndex("template_versions_v").on(t.companyId, t.templateId, t.version)]);
+
+/** An inspection (or field visit): a template version answered at one site for one period. */
+export const inspections = pgTable("inspections", {
+  id: text("id").primaryKey(),
+  companyId: text("company_id").notNull(),
+  ref: text("ref").notNull(),
+  /** Generated on the device, so a retried save after a dropped connection never makes a second inspection. */
+  clientId: text("client_id"),
+  templateId: text("template_id").notNull(),
+  templateVersion: integer("template_version").notNull(),
+  unitId: text("unit_id").notNull(),
+  period: date("period").notNull(),
+  status: text("status").notNull().default("draft"), // draft | submitted | returned | approved
+  inspectorEmail: text("inspector_email").notNull(),
+  supervisorEmail: text("supervisor_email"),
+  answers: jsonb("answers").notNull().default(sql`'{}'::jsonb`),
+  items: jsonb("items").notNull().default(sql`'[]'::jsonb`),
+  signatures: jsonb("signatures").notNull().default(sql`'{}'::jsonb`),
+  checkin: jsonb("checkin"),
+  score: jsonb("score"),
+  note: text("note").notNull().default(""),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+}, (t) => [
+  uniqueIndex("inspections_ref").on(t.companyId, t.ref),
+  uniqueIndex("inspections_client").on(t.companyId, t.clientId),
+  index("inspections_company_status").on(t.companyId, t.status),
+  index("inspections_template").on(t.companyId, t.templateId),
+]);
+
+export const inspectionEvents = pgTable("inspection_events", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  companyId: text("company_id").notNull(),
+  inspectionId: text("inspection_id").notNull(),
+  status: text("status").notNull(),
+  by: text("by").notNull(),
+  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  note: text("note"),
+});
+
 /** Per-company counters for human references (REV-0001, ACT-0001). */
 export const counters = pgTable("counters", {
   companyId: text("company_id").notNull(),
@@ -285,4 +376,5 @@ export const counters = pgTable("counters", {
 export const TENANT_TABLES = [
   "companies", "company_settings", "members", "units", "areas", "checks", "natures", "monthly_stats", "reviews", "review_items",
   "review_events", "scorecards", "scorecard_entries", "actions", "action_events", "evidence", "audit_log", "imports", "risk_outbox", "counters",
+  "templates", "template_versions", "inspections", "inspection_events", "scorecard_versions",
 ] as const;

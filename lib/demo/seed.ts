@@ -8,13 +8,14 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { withTenant, rowsOf, type Tx } from "@/lib/db/client";
-import { actionEvents, actions, members, monthlyStats, reviewEvents, reviewItems, reviews, scorecardEntries, scorecards, units, areas, natures, checks, companySettings, counters, evidence, imports, riskOutbox, companies } from "@/lib/db/schema";
+import { inspectionEvents, inspections, scorecardVersions, templateVersions, templates, actionEvents, actions, members, monthlyStats, reviewEvents, reviewItems, reviews, scorecardEntries, scorecards, units, areas, natures, checks, companySettings, counters, evidence, imports, riskOutbox, companies } from "@/lib/db/schema";
 import { DEMO, ensureAreas, ensureCompany, ensureUnits, setAreaChecklist, writeSettings } from "@/lib/company";
 import { record } from "@/lib/audit";
 import { cleanSettings, type Severity } from "@/lib/settings";
 import { evaluate, OPERATIONAL_STANDARD } from "@/lib/scorecard";
 import { AUDIT_POINTS } from "@/lib/bands";
 import { DEMO_COMPANY, DEMO_DOMAIN, PERSONAS } from "@/lib/demo/personas";
+import { seedInspections } from "@/lib/demo/inspections";
 
 const UNITS = ["Harbour", "Riverside", "Parkway", "Summit", "Crossroads", "Gateway"];
 // Base defect rate per branch: Summit is the watchlist story; Crossroads is drifting.
@@ -55,7 +56,7 @@ async function chunked<T>(rows: T[], n: number, fn: (c: T[]) => Promise<unknown>
 
 /** Wipe the demo tenant (demo only). */
 export async function clearDemo(tx: Tx): Promise<void> {
-  for (const t of [actionEvents, actions, reviewEvents, reviewItems, reviews, scorecardEntries, scorecards, monthlyStats, checks, natures, areas, units, members, companySettings, counters, evidence, imports, riskOutbox, companies]) {
+  for (const t of [inspectionEvents, inspections, templateVersions, templates, scorecardVersions, actionEvents, actions, reviewEvents, reviewItems, reviews, scorecardEntries, scorecards, monthlyStats, checks, natures, areas, units, members, companySettings, counters, evidence, imports, riskOutbox, companies]) {
     await tx.delete(t).where(sql`company_id = ${DEMO}`);
   }
   // The change history is append-only (its trigger refuses deletes), so a reset is recorded in it rather than erasing it.
@@ -75,8 +76,9 @@ export async function ensureDemoSeeded(): Promise<void> {
 export async function seedDemo(tx: Tx, now = new Date()): Promise<void> {
   const rand = rng(20261);
   await ensureCompany(tx, DEMO, DEMO_COMPANY, "demo");
-  await writeSettings(tx, DEMO, cleanSettings({ unitLabel: "Branch", unitPlural: "Branches", itemLabel: "File", itemTypes: ["New", "Change", "Maintenance", "Other"], instanceBasis: "check", scorecard: true }), "demo");
+  await writeSettings(tx, DEMO, cleanSettings({ unitLabel: "Branch", unitPlural: "Branches", itemLabel: "File", itemTypes: ["New", "Change", "Maintenance", "Other"], instanceBasis: "check", scorecard: true, sector: "banking", groupLabel: "Region", setupDone: true }), "demo");
   const unitIds = await ensureUnits(tx, DEMO, UNITS);
+  for (const [u, region] of [["Harbour", "South"], ["Riverside", "South"], ["Gateway", "South"], ["Parkway", "North"], ["Summit", "North"], ["Crossroads", "North"]] as const) await tx.update(units).set({ region }).where(sql`id = ${unitIds.get(u)!}`);
   const areaIds = await ensureAreas(tx, DEMO, PROGRAM.map((p) => p.area));
   for (const p of PROGRAM) await setAreaChecklist(tx, DEMO, areaIds.get(p.area)!, p.checks, p.natures.map(([label, category]) => ({ label, category })));
   for (const p of PERSONAS) {
@@ -230,7 +232,8 @@ export async function seedDemo(tx: Tx, now = new Date()): Promise<void> {
     await tx.insert(actionEvents).values(ev);
   }
   await tx.insert(counters).values({ companyId: DEMO, name: "action", value: 42 });
-  await record(tx, DEMO, { actor: "demo", action: "demo.seed", entityType: "company", entityId: DEMO, summary: `${DEMO_COMPANY} sample data: ${stats.length} history rows, ${reviewRows.length} reviews, ${LIST.length} actions` });
+  const ins = await seedInspections(tx, now, unitIds);
+  await record(tx, DEMO, { actor: "demo", action: "demo.seed", entityType: "company", entityId: DEMO, summary: `${DEMO_COMPANY} sample data: ${stats.length} history rows, ${reviewRows.length} reviews, ${LIST.length} actions, ${ins.templates} templates, ${ins.inspections} inspections` });
 }
 
 /** Reset the demo to its sample data (demo admin only). The change history keeps a record of the reset. */

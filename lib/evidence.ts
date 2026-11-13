@@ -6,11 +6,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { withTenant } from "@/lib/db/client";
-import { actions, evidence, reviews } from "@/lib/db/schema";
+import { actions, evidence, inspections, reviews } from "@/lib/db/schema";
 import { getStorage, storageIsDurable } from "@/lib/storage";
 import { record } from "@/lib/audit";
 import { canSeeAction } from "@/lib/actions";
 import { canSeeReview } from "@/lib/reviews";
+import { canSeeInspection } from "@/lib/inspections";
 import type { Actor } from "@/lib/roles";
 
 export const MAX_EVIDENCE_BYTES = 15 * 1024 * 1024;
@@ -33,6 +34,12 @@ async function entityVisible(a: Actor, entityType: string, entityId: string, for
       if (!r) return false;
       if (forWrite) return (r.inspectorEmail === a.email || a.roles.includes("admin")) && (r.status === "draft" || r.status === "returned");
       return canSeeReview(a, r);
+    }
+    if (entityType === "inspection") {
+      const r = (await tx.select().from(inspections).where(and(eq(inspections.companyId, a.tenant), eq(inspections.id, entityId))).limit(1))[0];
+      if (!r) return false;
+      if (forWrite) return (r.inspectorEmail === a.email || a.roles.includes("admin")) && (r.status === "draft" || r.status === "returned");
+      return canSeeInspection(a, r);
     }
     return false;
   });

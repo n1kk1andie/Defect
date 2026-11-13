@@ -1,14 +1,17 @@
-import { actorOr } from "@/lib/api";
-import { getProgram } from "@/lib/company";
-import { defectsTemplate, opstdTemplate } from "@/lib/workbook";
+// The company's checklist templates: list, and create (blank, from the
+// library, as a copy, or from a JSON definition).
+import { actorOr, body, json, result } from "@/lib/api";
+import { createTemplate, listTemplates } from "@/lib/templates/store";
+import { can } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
+export async function GET() {
   const g = await actorOr(); if ("response" in g) return g.response;
-  const what = new URL(req.url).searchParams.get("what") === "opstd" ? "opstd" : "defects";
-  const p = await getProgram(g.actor.tenant);
-  const units = p.units.filter((u) => u.active).map((u) => u.name);
-  const buf = what === "opstd" ? await opstdTemplate(units) : await defectsTemplate(units, p.areas.map((a) => a.name));
-  return new Response(new Uint8Array(buf), { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="pulsus-quality-${what}-template.xlsx"`, "Cache-Control": "no-store" } });
+  return json({ templates: await listTemplates(g.actor) });
+}
+
+export async function POST(req: Request) {
+  const g = await actorOr(can.buildTemplates); if ("response" in g) return g.response;
+  return result(await createTemplate(g.actor, await body(req), g.requestId), (template) => ({ template }));
 }

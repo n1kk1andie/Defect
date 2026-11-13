@@ -14,7 +14,10 @@
 export interface Measure {
   key: string;
   label: string;
-  kind: "input" | "computed";
+  /** input: keyed monthly; computed: averages other measures; inspection: taken from approved inspections of a template. */
+  kind: "input" | "computed" | "inspection";
+  /** For an inspection measure: which template, and which result (the average score, the pass rate, or 100 − the deviation rate). */
+  source?: { templateId: string; metric: "score" | "passRate" | "compliance" };
   /** For a computed measure: the measures it averages ("@audit" = audit points). */
   of?: string[];
   /** Optional weights, one per entry of `of` (default equal). */
@@ -91,7 +94,7 @@ const fin = (x: unknown): x is number => typeof x === "number" && Number.isFinit
 export function evaluate(def: ScorecardDef, inputs: Record<string, number | null | undefined>, auditPoints: number | null): Record<string, number | null> {
   const out: Record<string, number | null> = {};
   for (const m of def.measures) {
-    if (m.kind === "input") { const v = inputs[m.key]; out[m.key] = fin(v) ? v : null; continue; }
+    if (m.kind !== "computed") { const v = inputs[m.key]; out[m.key] = fin(v) ? v : null; continue; }
     let s = 0, w = 0;
     (m.of || []).forEach((k, i) => {
       const v = k === "@audit" ? auditPoints : out[k];
@@ -127,6 +130,11 @@ export function validateDefinition(raw: unknown): { ok: true; def: ScorecardDef 
       const weights = Array.isArray(m.weights) ? m.weights.map(Number) : undefined;
       if (weights && (weights.length !== of.length || weights.some((x) => !Number.isFinite(x) || x < 0))) return { ok: false, error: `“${label}” has invalid weights.` };
       measures.push({ key, label, kind: "computed", of, ...(weights ? { weights } : {}), ...(m.round ? { round: true } : {}) });
+    } else if (m.kind === "inspection") {
+      const templateId = String(m.source?.templateId || "").slice(0, 80);
+      if (!templateId) return { ok: false, error: `Choose the checklist “${label}” comes from.` };
+      const metric = m.source?.metric === "passRate" || m.source?.metric === "compliance" ? m.source.metric : "score";
+      measures.push({ key, label, kind: "inspection", source: { templateId, metric }, ...(m.group ? { group: String(m.group).slice(0, 40) } : {}) });
     } else {
       measures.push({ key, label, kind: "input", ...(m.group ? { group: String(m.group).slice(0, 40) } : {}) });
     }

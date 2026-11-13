@@ -1,10 +1,11 @@
-// Exports: ?what=register|history|actions|changes &format=csv|xlsx, scoped by
+// Exports: ?what=register|history|actions|inspections|changes &format=csv|xlsx, scoped by
 // the same filters as the screen (year, unit, area, group, metric). Each export
 // is recorded in the change history.
 import { actorOr, json } from "@/lib/api";
 import { getDataset } from "@/lib/dataset";
 import { getSettings } from "@/lib/company";
 import { listActions } from "@/lib/actions";
+import { listInspections } from "@/lib/inspections";
 import { actionsTable, historyTable, registerTable } from "@/lib/exports";
 import { buildXlsx, toCsv } from "@/lib/workbook";
 import { history } from "@/lib/audit";
@@ -30,7 +31,11 @@ export async function GET(req: Request) {
   if (what === "register") table = registerTable(d, f, q.get("group") === "area" ? "area" : "unit", settings.unitLabel);
   else if (what === "history") table = historyTable(d, f, (["defectRate", "resolutionRate", "recurringRate"].includes(q.get("metric") || "") ? q.get("metric") : "defectRate") as MetricKey, settings.unitLabel);
   else if (what === "actions") table = actionsTable(await listActions(a), (id) => d.areas.find((x) => x.id === id)?.name ?? "", settings.unitLabel);
-  else if (what === "changes") {
+  else if (what === "inspections") {
+    const list = await listInspections(a, { limit: 5000 });
+    table = { name: "Inspections", header: ["Ref", "Template", "Version", settings.unitLabel, "Month", "Status", "Inspector", "Approved by", "Score %", "Result", "Failed", "Critical", "Sampled items", "Deviations", "Checked in", "Submitted", "Approved"],
+      rows: list.map((r) => [r.ref, r.templateName, r.templateVersion, r.unitName, r.period.slice(0, 7), r.status, r.inspectorEmail, r.status === "approved" ? r.supervisorEmail : null, r.score?.pct ?? null, r.score?.result ?? null, r.score?.findings.length ?? 0, r.score?.criticalFails ?? 0, r.score?.items ?? 0, r.score?.deviations ?? 0, r.checkin?.at ?? null, r.submittedAt, r.approvedAt]) };
+  } else if (what === "changes") {
     if (!can.manage(a)) return json({ error: "Admins export the change history." }, 403);
     const h = await history(a.tenant, { limit: 2000 });
     table = { name: "Change history", header: ["#", "When", "Who", "What", "Record", "Summary"], rows: h.map((x) => [x.seq, x.at, x.actor, x.action, `${x.entityType}${x.entityId ? ":" + x.entityId : ""}`, x.summary]) };

@@ -47,5 +47,54 @@ export const MIGRATIONS: { id: string; statements: string[] }[] = [
    "DROP TRIGGER IF EXISTS audit_log_no_change ON audit_log;",
    "CREATE TRIGGER audit_log_no_change BEFORE UPDATE OR DELETE ON audit_log FOR EACH ROW EXECUTE FUNCTION audit_log_append_only();"
   ]
+ },
+ {
+  "id": "0002_inspections",
+  "statements": [
+   "CREATE TABLE \"inspection_events\" (\n\t\"id\" bigserial PRIMARY KEY NOT NULL,\n\t\"company_id\" text NOT NULL,\n\t\"inspection_id\" text NOT NULL,\n\t\"status\" text NOT NULL,\n\t\"by\" text NOT NULL,\n\t\"at\" timestamp with time zone DEFAULT now() NOT NULL,\n\t\"note\" text\n);",
+   "CREATE TABLE \"inspections\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"company_id\" text NOT NULL,\n\t\"ref\" text NOT NULL,\n\t\"client_id\" text,\n\t\"template_id\" text NOT NULL,\n\t\"template_version\" integer NOT NULL,\n\t\"unit_id\" text NOT NULL,\n\t\"period\" date NOT NULL,\n\t\"status\" text DEFAULT 'draft' NOT NULL,\n\t\"inspector_email\" text NOT NULL,\n\t\"supervisor_email\" text,\n\t\"answers\" jsonb DEFAULT '{}'::jsonb NOT NULL,\n\t\"items\" jsonb DEFAULT '[]'::jsonb NOT NULL,\n\t\"signatures\" jsonb DEFAULT '{}'::jsonb NOT NULL,\n\t\"checkin\" jsonb,\n\t\"score\" jsonb,\n\t\"note\" text DEFAULT '' NOT NULL,\n\t\"created_at\" timestamp with time zone DEFAULT now() NOT NULL,\n\t\"updated_at\" timestamp with time zone DEFAULT now() NOT NULL,\n\t\"submitted_at\" timestamp with time zone,\n\t\"approved_at\" timestamp with time zone\n);",
+   "CREATE TABLE \"template_versions\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"company_id\" text NOT NULL,\n\t\"template_id\" text NOT NULL,\n\t\"version\" integer NOT NULL,\n\t\"definition\" jsonb NOT NULL,\n\t\"sha256\" text NOT NULL,\n\t\"published_by\" text NOT NULL,\n\t\"published_at\" timestamp with time zone DEFAULT now() NOT NULL,\n\t\"note\" text DEFAULT '' NOT NULL\n);",
+   "CREATE TABLE \"templates\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"company_id\" text NOT NULL,\n\t\"name\" text NOT NULL,\n\t\"sector\" text DEFAULT 'general' NOT NULL,\n\t\"category\" text DEFAULT '' NOT NULL,\n\t\"status\" text DEFAULT 'draft' NOT NULL,\n\t\"draft\" jsonb NOT NULL,\n\t\"version\" integer DEFAULT 0 NOT NULL,\n\t\"dirty\" boolean DEFAULT true NOT NULL,\n\t\"origin\" text DEFAULT 'custom' NOT NULL,\n\t\"created_by\" text NOT NULL,\n\t\"created_at\" timestamp with time zone DEFAULT now() NOT NULL,\n\t\"updated_at\" timestamp with time zone DEFAULT now() NOT NULL,\n\t\"updated_by\" text\n);",
+   "CREATE UNIQUE INDEX \"inspections_ref\" ON \"inspections\" USING btree (\"company_id\",\"ref\");",
+   "CREATE UNIQUE INDEX \"inspections_client\" ON \"inspections\" USING btree (\"company_id\",\"client_id\");",
+   "CREATE INDEX \"inspections_company_status\" ON \"inspections\" USING btree (\"company_id\",\"status\");",
+   "CREATE INDEX \"inspections_template\" ON \"inspections\" USING btree (\"company_id\",\"template_id\");",
+   "CREATE UNIQUE INDEX \"template_versions_v\" ON \"template_versions\" USING btree (\"company_id\",\"template_id\",\"version\");",
+   "CREATE INDEX \"templates_company\" ON \"templates\" USING btree (\"company_id\",\"status\");"
+  ]
+ },
+ {
+  "id": "0003_inspections_tenancy",
+  "statements": [
+   "-- Tenant isolation for the inspection tables (as 0001_tenancy), and published\n-- template versions made immutable: a version, once published, never changes.\nDO $$\nDECLARE t text;\nBEGIN\n  FOREACH t IN ARRAY ARRAY['templates','template_versions','inspections','inspection_events']\n  LOOP\n    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);\n    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);\n    EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', t);\n    EXECUTE format('CREATE POLICY tenant_isolation ON %I USING (company_id = current_setting(''app.company_id'', true)) WITH CHECK (company_id = current_setting(''app.company_id'', true))', t);\n    BEGIN\n      EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %I TO quality_app', t);\n    EXCEPTION WHEN others THEN NULL;\n    END;\n  END LOOP;\n  BEGIN\n    EXECUTE 'GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO quality_app';\n    EXECUTE 'REVOKE UPDATE ON template_versions FROM quality_app';\n  EXCEPTION WHEN others THEN NULL;\n  END;\nEND $$;",
+   "CREATE OR REPLACE FUNCTION template_versions_frozen() RETURNS trigger AS $$\nBEGIN\n  RAISE EXCEPTION 'A published template version cannot be changed';\nEND;\n$$ LANGUAGE plpgsql;",
+   "DROP TRIGGER IF EXISTS template_versions_no_update ON template_versions;",
+   "CREATE TRIGGER template_versions_no_update BEFORE UPDATE ON template_versions FOR EACH ROW EXECUTE FUNCTION template_versions_frozen();"
+  ]
+ },
+ {
+  "id": "0004_scorecard_versions",
+  "statements": [
+   "CREATE TABLE \"scorecard_versions\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"company_id\" text NOT NULL,\n\t\"scorecard_id\" text NOT NULL,\n\t\"version\" integer NOT NULL,\n\t\"definition\" jsonb NOT NULL,\n\t\"published_by\" text NOT NULL,\n\t\"published_at\" timestamp with time zone DEFAULT now() NOT NULL\n);",
+   "ALTER TABLE \"scorecards\" ADD COLUMN \"draft\" jsonb;",
+   "ALTER TABLE \"scorecards\" ADD COLUMN \"dirty\" boolean DEFAULT false NOT NULL;",
+   "ALTER TABLE \"scorecards\" ADD COLUMN \"origin\" text DEFAULT 'custom' NOT NULL;",
+   "ALTER TABLE \"scorecards\" ADD COLUMN \"updated_at\" timestamp with time zone;",
+   "ALTER TABLE \"scorecards\" ADD COLUMN \"updated_by\" text;",
+   "CREATE UNIQUE INDEX \"scorecard_versions_v\" ON \"scorecard_versions\" USING btree (\"company_id\",\"scorecard_id\",\"version\");"
+  ]
+ },
+ {
+  "id": "0005_scorecard_versions_tenancy",
+  "statements": [
+   "-- Tenant isolation for published scorecard versions (as 0001_tenancy), and the\n-- versions made immutable. Existing scorecards get their first version row the\n-- first time the designer saves them (lib/scorecards.ts), inside their tenant.\nALTER TABLE scorecard_versions ENABLE ROW LEVEL SECURITY;",
+   "ALTER TABLE scorecard_versions FORCE ROW LEVEL SECURITY;",
+   "DROP POLICY IF EXISTS tenant_isolation ON scorecard_versions;",
+   "CREATE POLICY tenant_isolation ON scorecard_versions USING (company_id = current_setting('app.company_id', true)) WITH CHECK (company_id = current_setting('app.company_id', true));",
+   "DO $$ BEGIN\n  GRANT SELECT, INSERT, DELETE ON scorecard_versions TO quality_app;\nEXCEPTION WHEN others THEN NULL;\nEND $$;",
+   "CREATE OR REPLACE FUNCTION scorecard_versions_frozen() RETURNS trigger AS $$\nBEGIN\n  RAISE EXCEPTION 'A published scorecard version cannot be changed';\nEND;\n$$ LANGUAGE plpgsql;",
+   "DROP TRIGGER IF EXISTS scorecard_versions_no_update ON scorecard_versions;",
+   "CREATE TRIGGER scorecard_versions_no_update BEFORE UPDATE ON scorecard_versions FOR EACH ROW EXECUTE FUNCTION scorecard_versions_frozen();"
+  ]
  }
 ];

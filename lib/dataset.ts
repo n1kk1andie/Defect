@@ -10,7 +10,7 @@
 // The scorecard (Operational Standard) comes from scorecard_entries.
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { withTenant, type Tx } from "@/lib/db/client";
-import { areas, checks, monthlyStats, natures, reviewItems, reviews, scorecardEntries, scorecards, units } from "@/lib/db/schema";
+import { areas, checks, inspections, monthlyStats, natures, reviewItems, reviews, scorecardEntries, scorecards, units } from "@/lib/db/schema";
 import { loadSettings } from "@/lib/company";
 import type { QualityData, Row, ScorecardData } from "@/lib/metrics";
 import type { CompanySettings } from "@/lib/settings";
@@ -36,7 +36,15 @@ export async function buildDataset(tx: Tx, companyId: string, settings?: Company
     tx.select({ id: reviews.id, unitId: reviews.unitId, period: reviews.period }).from(reviews).where(and(eq(reviews.companyId, companyId), eq(reviews.status, "published"), eq(reviews.kind, "checklist"))),
     tx.select({ label: natures.label, category: natures.category }).from(natures).where(eq(natures.companyId, companyId)),
   ]);
-  const items = pubs.length ? await tx.select().from(reviewItems).where(and(eq(reviewItems.companyId, companyId), inArray(reviewItems.reviewId, pubs.map((p) => p.id)))) : [];
+  const items: { reviewId: string; areaId: string; checks: unknown; defects: number; nature: string; recurring: boolean; status: string }[] = pubs.length ? await tx.select().from(reviewItems).where(and(eq(reviewItems.companyId, companyId), inArray(reviewItems.reviewId, pubs.map((p) => p.id)))) : [];
+  // Approved inspections of a Branch Defects template count exactly as published reviews do.
+  const insp = await tx.select({ id: inspections.id, unitId: inspections.unitId, period: inspections.period, score: inspections.score }).from(inspections).where(and(eq(inspections.companyId, companyId), eq(inspections.status, "approved")));
+  for (const i of insp) {
+    const feed = (i.score as { feed?: { kind: string; areaId: string; items: { checks: Record<string, string>; defects: number; nature: string; recurring: boolean }[] } } | null)?.feed;
+    if (feed?.kind !== "defects") continue;
+    pubs.push({ id: i.id, unitId: i.unitId, period: i.period });
+    for (const it of feed.items) items.push({ reviewId: i.id, areaId: feed.areaId, checks: it.checks, defects: it.defects, nature: it.nature, recurring: it.recurring, status: "open" });
+  }
   const reviewOf = new Map(pubs.map((p) => [p.id, p]));
 
   // Cells from published reviews.
