@@ -128,6 +128,8 @@ test("the backup route refuses a call without the cron secret", async () => {
 test("the backup route does nothing without BACKUP_BLOB_READ_WRITE_TOKEN, and nothing on a demo", async () => {
   const { GET } = await import("../app/api/cron/backup/route.ts");
   process.env.CRON_SECRET = "s3cret";
+  const demoWas = process.env.DEMO_MODE; // the demo CI job runs every test with DEMO_MODE=1
+  delete process.env.DEMO_MODE;
   delete process.env.BACKUP_BLOB_READ_WRITE_TOKEN;
   const r = await GET(cronReq({ authorization: "Bearer s3cret" }));
   assert.equal(r.status, 200);
@@ -137,7 +139,7 @@ test("the backup route does nothing without BACKUP_BLOB_READ_WRITE_TOKEN, and no
   try {
     assert.equal((await (await GET(cronReq({ authorization: "Bearer s3cret" }))).json()).skipped, "demo");
   } finally {
-    delete process.env.DEMO_MODE;
+    if (demoWas === undefined) delete process.env.DEMO_MODE; else process.env.DEMO_MODE = demoWas;
     delete process.env.BACKUP_BLOB_READ_WRITE_TOKEN;
   }
 });
@@ -234,6 +236,7 @@ test("the backup route refuses a backup token that is the live store's token", a
   console.error = (...a) => errs.push(a.join(" "));
   try {
     process.env.CRON_SECRET = "s3cret";
+    delete process.env.DEMO_MODE;
     process.env.BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_same_store";
     process.env.BACKUP_BLOB_READ_WRITE_TOKEN = "vercel_blob_rw_same_store";
     const r = await GET(new Request("http://localhost/api/cron/backup", { headers: { authorization: "Bearer s3cret" } }));
