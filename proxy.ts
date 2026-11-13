@@ -74,6 +74,8 @@ export async function proxy(req: NextRequest) {
     return NextResponse.json({ error: "Cross-site request refused." }, { status: 403 });
   }
   if (PUBLIC.test(pathname) || /^\/api\/pulse\/?$/.test(pathname)) return forward(req, null);
+  // Scheduled jobs (/api/cron/*) check CRON_SECRET themselves (lib/cron.ts).
+  if (/^\/api\/cron\//.test(pathname)) return forward(req, null);
 
   if (isDemo()) {
     const p = (req.cookies.get(PERSONA_COOKIE)?.value || "").toLowerCase();
