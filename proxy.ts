@@ -95,7 +95,17 @@ export async function proxy(req: NextRequest) {
     }
   }
 
-  if (licenseWallActive()) return licenseWallResponse(pathname);
+  // The licence wall stops sessions that aren't a paying customer company. A
+  // visitor who isn't signed in at all goes to the sign-in page instead (with its
+  // free-trial link), as in every Pulsus app; a dead-end notice is no front door.
+  if (licenseWallActive()) {
+    if (!token && !api) {
+      const u = req.nextUrl.clone(); u.pathname = "/login";
+      u.search = pathname && pathname !== "/" ? `?next=${encodeURIComponent(pathname + search)}` : "";
+      return NextResponse.redirect(u);
+    }
+    return licenseWallResponse(pathname);
+  }
 
   if (/^\/api\/data\/?$/.test(pathname) && req.method === "GET") {
     const feed = (process.env.PULSE_FEED_TOKEN || "").trim();
