@@ -165,7 +165,7 @@ export function Shell({ children }: { children: ReactNode }) {
           {build.map((n) => <Link key={n.href} href={n.href} aria-current={on(n.href) ? "page" : undefined}><Icon name={n.icon} /><span>{n.label}</span></Link>)}
           <span className="nav-label">Organisation</span>
           <Link href="/settings" aria-current={on("/settings") ? "page" : undefined}><Icon name="settings" /><span>Settings</span></Link>
-          {!app.demo && <a href={app.platformUrl} target="_top"><Icon name="globe" /><span>Back to Pulsus</span></a>}
+          {!app.demo && <a href={app.platformUrl}><Icon name="globe" /><span>Back to Pulsus</span></a>}
         </nav>
         <div className="side-foot">
           <div className="me">
