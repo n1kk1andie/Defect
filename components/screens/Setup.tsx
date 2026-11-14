@@ -75,7 +75,7 @@ export function SetupWizard() {
 
   if (done) return (
     <div className="wizard">
-      <div className="hero" style={{ marginBottom: 18 }}>
+      <div className="hero tone-good" style={{ marginBottom: 18 }}>
         <div className="eyebrow">Set up</div>
         <div className="hero-big" style={{ fontSize: 40 }}>You're ready.</div>
         <div className="hero-sub">{done.units} {units.toLowerCase()} added · {done.templates} checklists published · {done.scorecard ? "your scorecard is on the dashboards" : "no scorecard yet"}.</div>
