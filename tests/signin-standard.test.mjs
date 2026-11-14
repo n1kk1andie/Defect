@@ -49,8 +49,9 @@ test("the uniform brand block: emblem-only 176/200 px box, Pulsus <App> as live 
   const block = css.slice(css.indexOf("The uniform brand block"));
   assert.match(block, /\.sf \.sf-emblem \{ width: 176px; height: 176px;[^}]*object-fit: contain; margin: 4px auto 0; \}/);
   assert.match(block, /@media \(min-width: 600px\) \{\n  \.sf \.sf-emblem \{ width: 200px; height: 200px;/);
-  assert.match(block, /font-weight: 800;\n  font-size: clamp\(30px, 10vw, 40px\); line-height: 1\.1; letter-spacing: -0\.01em; white-space: nowrap; color: #0b1f4d;/);
+  assert.match(block, /font-weight: 800;\n  font-size: clamp\(24px, 7\.4vw, 36px\); line-height: 1\.1; letter-spacing: -0\.01em; white-space: nowrap; color: #0b1f4d;/);
   assert.match(block, /\.sf \.sf-name \.sf-word \{ color: #c8102e; \}/);
+  assert.doesNotMatch(block, /font-size: 44px/, "the same name size at every width");
   assert.match(block, /\.sf \.sf-sub \{ margin: 8px 0 0;[^}]*font-weight: 700; font-size: 14px;[^}]*letter-spacing: 0\.16em; text-transform: uppercase; color: #0b1f4d; \}/);
   assert.match(block, /\.sf \.sf-tag \{ margin: 22px 0 0;[^}]*font-size: 18px;/);
   assert.match(block, /color: #f3f4fb;[\s\S]*#ff4d6d[\s\S]*#c6cae3/);
@@ -58,7 +59,7 @@ test("the uniform brand block: emblem-only 176/200 px box, Pulsus <App> as live 
   const { licenseWallResponse } = await import("../lib/licenseWall.ts");
   const html = await licenseWallResponse("/").text();
   assert.match(html, /img\.emblem\{display:block;width:176px;height:176px;object-fit:contain;margin:4px auto 0\}/);
-  assert.match(html, /@media \(min-width:600px\)\{img\.emblem\{width:200px;height:200px\}\.name\{font-size:44px\}\}/);
-  assert.match(html, /\.name\{margin:12px 0 0;[^}]*font-weight:800;font-size:clamp\(30px,10vw,40px\);line-height:1\.1;letter-spacing:-\.01em;white-space:nowrap;color:#0b1f4d\}\.name span\{color:#c8102e\}/);
+  assert.match(html, /@media \(min-width:600px\)\{img\.emblem\{width:200px;height:200px\}\}/);
+  assert.match(html, /\.name\{margin:12px 0 0;[^}]*font-weight:800;font-size:clamp\(24px,7\.4vw,36px\);line-height:1\.1;letter-spacing:-\.01em;white-space:nowrap;color:#0b1f4d\}\.name span\{color:#c8102e\}/);
   assert.match(html, /<h1 class="name">Pulsus <span>Quality<\/span><\/h1><p class="sub">Quality assurance<\/p><p class="tag">Live\. <span>Signal\.<\/span> Clarity\.<\/p>/);
 });
