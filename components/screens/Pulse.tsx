@@ -11,6 +11,7 @@ import { BarTrend, Heatmap } from "@/components/charts";
 import { FilterBar, ModeToggle, scopeText, YearSelect } from "@/components/screens/Filters";
 import { can } from "@/lib/roles";
 import { bandInfo, auditGrade, gradeBand, AUDIT_GRADES, opStdRating, ratingBand } from "@/lib/bands";
+import { heroTone, heroToneClass } from "@/lib/hero-tone";
 import { byArea, byUnit, filterRows, monthShort, num, pct, record, scMean, scMonths, scRows, score, trend } from "@/lib/metrics";
 
 export function Pulse() {
@@ -46,11 +47,11 @@ function DefectsPulse() {
           {can.manage(app.actor) && <div className="row wrap" style={{ justifyContent: "center", paddingBottom: 8 }}><a className="btn primary" href="/settings#settings-setup">Company set-up</a><a className="btn" href="/settings#settings-data">Import data or a workbook</a></div>}</Card>
       ) : (
         <div className="stack">
-          <section className="hero" aria-label="Defect rate">
+          <section className={`hero ${heroToneClass(heroTone(b))}`} aria-label="Defect rate" data-tone={heroTone(b)}>
             <div className="hero-scope">{scopeText(app)}</div>
             <div className="eyebrow">Defect rate</div>
             <div className="hero-big">{pct(rec.defectRate)}</div>
-            <div className="hero-sub">{num(rec.defects)} defects across {num(rec.instances)} possible instances{b !== "none" && <> · <strong>{bandInfo(b).label}</strong></>}</div>
+            <div className="hero-sub">{num(rec.defects)} defects across {num(rec.instances)} possible instances · <strong>{b !== "none" ? bandInfo(b).label : "No reading yet"}</strong></div>
           </section>
           <div className="grid g4">
             <Stat icon="review" value={num(rec.reviewed)} label={`${settings.itemLabel}s reviewed`} />

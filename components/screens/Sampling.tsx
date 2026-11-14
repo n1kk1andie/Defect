@@ -4,6 +4,7 @@
 // the sample size is worked out and the items chosen at random from a seed
 // anyone can re-run. Review the selected items as an inspection; the result
 // is projected to the population with an upper deviation limit.
+import { heroToneClass } from "@/lib/hero-tone";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -165,7 +166,7 @@ export function PlanDetail({ plan: p, population }: { plan: PlanView; population
       <div className="grid g-2-1">
         <div style={{ minWidth: 0 }}>
           {ev ? (
-            <section className={`hero${ev.effective ? " navy" : ""}`} aria-label="Result" style={{ marginBottom: 16 }}>
+            <section className={`hero ${heroToneClass(ev.effective ? "good" : "bad")}`} data-tone={ev.effective ? "good" : "bad"} aria-label="Result" style={{ marginBottom: 16 }}>
               <div className="eyebrow">Result · {ev.source === "inspection" ? `from ${p.inspectionRef ?? "the review"}` : "entered"} · {fmtDateTime(ev.at)}</div>
               <div className="hero-big" style={{ fontSize: 44 }}>{ev.effective ? "Effective" : "Not effective"}</div>
               <div className="hero-sub">{ev.deviations} deviation{ev.deviations === 1 ? "" : "s"} in {ev.n} ({pc(ev.rate)}) · upper limit {pc(ev.upper)} at {pc(ev.confidence, 0)} confidence vs tolerable {pc(ev.tdr)}{ev.projected != null ? ` · about ${ev.projected.toLocaleString("en-US")} in the population` : ""}</div>
