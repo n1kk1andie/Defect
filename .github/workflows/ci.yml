@@ -1,23 +1,30 @@
-# Checks on every pull request and every push to the live and demo branches:
-# the build and the test suite in live and demo mode, the accessibility check
-# (axe, WCAG 2.2 AA) against a running demo build, and a dependency audit.
+# The full set of checks, run by hand before big releases:
+# the build and the test suite in live and demo mode, the accessibility
+# check (axe, WCAG 2.2 AA) against a running demo build, and a dependency audit.
 name: CI
 
+# Manual only (Actions → CI → Run workflow), to keep GitHub Actions costs
+# near zero: these checks run locally before every merge (RELEASING.md). Run
+# it by hand for big releases. "job" picks one job, or all.
 on:
-  pull_request:
-  push:
-    branches: [claude/build-tracker-xq65z0, claude/demo-environment]
   workflow_dispatch:
+    inputs:
+      job:
+        description: Which job to run
+        type: choice
+        default: all
+        options: [all, test, a11y, audit]
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   test:
+    if: inputs.job == 'all' || inputs.job == 'test'
     name: Build and tests (${{ matrix.mode }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -42,6 +49,7 @@ jobs:
         run: npm test
 
   a11y:
+    if: inputs.job == 'all' || inputs.job == 'a11y'
     name: Accessibility (axe, WCAG 2.2 AA)
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -64,6 +72,7 @@ jobs:
         run: A11Y_BASE=http://localhost:3652 npm run test:a11y
 
   audit:
+    if: inputs.job == 'all' || inputs.job == 'audit'
     name: Dependency audit
     runs-on: ubuntu-latest
     timeout-minutes: 10
