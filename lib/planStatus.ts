@@ -23,4 +23,4 @@ export function cachedLicenceLapsed(plan: PlanState | null | undefined, now = Da
   return null;
 }
 
-export const LICENCE_MESSAGE = "Your company's Pulsus Quality plan isn't active. An owner or admin can choose a plan on Pulsus (Plan & billing); existing API keys work again as soon as it is.";
+export const LICENCE_MESSAGE = "Your organisation's Pulsus subscription is not active. Your records are kept. Only your organisation's owner can pay (View plan & billing on Pulsus Platform); existing API keys work again as soon as it is.";

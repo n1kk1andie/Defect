@@ -30,9 +30,11 @@
 // Otherwise: 401 for an API, /login for a page.
 import { licenceLapsed } from "./lib/planStatus";
 import { NextRequest, NextResponse } from "next/server";
-import { licenseWallActive, licenseWallResponse } from "./lib/licenseWall";
+import { BILLING_LABEL, BILLING_NOTE, ctaHtml, licenseWallActive, licenseWallResponse } from "./lib/licenseWall";
+import { frameHtml, QUALITY_FRAME } from "./lib/frame-html";
+import { footerLines } from "./lib/footer";
 import { demoAccessGate } from "./lib/demoAccess";
-import { claimedIssuer, COMPANY_JWT_ISSUER, platformSession, PLATFORM_COOKIE, type PlatformSession } from "./lib/platform-jwt";
+import { claimedIssuer, COMPANY_JWT_ISSUER, platformSession, platformUrl, PLATFORM_COOKIE, type PlatformSession } from "./lib/platform-jwt";
 
 const MODULE_KEY = "quality";
 const OWN = "_own";
@@ -71,11 +73,15 @@ function companyIdentity(s: PlatformSession): Record<string, string> {
   };
 }
 
+/** Plan & billing on Pulsus Platform (the demo hub on a demo). */
+const billingUrl = () => `${platformUrl()}/company#billing`;
+
+/** A customer company's notice, in the sign-in standard's frame with "View plan & billing"; JSON (with `plan`) for an API. */
 function refuse(pathname: string, status: number, title: string, body: string): NextResponse {
-  if (pathname.startsWith("/api/")) return NextResponse.json({ error: title }, { status, headers: { "Cache-Control": "no-store" } });
+  if (pathname.startsWith("/api/")) return NextResponse.json({ error: title, plan: billingUrl() }, { status, headers: { "Cache-Control": "no-store" } });
   return new NextResponse(
-    `<!doctype html><html lang="en"><meta charset="utf-8"><meta name=viewport content="width=device-width,initial-scale=1"><title>Pulsus Quality</title><body style="font-family:system-ui,sans-serif;max-width:520px;margin:15vh auto;padding:0 16px;text-align:center;color:#1C1416;background:#F7F1E8"><h1 style="font-size:22px">${title}</h1><p>${body}</p></body></html>`,
-    { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } },
+    frameHtml(QUALITY_FRAME, { pageTitle: `${title} · Pulsus Quality`, title, body, ctaHtml: ctaHtml(billingUrl(), BILLING_LABEL, BILLING_NOTE), foot: footerLines() }),
+    { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" } },
   );
 }
 
@@ -100,10 +106,10 @@ export async function proxy(req: NextRequest) {
   if (token && claimedIssuer(token) === COMPANY_JWT_ISSUER) {
     const s = await platformSession(token);
     if (s?.company) {
-      if (!s.company.modules.includes(MODULE_KEY)) return refuse(pathname, 403, "Pulsus Quality isn't switched on for your company", "An owner or admin can add it on the company page in Pulsus.");
+      if (!s.company.modules.includes(MODULE_KEY)) return refuse(pathname, 403, "Pulsus Quality isn't switched on for your organisation", "Your organisation's owner or administrator can add it on the company page in Pulsus Platform.");
       const lapsed = licenceLapsed(s.company.plan);
       if (lapsed) {
-        if (api) return NextResponse.json({ error: "licence_required" }, { status: 402 });
+        if (api) return NextResponse.json({ error: "licence_required", plan: billingUrl() }, { status: 402 });
         if (pathname !== "/licence") { const u = req.nextUrl.clone(); u.pathname = "/licence"; u.search = `?reason=${lapsed}`; return NextResponse.redirect(u); }
       }
       return forward(req, companyIdentity(s));

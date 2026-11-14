@@ -31,7 +31,7 @@ test("every sign-in-like page uses the one frame with Pulsus Quality's own artwo
   assert.ok(existsSync(new URL("../public/pulsus-quality-icon.png", import.meta.url)));
   assert.ok(existsSync(new URL("../public/pulsus-quality-icon-night.png", import.meta.url)));
   assert.match(src("components/account/AccountFrame.tsx"), /<SignInFrame brand=\{QUALITY_BRAND\}/);
-  for (const f of ["components/NoAccess.tsx", "app/licence/page.tsx"]) assert.match(src(f), /<AccountFrame/, f);
+  for (const f of ["components/NoAccess.tsx", "app/licence/page.tsx"]) assert.match(src(f), /<AccountFrame|<LicenceNotice/, f);
   const { licenseWallResponse } = await import("../lib/licenseWall.ts");
   for (const html of [await licenseWallResponse("/").text()]) {
     assert.match(html, /pulsus-quality-icon-day\.png/);
