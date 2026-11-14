@@ -26,6 +26,20 @@ export function Wordmark({ size = 1 }: { size?: number }) {
   );
 }
 
+// The app footer, the same two lines across the Pulsus Intelligence Suite: the
+// product and the suite, then the studio and the company.
+export const FOOTER_SUITE = "Part of the Pulsus Intelligence Suite";
+export const FOOTER_STUDIO = "A product of Tumblehill Labs, a product studio of Tumblehill Holdings LLC.";
+
+export function FooterLines() {
+  return (
+    <>
+      <span>Pulsus Quality · {FOOTER_SUITE}</span>
+      <span>{FOOTER_STUDIO}</span>
+    </>
+  );
+}
+
 export function Tagline({ className = "" }: { className?: string }) {
   return (
     <p className={`tagline ${className}`} style={{ margin: 0 }}>

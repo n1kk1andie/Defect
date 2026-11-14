@@ -3,7 +3,7 @@
 // look — the family paper, the wordmark, a big two-line headline — with the form on
 // a white card beside it (stacked on a phone).
 import type { ReactNode } from "react";
-import { Tagline, Wordmark } from "@/components/Brand";
+import { FooterLines, Tagline, Wordmark } from "@/components/Brand";
 import { Icon } from "@/components/icons";
 
 export function AccountFrame({ title, sub, children }: { title: string; sub?: ReactNode; children: ReactNode }) {
@@ -25,8 +25,9 @@ export function AccountFrame({ title, sub, children }: { title: string; sub?: Re
         {sub && <p className="sub" style={{ fontSize: 14, margin: "4px 0 0" }}>{sub}</p>}
         {children}
         <p className="sub" style={{ marginTop: 22, fontSize: 12 }}>
-          <a href="https://pulsus.tech/terms" style={{ color: "inherit" }}>Terms of Use</a> · <a href="https://pulsus.tech/privacy" style={{ color: "inherit" }}>Privacy Policy</a> · <a href="mailto:support@pulsus.tech" style={{ color: "inherit" }}>support@pulsus.tech</a><br />© 2026 Tumblehill Holdings LLC
+          <a href="https://pulsus.tech/terms" style={{ color: "inherit" }}>Terms of Use</a> · <a href="https://pulsus.tech/privacy" style={{ color: "inherit" }}>Privacy Policy</a> · <a href="mailto:support@pulsus.tech" style={{ color: "inherit" }}>support@pulsus.tech</a>
         </p>
+        <p className="sub foot-lines" style={{ marginTop: 6, fontSize: 12 }}><FooterLines /></p>
       </section>
     </main>
   );

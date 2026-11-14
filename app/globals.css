@@ -297,7 +297,9 @@ html[data-theme="dark"] .overlay{background:rgba(4,6,20,.65)}
 .empty{text-align:center;padding:30px 16px;color:var(--dim)}
 .tagline{font-family:Sora,sans-serif;font-weight:700;letter-spacing:.02em;color:var(--ink-2)}
 .tagline em{font-style:normal;color:var(--red)}
-.foot{max-width:1320px;padding:0 28px 40px;font-size:12px;color:var(--dim);display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between}
+.foot{max-width:1320px;padding:0 28px 40px;font-size:12px;line-height:1.5;text-wrap:pretty;color:var(--dim);display:flex;flex-direction:column;gap:2px}
+.foot-lines{display:flex;flex-direction:column;gap:2px}
+.demonote{margin:10px 16px 0;font-size:12px;font-weight:600;color:var(--info-ink)}
 @media (max-width:860px){.foot{padding:0 16px calc(100px + env(safe-area-inset-bottom))}}
 
 /* settings */
