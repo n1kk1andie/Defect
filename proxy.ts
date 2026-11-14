@@ -48,6 +48,9 @@ const DEMO_PERSONAS = ["guest", "admin", "taylor.reid", "robin.ellis", "jordan.b
 
 const PUBLIC = /^\/(?:login|signup|licence|api\/health|api\/logout|manifest\.webmanifest|icon\.png|apple-icon\.png|apple-touch-icon\.png|favicon\.ico|pulsus-quality[\w.-]*\.png|r|api\/public|api\/v1|api\/cron)(?:\/|$)/;
 const MACHINE = /^\/(?:api\/health|api\/logout|api\/pulse|api\/data|api\/v1|api\/cron)(?:\/|$)/;
+// A signed-out visitor at the front door (/ only) goes to the product's own site;
+// everything else (sign-in, the licence wall, demo deployments) is unchanged.
+const ABOUT_SITE = "https://aboutquality.pulsus.tech/";
 const isDemo = () => (process.env.DEMO_MODE || "").trim().replace(/^["']+|["']+$/g, "") === "1";
 
 function forward(req: NextRequest, id: Record<string, string> | null): NextResponse {
@@ -120,6 +123,7 @@ export async function proxy(req: NextRequest) {
   // visitor who isn't signed in at all goes to the sign-in page instead (with its
   // free-trial link), as in every Pulsus app; a dead-end notice is no front door.
   if (licenseWallActive()) {
+    if (pathname === "/" && !(token && (await platformSession(token)))) return NextResponse.redirect(ABOUT_SITE, 302);
     if (!token && !api) {
       const u = req.nextUrl.clone(); u.pathname = "/login";
       u.search = pathname && pathname !== "/" ? `?next=${encodeURIComponent(pathname + search)}` : "";
@@ -143,6 +147,7 @@ export async function proxy(req: NextRequest) {
   }
 
   if (api) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
+  if (pathname === "/") return NextResponse.redirect(ABOUT_SITE, 302);
   const url = req.nextUrl.clone();
   url.pathname = "/login";
   url.search = pathname && pathname !== "/" ? `?next=${encodeURIComponent(pathname + search)}` : "";
