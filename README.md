@@ -43,7 +43,7 @@ Docs: [quality model and benchmark](docs/quality-model.md) · [migration](docs/m
 ```
 npm install
 npm run dev                         # http://localhost:3000 (needs a platform session; or:)
-DEMO_MODE=1 npm run dev             # the demo, straight in
+DEMO_MODE=1 DEMO_ACCESS_GATE=off npm run dev   # the demo, straight in (a deployed demo needs the platform's demo access: lib/demoAccess.ts)
 npm test                            # unit and database tests (PGlite, row-level security on)
 DEMO_MODE=1 npm test
 A11Y_BASE=http://localhost:3652 npm run test:a11y   # axe, WCAG 2.2 AA, against a running demo build
