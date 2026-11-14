@@ -10,6 +10,7 @@ import { actions, entities, inspections, siteGroups, templates, units } from "@/
 import { authenticateKey, rateLimited, type KeyActor, type Scope } from "@/lib/apiKeys";
 import type { StoredScore } from "@/lib/inspections";
 import { LICENCE_MESSAGE } from "@/lib/planStatus";
+import { platformUrl } from "@/lib/platform-jwt";
 
 export const API_VERSION = "2026-11-01";
 
@@ -19,7 +20,8 @@ export function apiError(status: number, code: string, message: string, headers:
 export const apiJson = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { "Cache-Control": "no-store", "X-Pulsus-Api-Version": API_VERSION } });
 
 /** 402 with code "licence_required": the company's plan has lapsed (the same rule as the licence wall). */
-export const licenceRefusal = () => apiError(402, "licence_required", LICENCE_MESSAGE);
+export const licenceRefusal = () =>
+  NextResponse.json({ error: { code: "licence_required", message: LICENCE_MESSAGE }, plan: `${platformUrl()}/company#billing` }, { status: 402, headers: { "Cache-Control": "no-store", "X-Pulsus-Api-Version": API_VERSION } });
 
 /** Authenticate, check the licence, the scope and the rate limit, then run. */
 export async function withKey(req: Request, scope: Scope, fn: (k: KeyActor) => Promise<Response>): Promise<Response> {

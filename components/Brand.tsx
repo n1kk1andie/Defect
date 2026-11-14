@@ -1,5 +1,6 @@
 // The Pulsus Quality marks: the emblem (day and night artwork), the PULSUS /
 // QUALITY wordmark and the suite tagline.
+import { footerLines, FOOTER_STUDIO, FOOTER_SUITE } from "@/lib/footer";
 
 export function QualityMark({ className = "brand-mark" }: { className?: string }) {
   // The owner's Pulsus Quality emblem (rosette with a tick over a heartbeat in
@@ -29,16 +30,16 @@ export function Wordmark({ size = 1 }: { size?: number }) {
   );
 }
 
-// The app footer, the same two lines across the Pulsus Intelligence Suite: the
-// product and the suite, then the studio and the company.
-export const FOOTER_SUITE = "Part of the Pulsus Intelligence Suite";
-export const FOOTER_STUDIO = "A product of Tumblehill Labs, a product studio of Tumblehill Holdings LLC.";
+// The app footer, the same two lines across the Pulsus Intelligence Suite
+// (lib/footer.ts): the product and the suite, then the studio and the company.
+export { FOOTER_STUDIO, FOOTER_SUITE };
 
 export function FooterLines() {
+  const [suite, studio] = footerLines();
   return (
     <>
-      <span>Pulsus Quality · {FOOTER_SUITE}</span>
-      <span>{FOOTER_STUDIO}</span>
+      <span>{suite}</span>
+      <span>{studio}</span>
     </>
   );
 }

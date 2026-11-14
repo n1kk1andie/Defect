@@ -5,7 +5,7 @@
 // and the app's own images; no scripts.
 export interface FrameBrand { word: string; sub: string; emblem: string; emblemNight: string; icon: string }
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 export function frameHtml(b: FrameBrand, p: { pageTitle: string; title: string; body: string; ctaHtml?: string; foot?: string[]; lang?: string }): string {
   const foot = (p.foot || []).map((l) => `<p>${esc(l)}</p>`).join("");
@@ -22,6 +22,7 @@ img.emblem{display:block;width:58%;min-width:180px;max-width:240px;height:auto;m
 h2{margin:28px 0 0;font-family:Sora,"IBM Plex Sans",system-ui,sans-serif;font-size:24px;font-weight:800;line-height:1.25}
 .body{margin:12px 0 0;font-size:17px;line-height:1.55;color:var(--muted)}
 .cta{display:inline-flex;align-items:center;justify-content:center;width:100%;min-height:56px;margin-top:24px;background:var(--red);color:#fff;text-decoration:none;font-family:Sora,"IBM Plex Sans",system-ui,sans-serif;font-weight:700;font-size:18px;padding:12px 16px;border-radius:14px}
+.note{margin:14px 0 0;font-size:14px;line-height:1.5;color:var(--muted)}.signout{display:inline-block;margin-top:14px;font-weight:700;font-size:16px;color:var(--red);text-decoration:none}
 .cta:focus-visible,a:focus-visible{outline:3px solid #2f5bd3;outline-offset:2px}
 .foot{width:100%;max-width:480px;margin:22px auto 0;text-align:center;font-size:13px;line-height:1.6;color:var(--muted)}.foot p{margin:0}
 @media (min-width:720px){.card{padding:44px 40px 36px}img.emblem{width:260px;max-width:260px}}

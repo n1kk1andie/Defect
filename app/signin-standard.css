@@ -127,3 +127,9 @@ html[data-theme="dark"] .sf .sf-btn { background: #c8102e; }
   html:not([data-theme="light"]) .sf .sf-night { display: block !important; }
   html:not([data-theme="light"]) .sf .sf-btn { background: #c8102e; }
 }
+
+/* The licence screen standard (app/licence, the same words and look as the licence wall in lib/licenseWall.ts). */
+.sf-notice-title { margin: 28px 0 0; font-family: "Sora", "IBM Plex Sans", system-ui, sans-serif; font-size: 24px; font-weight: 800; line-height: 1.25; text-align: center; color: var(--sf-ink); }
+.sf-notice-body { margin: 12px 0 0; font-size: 17px; line-height: 1.55; text-align: center; color: var(--sf-muted); }
+html body .sf a.sf-notice-cta, html body .sf a.sf-notice-cta:hover { display: inline-flex; align-items: center; justify-content: center; width: 100%; min-height: 56px; margin-top: 24px; text-decoration: none; color: #fff; }
+.sf-notice-note { margin: 14px 0 0; font-size: 14px; line-height: 1.5; text-align: center; color: var(--sf-muted); }
