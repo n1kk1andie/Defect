@@ -6,6 +6,7 @@
     {
       "path": "/api/cron/notify",
       "schedule": "17 6 * * *"
-    }
+    },
+    { "path": "/api/cron/backup", "schedule": "29 3 * * *" }
   ]
 }
