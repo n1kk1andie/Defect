@@ -4,7 +4,7 @@ Quality management and inspections for multi-site organisations: banks and credi
 
 - **Pulse:** defect rate, defects found, resolved and recurring, the trend, every branch and process area; or the Operational Standard scorecard against its target, with audit grades.
 - **Register:** the counts behind every rate (sortable, CSV/Excel) and each published defect, which supervisors resolve or turn into actions.
-- **History:** branch × month heat-maps of the defect, resolution and recurring rates, and branch × process area.
+- **Performance** (`/history`)**:** branch × month heat-maps of the defect, resolution and recurring rates, and branch × process area.
 - **Insights:** the branch watchlist, the resolution gap, recurring-issue detection (preventive actions, send to Pulsus Risk), systemic recurring, scorecard vs defects.
 - **Inspect:** inspections, field visits and file reviews on any published template, on a phone and offline: check-in, photos per question, signatures, live score; a supervisor who didn't carry it out approves it, and failed items become corrective actions.
 - **Schedule:** programmes of recurring visits per checklist and site (fixed cadence or set by the risk band), assigned to inspectors; my schedule on the phone, all visits, a month calendar and overdue alerts.

@@ -559,7 +559,7 @@ function HelpPage() {
       <ol style={{ paddingLeft: 18, lineHeight: 1.7 }}>
         <li>A Quality admin sets up {"units"}, process areas and checklists (Company set-up), and grants roles (People and roles).</li>
         <li>Inspectors key reviews on Review; a supervisor approves them.</li>
-        <li>Pulse, Register, History and Insights update as reviews are published.</li>
+        <li>Pulse, Register, Performance and Insights update as reviews are published.</li>
         <li>Supervisors raise actions from defects or recurring issues; another supervisor verifies the closure.</li>
       </ol>
       <p>Questions: <a href="mailto:support@pulsus.tech">support@pulsus.tech</a></p>

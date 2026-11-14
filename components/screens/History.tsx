@@ -16,7 +16,7 @@ export function History() {
   const app = useApp();
   return (
     <>
-      <PageHead eyebrow={`History · ${scopeText(app)}`} title="Finding the issue" accent="is only the beginning." lede="Every branch, month by month: where defects appeared, how fast they were fixed and what keeps coming back." right={<YearSelect />} />
+      <PageHead eyebrow={`Performance · ${scopeText(app)}`} title="Finding the issue" accent="is only the beginning." lede="Every branch, month by month: where defects appeared, how fast they were fixed and what keeps coming back." right={<YearSelect />} />
       <ModeToggle />
       <FilterBar />
       {app.filters.mode === "standard" && app.data.scorecard ? <StandardHistory /> : <DefectHistory />}
