@@ -1,18 +1,28 @@
-// The nightly logical backup (app/api/cron/backup): every company's rows, one
-// gzipped JSON file per company, written to a SEPARATE Blob store (its own
-// token, BACKUP_BLOB_READ_WRITE_TOKEN) under
+// Change-triggered logical backups: a company's rows, one gzipped JSON file,
+// written to a SEPARATE Blob store (its own token, BACKUP_BLOB_READ_WRITE_TOKEN)
+// under
 //   backups/quality/<yyyy-mm-dd>/<company>.json.gz
-// with backups/quality/<yyyy-mm-dd>/manifest.json beside them. Files older than
-// RETENTION_DAYS are deleted, only under backups/quality/ in that store.
+// with backups/quality/<yyyy-mm-dd>/manifest.json beside them (a later backup the
+// same day replaces that day's file). Days older than RETENTION_DAYS are
+// deleted, only under backups/quality/ in that store, and only as part of a backup
+// that actually happened (the first one of each day).
+//
+// When: a write for a real company marks it in backup_state (a trigger, see
+// drizzle/0011_backup_state.sql); after the response, lib/backup-after.ts calls
+// backupIfDue(), which backs that company up if it has unsaved changes and its
+// last backup is at least 15 minutes old. The once-a-day sweep
+// (app/api/cron/backup) catches trailing edits: it asks one cheap question,
+// "is anything pending?", and stops there when nothing is: no store calls, no
+// per-company loop. No real changes, no runs, no cost.
 //
 // Reads go through the system path, read-only, one repeatable-read transaction
-// per company (a consistent snapshot of that company). A run stops at its
-// deadline; the next run for the same day lists the files already written and
-// carries on from there (the route chains runs until the day is complete).
+// per company (a consistent snapshot of that company).
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import { sql } from "drizzle-orm";
 import { systemTx } from "./db/system";
+import { vercelBlobToken as liveBlobToken } from "./storage";
+import { BACKUP_THROTTLE_MS, isDemoMode, tracksChanges } from "./backup-policy";
 import type { Tx } from "./db/client";
 
 /** The table that lists the companies, and its id column. */
@@ -103,8 +113,10 @@ async function tablesOf(tx: Tx): Promise<{ name: string; key: string }[]> {
 }
 
 /** One company's rows, every table, in one consistent read-only snapshot. */
-export async function exportCompany(companyId: string): Promise<{ body: Buffer; rows: Record<string, number> }> {
+export async function exportCompany(companyId: string): Promise<{ body: Buffer; rows: Record<string, number>; seq: number }> {
   return systemTx(async (tx) => {
+    // The change count this snapshot includes: a mark after it keeps the company pending.
+    const seq = Number(rowsOf<{ seq: string }>(await tx.execute(sql`select change_seq::text as seq from backup_state where company_id = ${companyId}`))[0]?.seq ?? 0);
     const tables: Record<string, unknown[]> = {};
     const rows: Record<string, number> = {};
     for (const t of await tablesOf(tx)) {
@@ -113,69 +125,134 @@ export async function exportCompany(companyId: string): Promise<{ body: Buffer; 
       rows[t.name] = r.length;
     }
     const doc = { app: BACKUP_APP, company: companyId, exportedAt: new Date().toISOString(), format: 1, tables };
-    return { body: gzipSync(Buffer.from(encode(doc))), rows };
+    return { body: gzipSync(Buffer.from(encode(doc))), rows, seq };
   }, { readOnly: true });
-}
-
-async function companyIds(): Promise<string[]> {
-  return systemTx(async (tx) => rowsOf<{ id: string }>(
-    await tx.execute(sql`select ${sql.identifier(COMPANIES.key)} as id from ${sql.identifier(COMPANIES.table)} order by 1`),
-  ).map((r) => String(r.id)), { readOnly: true });
 }
 
 const fileOf = (day: string, companyId: string) => `${ROOT}${day}/${encodeURIComponent(companyId)}.json.gz`;
 export const today = (now = new Date()) => now.toISOString().slice(0, 10);
 
 interface Manifest {
-  app: string; date: string; format: 1; updatedAt: string; complete: boolean; retentionDays: number;
-  companies: number; written: number; missing: string[];
-  files: Record<string, { path: string; bytes: number; sha256?: string; rows?: Record<string, number>; at: string }>;
+  app: string; date: string; format: 2; updatedAt: string; retentionDays: number; companies: number;
+  files: Record<string, { path: string; bytes: number; sha256: string; rows: Record<string, number>; at: string }>;
 }
 
-export interface BackupResult { date: string; complete: boolean; companies: number; done: number; wroteNow: number; failed: string[]; pruned: number }
+const clean = (v: unknown) => (typeof v === "string" ? v.trim().replace(/^["']+|["']+$/g, "").trim() : "");
+let warnedNoToken = false;
+export const resetBackupWarningsForTests = () => { warnedNoToken = false; };
 
 /**
- * Back up every company not yet backed up for `date`, stopping at `deadline`
- * (ms since epoch). Safe to run again for the same day: it resumes.
+ * The backup store from the environment, or why there is none. Without
+ * BACKUP_BLOB_READ_WRITE_TOKEN: nothing (one log line per process). A token
+ * equal to the live store's is refused: a backup kept in the live store is no
+ * backup, and pruning there must never run.
  */
-export async function runBackup(store: BackupStore, opts: { date?: string; deadline: number; now?: Date }): Promise<BackupResult> {
-  const date = opts.date && DAY.test(opts.date) ? opts.date : today(opts.now);
+export function backupStoreFromEnv(): { store: BackupStore } | { skipped: string } | { error: string } {
+  if (isDemoMode()) return { skipped: "demo" };
+  const token = clean(process.env.BACKUP_BLOB_READ_WRITE_TOKEN);
+  if (!token) {
+    if (!warnedNoToken) { warnedNoToken = true; console.warn("backup: BACKUP_BLOB_READ_WRITE_TOKEN is not set; changes are marked but not backed up"); }
+    return { skipped: "BACKUP_BLOB_READ_WRITE_TOKEN is not set" };
+  }
+  if (token === clean(liveBlobToken())) {
+    console.error("backup: BACKUP_BLOB_READ_WRITE_TOKEN is the live Blob store's token; refusing to back up into the live store");
+    return { error: "The backup store must be separate from the live store" };
+  }
+  return { store: blobBackupStore(token) };
+}
+
+/** A claim older than this is taken to have died (a failed backup is retried after it). */
+const STALE_CLAIM_MS = 5 * 60_000;
+
+/**
+ * Claim a company's backup: only if it has unsaved changes, no other backup of
+ * it is running, and (unless `throttle` is false) its last backup is at least
+ * BACKUP_THROTTLE_MS old. One UPDATE; true if this caller won the claim.
+ */
+async function claim(companyId: string, now: Date, throttle: boolean): Promise<boolean> {
+  const stale = new Date(now.getTime() - STALE_CLAIM_MS);
+  const due = new Date(now.getTime() - (throttle ? BACKUP_THROTTLE_MS : 0));
+  return systemTx(async (tx) => rowsOf<{ id: string }>(await tx.execute(sql`
+    update backup_state set backup_started_at = ${now}
+    where company_id = ${companyId} and pending
+      and (backup_started_at is null or backup_started_at < ${stale})
+      and (last_backup_at is null or last_backup_at <= ${due})
+    returning company_id as id`)).length > 0);
+}
+
+export interface CompanyBackup { company: string; path: string; bytes: number; pruned: number }
+
+/** Back up one company (already claimed) now: its file, the day's manifest, retention on the day's first backup, then clear its mark. */
+async function backupClaimed(store: BackupStore, companyId: string, now: Date): Promise<CompanyBackup> {
+  const date = today(now);
   const prefix = `${ROOT}${date}/`;
-  const ids = await companyIds();
-  const present = new Map((await store.list(prefix)).map((f) => [f.pathname, f]));
+  const path = fileOf(date, companyId);
+  const { body, rows, seq } = await exportCompany(companyId);
+  await store.put(path, body, "application/gzip");
   const prev = await store.get(`${prefix}manifest.json`).then((b) => (b ? (JSON.parse(b.toString("utf8")) as Manifest) : null)).catch(() => null);
   const files: Manifest["files"] = { ...(prev?.files ?? {}) };
+  files[companyId] = { path, bytes: body.length, sha256: createHash("sha256").update(body).digest("hex"), rows, at: new Date().toISOString() };
+  const manifest: Manifest = { app: BACKUP_APP, date, format: 2, updatedAt: new Date().toISOString(), retentionDays: RETENTION_DAYS, companies: Object.keys(files).length, files };
+  await store.put(`${prefix}manifest.json`, Buffer.from(JSON.stringify(manifest, null, 1)), "application/json");
+  // Retention runs only when a backup happened, once a day (the day's first).
+  const pruned = prev ? 0 : await prune(store, date);
+  // Clear the mark only if nothing was marked after this backup's snapshot.
+  await systemTx((tx) => tx.execute(sql`
+    update backup_state set last_backup_at = ${now}, backed_up_seq = ${seq}, backup_started_at = null, pending = (change_seq > ${seq})
+    where company_id = ${companyId}`));
+  console.info(`backup: ${BACKUP_APP} ${companyId} -> ${path} (${body.length} bytes)${pruned ? `, ${pruned} old files deleted` : ""}`);
+  return { company: companyId, path, bytes: body.length, pruned };
+}
+
+/**
+ * After a request for this company: back it up if it has unsaved changes and
+ * its last backup is at least 15 minutes old. Returns what it did.
+ */
+export async function backupIfDue(companyId: string, opts: { store?: BackupStore; now?: Date } = {}): Promise<CompanyBackup | { skipped: string }> {
+  if (!tracksChanges(companyId)) return { skipped: "demo" };
+  let store = opts.store;
+  if (!store) {
+    const env = backupStoreFromEnv();
+    if (!("store" in env)) return { skipped: "skipped" in env ? env.skipped : env.error };
+    store = env.store;
+  }
+  const now = opts.now ?? new Date();
+  if (!(await claim(companyId, now, true))) return { skipped: "not due" };
+  return backupClaimed(store, companyId, now);
+}
+
+/** The one cheap question the daily sweep asks first: has any company unsaved changes? */
+export async function anyPending(): Promise<boolean> {
+  return systemTx(async (tx) => rowsOf<{ any: boolean }>(await tx.execute(sql`select exists (select 1 from backup_state where pending) as any`))[0]?.any === true, { readOnly: true });
+}
+
+export interface SweepResult { idle: boolean; pending: number; backedUp: string[]; failed: string[]; left: number }
+
+/**
+ * The daily sweep: if nothing is pending, stop (no store calls at all).
+ * Otherwise back up each pending company (no 15-minute wait), until `deadline`.
+ */
+export async function sweepPending(store: BackupStore, opts: { deadline: number; now?: Date }): Promise<SweepResult> {
+  if (!(await anyPending())) return { idle: true, pending: 0, backedUp: [], failed: [], left: 0 };
+  const ids = await systemTx(async (tx) => rowsOf<{ id: string }>(await tx.execute(sql`select company_id as id from backup_state where pending order by last_change_at nulls first`)).map((r) => String(r.id)), { readOnly: true });
+  const backedUp: string[] = [];
   const failed: string[] = [];
-  let wroteNow = 0;
+  let left = 0;
   for (const id of ids) {
-    const path = fileOf(date, id);
-    if (present.has(path)) {
-      const f = present.get(path)!;
-      files[id] = { ...files[id], path, bytes: f.size, at: files[id]?.at ?? f.uploadedAt.toISOString() };
-      continue;
-    }
-    if (Date.now() >= opts.deadline) break;
+    if (!tracksChanges(id)) continue;
+    if (Date.now() >= opts.deadline) { left++; continue; }
+    const now = opts.now ?? new Date();
     try {
-      const { body, rows } = await exportCompany(id);
-      await store.put(path, body, "application/gzip");
-      files[id] = { path, bytes: body.length, sha256: createHash("sha256").update(body).digest("hex"), rows, at: new Date().toISOString() };
-      wroteNow++;
+      if (!(await claim(id, now, false))) continue;
+      await backupClaimed(store, id, now);
+      backedUp.push(id);
     } catch (e) {
       failed.push(id);
       console.error(`backup: ${BACKUP_APP} company ${id} failed:`, e instanceof Error ? e.message : e);
     }
   }
-  for (const k of Object.keys(files)) if (!ids.includes(k)) delete files[k];
-  const missing = ids.filter((id) => !files[id]);
-  const complete = missing.length === 0;
-  const manifest: Manifest = {
-    app: BACKUP_APP, date, format: 1, updatedAt: new Date().toISOString(), complete, retentionDays: RETENTION_DAYS,
-    companies: ids.length, written: ids.length - missing.length, missing, files,
-  };
-  await store.put(`${prefix}manifest.json`, Buffer.from(JSON.stringify(manifest, null, 1)), "application/json");
-  const pruned = complete ? await prune(store, date, opts.deadline) : 0;
-  console.info(`backup: ${BACKUP_APP} ${date}: ${manifest.written}/${ids.length} companies (${wroteNow} this run)${complete ? ", complete" : ""}${pruned ? `, ${pruned} old files deleted` : ""}`);
-  return { date, complete, companies: ids.length, done: manifest.written, wroteNow, failed, pruned };
+  console.info(`backup: ${BACKUP_APP} sweep: ${backedUp.length} of ${ids.length} pending companies backed up${left ? `, ${left} left for the next run` : ""}`);
+  return { idle: false, pending: ids.length, backedUp, failed, left };
 }
 
 /** Delete the backup days older than RETENTION_DAYS before `date`, only under backups/quality/. */

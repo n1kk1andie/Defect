@@ -15,6 +15,7 @@ import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { listTenantIds, withTenant } from "@/lib/db/client";
 import { actionEvents, actions, companies, counters, inspections, issueReports, members, reviews, units } from "@/lib/db/schema";
 import { loadSettings } from "@/lib/company";
+import { isDemoCompany } from "@/lib/backup-policy";
 import { record } from "@/lib/audit";
 import { inScope, isSupervisor, verifyBlocker, isRole, type Actor, type Role } from "@/lib/roles";
 import type { Effectiveness } from "@/lib/actionRules";
@@ -131,6 +132,19 @@ function memberActor(companyId: string, companyName: string, m: typeof members.$
   return { tenant: companyId, tenantName: companyName, kind: companyId === "_own" ? "institution" : "company", email: m.email, name: m.name, roles: (m.roles as string[]).filter(isRole) as Role[], unitIds: m.unitIds as string[], platformRole: "member", operator: false, plan: null };
 }
 
+let realCompanySeen = false;
+/**
+ * Is there at least one real company (not a demo deployment, not a demo
+ * company)? One small query on the company list, and once the answer is yes
+ * it is remembered for the life of the process (companies are not removed).
+ */
+export async function hasRealCompany(): Promise<boolean> {
+  if (isDemo()) return false;
+  if (realCompanySeen) return true;
+  realCompanySeen = (await listTenantIds()).some((id) => !isDemoCompany(id));
+  return realCompanySeen;
+}
+
 export interface DigestRun { companyId: string; sent: number; skipped: string | null; failed: number }
 
 /** Send today's emails for one company, once a day. */
@@ -146,7 +160,7 @@ export async function sendDigests(companyId: string, now = new Date()): Promise<
     const c = (await tx.select().from(companies).where(eq(companies.companyId, companyId)).limit(1))[0];
     const people = await tx.select().from(members).where(and(eq(members.companyId, companyId), eq(members.status, "active"), eq(members.emailAlerts, true)));
     return { settings, name: c?.name ?? "", people };
-  });
+  }, { backup: false }); // the "sent today" counter is housekeeping, not a change worth a backup
   if (!ctx) return { companyId, sent: 0, skipped: "already sent today", failed: 0 };
   if (!ctx.settings.emailAlerts) return { companyId, sent: 0, skipped: "turned off for the company", failed: 0 };
   let sent = 0, failed = 0;
@@ -163,6 +177,7 @@ export async function sendDigests(companyId: string, now = new Date()): Promise<
 /** The daily run across every company. */
 export async function sendAllDigests(now = new Date()): Promise<DigestRun[]> {
   if (!emailConfigured()) return [];
+  if (!(await hasRealCompany())) return [];
   const out: DigestRun[] = [];
   for (const id of await listTenantIds()) {
     try { out.push(await sendDigests(id, now)); } catch (e) { console.error("digest", e); out.push({ companyId: id, sent: 0, skipped: "error", failed: 0 }); }

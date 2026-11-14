@@ -20,11 +20,20 @@
 // role is what makes the policies bind: in production the app refuses to serve
 // if it cannot (at connection and again in every tenant transaction), rather
 // than falling back to the owner role. lib/db/system.ts is the cross-company
-// path, for cron jobs only.
+// path, for cron jobs (and the post-response backup, lib/backup-after.ts) only.
+//
+// Change-triggered backups: withTenant() also sets app.backup_mark for a real
+// company (never on a demo deployment or for a demo company), so a trigger on
+// every company table marks the company in backup_state when the transaction
+// writes (drizzle/0011_backup_state.sql), and schedules a cheap check after the
+// response that backs that company up if it has unsaved changes and its last
+// backup is over 15 minutes old.
 import { sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as schema from "./schema";
 import { MIGRATIONS } from "./migrations.generated";
+import { tracksChanges } from "../backup-policy";
+import { scheduleBackupCheck } from "../backup-after";
 
 export type Db = PgDatabase<PgQueryResultHKT, typeof schema>;
 export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -156,13 +165,16 @@ export async function resetConnectionForTests(): Promise<void> {
 const TENANT_ID = /^(?:_own|_demo|[a-z0-9][a-z0-9-]{0,39})$/;
 
 /** Run fn in a transaction that can see and change only this company's rows. */
-export async function withTenant<T>(companyId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+export async function withTenant<T>(companyId: string, fn: (tx: Tx) => Promise<T>, opts: { backup?: boolean } = {}): Promise<T> {
   if (!TENANT_ID.test(companyId)) throw new Error("Invalid tenant");
   const c = await connection();
+  // { backup: false }: housekeeping writes (the daily email's "sent today" counter) are not changes worth a backup.
+  const mark = opts.backup !== false && tracksChanges(companyId);
+  if (mark) scheduleBackupCheck(companyId);
   return c.db.transaction(async (tx) => {
     if (c.appRole) await tx.execute(sql`set local role quality_app`);
     const [r] = rowsOf<{ bypass: boolean | null }>(await tx.execute(
-      sql`select set_config('app.company_id', ${companyId}, true) as company, (select rolbypassrls or rolsuper from pg_roles where rolname = current_user) as bypass`,
+      sql`select set_config('app.company_id', ${companyId}, true) as company, set_config('app.backup_mark', ${mark ? "1" : "0"}, true) as mark, (select rolbypassrls or rolsuper from pg_roles where rolname = current_user) as bypass`,
     ));
     if (r?.bypass !== false && strictIsolation()) {
       console.error("Quality database: a tenant transaction would bypass row-level security. Request refused.");
@@ -170,6 +182,20 @@ export async function withTenant<T>(companyId: string, fn: (tx: Tx) => Promise<T
     }
     return fn(tx);
   });
+}
+
+/**
+ * Run housekeeping writes inside a tenant transaction (the cached plan) without
+ * marking the company for backup: browsing alone never triggers a backup. Real
+ * changes in the same transaction, before or after, still mark it.
+ */
+export async function withoutBackupMark<T>(tx: Tx, fn: () => Promise<T>): Promise<T> {
+  const [r] = rowsOf<{ was: string | null }>(await tx.execute(sql`select current_setting('app.backup_mark', true) as was, set_config('app.backup_mark', '0', true) as off`));
+  try {
+    return await fn();
+  } finally {
+    await tx.execute(sql`select set_config('app.backup_mark', ${r?.was ?? "0"}, true)`).catch(() => {});
+  }
 }
 
 /** Rows from a raw tx.execute(), whichever driver ran it. */

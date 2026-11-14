@@ -518,5 +518,5 @@ export const TENANT_TABLES = [
   "companies", "company_settings", "members", "units", "areas", "checks", "natures", "monthly_stats", "reviews", "review_items",
   "review_events", "scorecards", "scorecard_entries", "actions", "action_events", "evidence", "audit_log", "imports", "risk_outbox", "counters",
   "templates", "template_versions", "inspections", "inspection_events", "scorecard_versions", "sampling_plans", "programmes", "unit_factors",
-  "entities", "site_groups", "report_links", "issue_reports", "api_keys",
+  "entities", "site_groups", "report_links", "issue_reports", "api_keys", "backup_state",
 ] as const;
