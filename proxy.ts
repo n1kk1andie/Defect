@@ -9,6 +9,12 @@
 //    the site's link token, Turnstile), the REST API (/api/v1: an API key),
 //    and the daily alert email (/api/cron: CRON_SECRET).
 // 3. Writes: a non-GET API call must come from this site (Origin check).
+// 2a. A demo deployment (DEMO_MODE=1) first needs the visitor's demo access:
+//    the platform's pz_demo token (lib/demoAccess.ts). Without it a page goes to
+//    the platform's register page and an API call gets 401. Only the machine
+//    channels (health, feeds, REST API, jobs) stay open; the public report
+//    link (/r, /api/public) is gated too in a demo — the demo has no outside
+//    reporters, and a registered visitor can still try it.
 // 4. A demo deployment (DEMO_MODE=1) opens straight into its fictional
 //    company as the chosen persona (guest viewer by default): no sign-in, no
 //    licence wall, no trial banner.
@@ -25,6 +31,7 @@
 import { licenceLapsed } from "./lib/planStatus";
 import { NextRequest, NextResponse } from "next/server";
 import { licenseWallActive, licenseWallResponse } from "./lib/licenseWall";
+import { demoAccessGate } from "./lib/demoAccess";
 import { claimedIssuer, COMPANY_JWT_ISSUER, platformSession, PLATFORM_COOKIE, type PlatformSession } from "./lib/platform-jwt";
 
 const MODULE_KEY = "quality";
@@ -38,6 +45,7 @@ const PERSONA_COOKIE = "pq_persona";
 const DEMO_PERSONAS = ["guest", "admin", "taylor.reid", "robin.ellis", "jordan.blake", "sam.foster"].map((p) => `${p}@demo.pulsus.tech`);
 
 const PUBLIC = /^\/(?:login|signup|licence|api\/health|api\/logout|manifest\.webmanifest|icon\.png|apple-icon\.png|apple-touch-icon\.png|favicon\.ico|pulsus-quality[\w.-]*\.png|r|api\/public|api\/v1|api\/cron)(?:\/|$)/;
+const MACHINE = /^\/(?:api\/health|api\/logout|api\/pulse|api\/data|api\/v1|api\/cron)(?:\/|$)/;
 const isDemo = () => (process.env.DEMO_MODE || "").trim().replace(/^["']+|["']+$/g, "") === "1";
 
 function forward(req: NextRequest, id: Record<string, string> | null): NextResponse {
@@ -78,6 +86,8 @@ export async function proxy(req: NextRequest) {
   if (api && req.method !== "GET" && req.method !== "HEAD" && !sameOrigin(req)) {
     return NextResponse.json({ error: "Cross-site request refused." }, { status: 403 });
   }
+  const gate = await demoAccessGate(req, { app: MODULE_KEY, exempt: (p) => MACHINE.test(p) });
+  if (gate) return gate;
   if (PUBLIC.test(pathname) || /^\/api\/pulse\/?$/.test(pathname)) return forward(req, null);
 
   if (isDemo()) {

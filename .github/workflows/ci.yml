@@ -55,6 +55,7 @@ jobs:
     timeout-minutes: 25
     env:
       DEMO_MODE: "1"
+      DEMO_ACCESS_GATE: "off"   # local demo build: no platform demo-access token here
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
