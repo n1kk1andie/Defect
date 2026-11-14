@@ -56,6 +56,11 @@ h1,h2,h3,.sora{font-family:Sora,"IBM Plex Sans",system-ui,sans-serif;letter-spac
 .brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink);min-width:0}
 .side .brand{padding:4px 8px 14px}
 .brand-mark{width:36px;height:36px;flex:none}
+.brand-emblem{display:block;width:40px;height:40px}
+.brand-emblem img{display:block;width:100%;height:100%}
+.brand-emblem .mark-night{display:none}
+html[data-theme="dark"] .brand-emblem .mark-day{display:none}
+html[data-theme="dark"] .brand-emblem .mark-night{display:block}
 .brand-name{font:700 16px/1.1 Sora,sans-serif;white-space:nowrap}
 .brand-name b{color:var(--red);font-weight:700}
 .brand-sub{font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px}
