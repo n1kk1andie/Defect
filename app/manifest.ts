@@ -11,8 +11,10 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#ffffff",
     theme_color: "#E4012B",
     icons: [
-      { src: "/pulsus-quality-icon.png", sizes: "any", type: "image/png", purpose: "any" },
-      { src: "/pulsus-quality-icon.png", sizes: "any", type: "image/png", purpose: "maskable" },
+      { src: "/pulsus-quality-icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/pulsus-quality-icon.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/pulsus-quality-maskable-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+      { src: "/pulsus-quality-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
   };
 }

@@ -7,7 +7,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { api, useApp } from "@/components/app-context";
 import { Icon, type IconName } from "@/components/icons";
-import { FooterLines, ShieldMark } from "@/components/Brand";
+import { FooterLines, QualityMark } from "@/components/Brand";
 import { trialDaysLeft } from "@/lib/trial";
 import { monthLabel, lastActive } from "@/lib/metrics";
 import { ROLE_INFO, isAdmin } from "@/lib/roles";
@@ -194,7 +194,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <a href="#main" className="skip">Skip to content</a>
       <aside className="side" aria-label="Pulsus Quality">
         <Link href="/" className="brand">
-          <ShieldMark />
+          <QualityMark />
           <span className="brand-txt">
             <span className="brand-name" style={{ display: "block" }}>Pulsus <b>Quality</b></span>
             <span className="brand-sub" style={{ display: "block" }}>{app.actor.tenantName}</span>
@@ -231,7 +231,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <div className="mainwrap">
         <header className="topbar">
           <Link href="/" className="brand mobile-only" aria-label="Pulsus Quality, Pulse">
-            <ShieldMark />
+            <QualityMark />
             <span className="brand-name">Pulsus <b>Quality</b></span>
           </Link>
           <span className="title grow" style={{ minWidth: 0 }}>{current}<small>{context}</small></span>

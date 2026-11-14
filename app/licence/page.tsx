@@ -4,7 +4,7 @@
 import { cookies } from "next/headers";
 import { platformSession, platformUrl, PLATFORM_COOKIE } from "@/lib/platform-jwt";
 import { cachePlan } from "@/lib/planCache";
-import { ShieldMark, Tagline } from "@/components/Brand";
+import { AccountFrame } from "@/components/account/AccountFrame";
 
 export const dynamic = "force-dynamic";
 
@@ -18,15 +18,14 @@ export default async function LicencePage({ searchParams }: { searchParams: Prom
   } catch { /* an unknown or invalid company id: nothing to record */ }
   const suspended = reason === "suspended";
   return (
-    <main id="main" style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
-      <div className="card" style={{ maxWidth: 480, textAlign: "center", padding: 32 }}>
-        <ShieldMark className="brand-mark" title="Pulsus Quality" />
-        <h1 className="headline" style={{ fontSize: 30 }}>{suspended ? "Your company's account is suspended." : "Your free trial has ended."}<span className="accent">Your data is safe.</span></h1>
-        <p className="lede" style={{ margin: "12px auto" }}>{suspended ? "Pulsus Quality is paused until your company's plan is active again." : "Choose a plan to carry on. Your reviews, actions and settings are kept exactly as you left them."}</p>
-        <a className="btn primary" href={`${platformUrl()}/company#billing`} target="_top">View plan &amp; billing</a>
-        <p className="sub mt">Only your company&apos;s owner or an admin can change the plan.</p>
-        <Tagline className="mt" />
+    <AccountFrame
+      title={suspended ? "Your company's account is suspended. Your data is safe." : "Your free trial has ended. Your data is safe."}
+      sub={suspended ? "Pulsus Quality is paused until your company's plan is active again." : "Choose a plan to carry on. Your reviews, actions and settings are kept exactly as you left them."}
+    >
+      <div className="sf-form">
+        <a className="sf-btn" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", textDecoration: "none", color: "#fff" }} href={`${platformUrl()}/company#billing`} target="_top">View plan &amp; billing</a>
+        <p className="sf-note" style={{ textAlign: "center" }}>Only your company&apos;s owner or an admin can change the plan.</p>
       </div>
-    </main>
+    </AccountFrame>
   );
 }

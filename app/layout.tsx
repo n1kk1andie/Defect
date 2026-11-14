@@ -1,12 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./signin-standard.css";
 
 export const metadata: Metadata = {
   title: "Pulsus Quality",
   description: "Pulsus Quality: branch and operational quality, inspections and corrective actions. Live. Signal. Clarity.",
   applicationName: "Pulsus Quality",
   manifest: "/manifest.webmanifest",
-  icons: { icon: "/pulsus-quality-icon.png", apple: "/pulsus-quality-icon.png" },
+  icons: { icon: [{ url: "/favicon.ico", sizes: "16x16 32x32 48x48" }, { url: "/pulsus-quality-icon-192.png", sizes: "192x192", type: "image/png" }], shortcut: "/favicon.ico", apple: "/apple-touch-icon.png" },
   robots: { index: false, follow: false },
 };
 
