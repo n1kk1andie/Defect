@@ -39,7 +39,8 @@ export function MoreMenu() {
             <Icon name="chevron" />
           </Link>
         ))}
-        {!app.demo && <a href={app.platformUrl} target="_top" className="sitem"><span className="badge sm" aria-hidden="true"><Icon name="globe" /></span><span className="grow"><span className="t1" style={{ display: "block" }}>Back to Pulsus</span><span className="t2" style={{ display: "block" }}>Pulsus Platform</span></span><Icon name="chevron" /></a>}
+        {/* No target: inside Pulsus Platform's app viewer the platform loads in this frame and closes the viewer, back on Apps; on its own it simply goes there. */}
+        {!app.demo && <a href={app.platformUrl} className="sitem"><span className="badge sm" aria-hidden="true"><Icon name="globe" /></span><span className="grow"><span className="t1" style={{ display: "block" }}>Back to Pulsus</span><span className="t2" style={{ display: "block" }}>Pulsus Platform</span></span><Icon name="chevron" /></a>}
       </nav>
     </>
   );
