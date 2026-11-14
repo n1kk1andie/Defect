@@ -120,21 +120,21 @@ export function SignIn({ hub, next, error }: { hub: string; next: string; error:
   };
 
   const note = msg ? <p className={`sf-msg ${msg.kind}`} role={msg.kind === "err" ? "alert" : "status"}>{msg.text}</p> : null;
-  const form = (onSubmit: () => void, children: React.ReactNode) => <form className="sf-form" noValidate onSubmit={(e) => { e.preventDefault(); onSubmit(); }}>{children}</form>;
+  const form = (onSubmit: () => void, children: React.ReactNode) => <form className="sf-form pf-form" noValidate onSubmit={(e) => { e.preventDefault(); onSubmit(); }}>{children}</form>;
 
   if (isDemo) return (
     <AccountFrame title="The demo opens straight in" sub="No sign-in needed: everything in the demo is a fictional company's sample data.">
-      <div className="sf-form"><a className="sf-btn2" href="/">Open the demo</a></div>
+      <div className="sf-form pf-form"><a className="sf-btn2" href="/">Open the demo</a></div>
     </AccountFrame>
   );
 
   if (mode === "reset") return (
     <AccountFrame title="Set a new password" sub="At least 12 characters.">
       {form(setNewPassword, <>
-        <label className="sf-field"><span>New password</span><input className="sf-input" type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} /></label>
-        <label className="sf-field"><span>Confirm password</span><input className="sf-input" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} /></label>
+        <label className="sf-field pf-field"><span className="pf-label">New password</span><input className="sf-input pf-input" type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} /></label>
+        <label className="sf-field pf-field"><span className="pf-label">Confirm password</span><input className="sf-input pf-input" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} /></label>
         {note}
-        <button className="sf-btn" disabled={busy}>{busy ? "Saving…" : "Save and sign in"}</button>
+        <button className="sf-btn pf-btn" disabled={busy}>{busy ? "Saving…" : "Save and sign in"}</button>
       </>)}
     </AccountFrame>
   );
@@ -142,39 +142,39 @@ export function SignIn({ hub, next, error }: { hub: string; next: string; error:
   if (mode === "mfa") return (
     <AccountFrame title="Two-step sign-in" sub="Enter the 6-digit code from your authenticator app, or one of your recovery codes.">
       {form(verifyCode, <>
-        <label className="sf-field"><span>Code</span><input className="sf-input" style={{ letterSpacing: ".2em", textAlign: "center" }} inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} /></label>
+        <label className="sf-field pf-field"><span className="pf-label">Code</span><input className="sf-input pf-input" style={{ letterSpacing: ".2em", textAlign: "center" }} inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} /></label>
         {note}
-        <button className="sf-btn" disabled={busy}>{busy ? "Checking…" : "Verify"}</button>
+        <button className="sf-btn pf-btn" disabled={busy}>{busy ? "Checking…" : "Verify"}</button>
       </>)}
-      <div className="sf-links"><button type="button" className="sf-link" onClick={() => { setMode("signin"); setCode(""); setPw(""); setMsg(null); loadChallenge(); }}>Back</button></div>
+      <div className="sf-links pf-links"><button type="button" className="sf-link pf-link" onClick={() => { setMode("signin"); setCode(""); setPw(""); setMsg(null); loadChallenge(); }}>Back</button></div>
     </AccountFrame>
   );
 
   if (mode === "sent") return (
     <AccountFrame title="Check your email" sub="If that address has a Pulsus account, we've emailed it a link to set a new password. The link works for one hour.">
-      <div className="sf-links"><button type="button" className="sf-link" onClick={() => { setMode("signin"); setMsg(null); loadChallenge(); }}>Back to sign in</button></div>
+      <div className="sf-links pf-links"><button type="button" className="sf-link pf-link" onClick={() => { setMode("signin"); setMsg(null); loadChallenge(); }}>Back to sign in</button></div>
     </AccountFrame>
   );
 
   const forgot = mode === "forgot";
   return (
-    <AccountFrame title={forgot ? "Reset your password" : "Sign in"} sub={forgot ? "We'll email you a link to set a new password." : undefined}>
+    <AccountFrame title={forgot ? "Reset your password" : undefined} heading={forgot ? undefined : "Sign in to Pulsus Quality"} sub={forgot ? "We'll email you a link to set a new password." : undefined}>
       {form(forgot ? requestReset : signIn, <>
-        <label className="sf-field"><span>Work email</span><input id="si-email" className="sf-input" type="email" autoComplete="username" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+        <label className="sf-field pf-field"><span className="pf-label">Work email</span><input id="si-email" className="sf-input pf-input" type="email" autoComplete="username" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
         {!forgot && <>
-          <label className="sf-field"><span>{mode === "activate" ? "Choose a password" : "Password"}</span><input className="sf-input" type="password" autoComplete={mode === "activate" ? "new-password" : "current-password"} value={pw} onChange={(e) => setPw(e.target.value)} /></label>
-          {mode === "activate" && <label className="sf-field"><span>Confirm password</span><input className="sf-input" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} /></label>}
+          <label className="sf-field pf-field"><span className="pf-label">{mode === "activate" ? "Choose a password" : "Password"}</span><input className="sf-input pf-input" type="password" autoComplete={mode === "activate" ? "new-password" : "current-password"} value={pw} onChange={(e) => setPw(e.target.value)} /></label>
+          {mode === "activate" && <label className="sf-field pf-field"><span className="pf-label">Confirm password</span><input className="sf-input pf-input" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} /></label>}
         </>}
         <HumanCheckBox check={human} />
         {note}
-        <button className="sf-btn" disabled={busy || !ch}>
+        <button className="sf-btn pf-btn" disabled={busy || !ch}>
           {busy ? "Please wait…" : forgot ? "Email me a link" : mode === "activate" ? "Set password and sign in" : "Sign in"}
         </button>
-        {!forgot && sso && <><div className="sf-or">or</div><MicrosoftButton onClick={microsoft} disabled={busy} /></>}
+        {!forgot && sso && <MicrosoftButton onClick={microsoft} disabled={busy} />}
       </>)}
-      <div className="sf-links">
-        {forgot ? <button type="button" className="sf-link" onClick={() => { setMode("signin"); setMsg(null); }}>Back to sign in</button> : <button type="button" className="sf-link" onClick={() => { setMode("forgot"); setMsg(null); }}>Forgot password?</button>}
-        {!forgot && <p>New to Pulsus Quality? <a href="/signup">Start a 14-day free trial</a></p>}
+      <div className="sf-links pf-links">
+        {forgot ? <button type="button" className="sf-link pf-link" onClick={() => { setMode("signin"); setMsg(null); }}>Back to sign in</button> : <button type="button" className="sf-link pf-link" onClick={() => { setMode("forgot"); setMsg(null); }}>Forgot password?</button>}
+        {!forgot && <p className="pf-trial">New to Pulsus Quality? <a href="/signup">Start a 14-day free trial</a></p>}
       </div>
     </AccountFrame>
   );

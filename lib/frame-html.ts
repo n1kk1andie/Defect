@@ -28,6 +28,11 @@ h2{margin:28px 0 0;font-family:Sora,"IBM Plex Sans",system-ui,sans-serif;font-si
 .foot{width:100%;max-width:480px;margin:22px auto 0;text-align:center;font-size:13px;line-height:1.6;color:var(--muted)}.foot p{margin:0}
 @media (min-width:600px){img.emblem{width:200px;height:200px}}
 @media (min-width:720px){.card{padding:44px 40px 36px}}
+/* The Pulsus sign-in form standard (Nov 2026), the same in every app: the page starts 56 px down on a phone (top-aligned, so every app's button sits at the same height), the subtitle on one line from 375 px, one 54 px red button. */
+body{justify-content:flex-start;padding:56px 16px 8px}.card{padding:36px 24px 30px}.sub{font-size:clamp(11px,3.1vw,14px);letter-spacing:.12em;line-height:1.35;white-space:nowrap}@media (max-width:374px){.sub{white-space:normal}}.tag{line-height:24px}
+h2{margin:24px 0 0;font-size:24px;line-height:30px}.body{margin:12px 0 0;font-size:17px;line-height:26px}.cta{box-sizing:border-box;display:flex;align-items:center;justify-content:center;width:100%;height:54px;min-height:54px;margin-top:24px;padding:0 16px;border-radius:12px;font-family:Sora,"IBM Plex Sans",system-ui,sans-serif;font-weight:700;font-size:17px;line-height:1;background:#c8102e;color:#fff;text-decoration:none}.cta:hover{background:#a50d26}
+.note{margin:16px 0 0;font-size:15px;line-height:22px}.foot{margin:22px auto 0;padding:0 0 28px;font-size:12.5px;line-height:1.6}
+@media (min-width:720px){body{justify-content:center}.card{padding:44px 40px 36px}}
 </style></head><body><main class="card"><img class="emblem day" src="${esc(b.emblem)}" alt="" width="200" height="200"><img class="emblem night" src="${esc(b.emblemNight)}" alt="" width="200" height="200"><h1 class="name">Pulsus <span>${esc(b.word)}</span></h1><p class="sub">${esc(b.sub)}</p><p class="tag">Live. <span>Signal.</span> Clarity.</p><h2>${esc(p.title)}</h2><p class="body">${esc(p.body)}</p>${p.ctaHtml || ""}</main>${foot ? `<footer class="foot">${foot}</footer>` : ""}</body></html>`;
 }
 
