@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./signin-standard.css";
 
 export const metadata: Metadata = {
   title: "Pulsus Quality",
