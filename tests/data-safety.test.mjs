@@ -15,6 +15,7 @@ const APP_ROLE_NAME = "quality_app";
 const COMPANY_IDS = ["acme", "globex"];
 const SYSTEM_USE = /\bsystemTx\b|db\/system/;
 const SYSTEM_ALLOWED = ["lib/backup.ts"];
+const BACKUP_AFTER = "lib/backup-after.ts";
 const fails = (p, re) => assert.rejects(p, (e) => re.test(String(e?.message)) || re.test(String(e?.cause?.message)));
 
 before(async () => {
@@ -96,7 +97,7 @@ test("the system path refuses to run on a login role that cannot bypass row-leve
   assert.equal((await systemTx(async (tx) => rowsOf(await tx.execute(sql`select company_id from companies`)), { readOnly: true })).length, 2);
   await fails(systemTx((tx) => tx.execute(sql`insert into companies (company_id, name, kind) values ('ro', 'x', 'company')`), { readOnly: true }), /read-only/);
 });
-// ── The nightly backup ───────────────────────────────────────────────────────
+// ── The backup ──────────────────────────────────────────────────────────────
 
 function memoryStore() {
   const files = new Map();
@@ -145,33 +146,27 @@ test("the backup route does nothing without BACKUP_BLOB_READ_WRITE_TOKEN, and no
   }
 });
 
-test("the backup writes one gzipped file per company and a manifest, resumes, and prunes only old days of its own prefix", async () => {
-  const { runBackup, BACKUP_APP } = await import("../lib/backup.ts");
+test("a backup writes one gzipped file per company and a manifest, and prunes only old days of its own prefix", async () => {
+  const { backupIfDue, BACKUP_APP } = await import("../lib/backup.ts");
   const { gunzipSync } = await import("node:zlib");
+  const c = await connection();
   const store = memoryStore();
   const root = `backups/${BACKUP_APP}/`;
   await store.put(`${root}2026-09-01/old.json.gz`, Buffer.from("x"));   // older than 35 days: deleted
   await store.put(`${root}2026-10-20/kept.json.gz`, Buffer.from("x"));  // within 35 days: kept
   await store.put(`backups/other-app/2026-01-01/x.json.gz`, Buffer.from("x")); // another prefix: untouched
   await store.put(`companies/acme/evidence.pdf`, Buffer.from("x"));     // not a backup: untouched
-
-  // A deadline already passed: nothing is written, the manifest says what is missing.
-  const first = await runBackup(store, { date: "2026-11-13", deadline: 0 });
-  assert.equal(first.complete, false);
-  assert.equal(first.wroteNow, 0);
-  assert.ok(store.files.has(`${root}2026-11-13/manifest.json`));
-  assert.ok(store.files.has(`${root}2026-09-01/old.json.gz`), "no pruning before the day is complete");
-
-  const done = await runBackup(store, { date: "2026-11-13", deadline: Date.now() + 60_000 });
-  assert.equal(done.complete, true);
-  assert.ok(done.companies >= 2);
-  assert.equal(done.done, done.companies);
-  const again = await runBackup(store, { date: "2026-11-13", deadline: Date.now() + 60_000 });
-  assert.equal(again.wroteNow, 0, "a second run for the same day resumes: nothing rewritten");
-
+  await c.db.execute(sql`insert into backup_state (company_id, pending) values ('acme', true), ('globex', true) on conflict (company_id) do update set pending = true, last_backup_at = null, backup_started_at = null`);
+  const now = new Date("2026-11-13T12:00:00Z");
+  const demoWas = process.env.DEMO_MODE; // the demo CI job runs every test with DEMO_MODE=1
+  delete process.env.DEMO_MODE;
+  try {
+    for (const id of COMPANY_IDS) assert.equal((await backupIfDue(id, { store, now })).company, id);
+  } finally {
+    if (demoWas !== undefined) process.env.DEMO_MODE = demoWas;
+  }
   const manifest = JSON.parse(store.files.get(`${root}2026-11-13/manifest.json`).toString());
-  assert.equal(manifest.complete, true);
-  assert.deepEqual(manifest.missing, []);
+  assert.deepEqual(Object.keys(manifest.files).sort(), COMPANY_IDS);
   for (const id of COMPANY_IDS) {
     const doc = JSON.parse(gunzipSync(store.files.get(`${root}2026-11-13/${id}.json.gz`)).toString());
     assert.equal(doc.company, id);
@@ -200,9 +195,16 @@ test("the system path is reachable only from cron routes that check CRON_SECRET"
   const rel = (f) => path.relative(root, f).split(path.sep).join("/");
   const users = files.filter((f) => SYSTEM_USE.test(readFileSync(f, "utf8"))).map(rel).filter((f) => !f.startsWith("lib/db/"));
   for (const f of users) assert.ok(SYSTEM_ALLOWED.includes(f), `${f} uses the cross-company system path; only cron jobs may`);
-  // Whoever imports the backup module must itself be a cron route.
-  const backupUsers = files.filter((f) => /from ["']@\/lib\/backup["']|from ["']\.\.?\/.*backup(\.ts)?["']/.test(readFileSync(f, "utf8"))).map(rel);
-  for (const f of backupUsers) assert.match(f, /^app\/api\/cron\//, `${f} imports the backup module`);
+  // Whoever imports the backup module must itself be a cron route, or the
+  // post-response hook (lib/backup-after.ts): it reaches the backup only inside
+  // Next.js after(), for the company the request was already for, once the
+  // response has been sent. It is allowed by name and may export nothing else.
+  const backupUsers = files.filter((f) => /(?:from |import\()["'](?:@\/lib\/backup|\.\.?\/(?:[^"']*\/)?backup)(?:\.ts)?["']/.test(readFileSync(f, "utf8"))).map(rel);
+  for (const f of backupUsers) if (f !== BACKUP_AFTER) assert.match(f, /^app\/api\/cron\//, `${f} imports the backup module`);
+  const hook = readFileSync(path.join(root, BACKUP_AFTER), "utf8");
+  assert.deepEqual([...hook.matchAll(/^export\s+(?:async\s+)?(?:function|const|let|class)\s+(\w+)/gm)].map((m) => m[1]), ["scheduleBackupCheck"]);
+  assert.match(hook, /import \{ after \} from "next\/server"/);
+  assert.ok(hook.indexOf('await import("./backup")') > hook.indexOf("const task = async"), "the backup is reached only inside the after() task");
   for (const f of [...users, ...backupUsers].filter((f) => f.startsWith("app/"))) {
     assert.match(readFileSync(path.join(root, f), "utf8"), /CRON_SECRET|cronAuthorized\(/, `${f} must check the cron secret`);
   }

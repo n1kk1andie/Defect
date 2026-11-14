@@ -148,5 +148,20 @@ export const MIGRATIONS: { id: string; statements: string[] }[] = [
    "ALTER TABLE \"companies\" ADD COLUMN \"plan\" jsonb;",
    "ALTER TABLE \"companies\" ADD COLUMN \"plan_seen_at\" timestamp with time zone;"
   ]
+ },
+ {
+  "id": "0011_backup_state",
+  "statements": [
+   "-- Change-triggered backups: one row per company saying whether it has changes\n-- not yet in a backup (lib/backup.ts, lib/backup-after.ts).\n--\n-- Every row written for a company (insert, update or delete on any table with\n-- company_id) marks that company's row here, through the trigger below, inside\n-- the same transaction: so a change and its mark commit or roll back together.\n-- The trigger only marks when lib/db/client.ts withTenant() has set\n-- app.backup_mark = '1' for the transaction, which it never does on a demo\n-- deployment (DEMO_MODE=1) or for a demo company (_demo, demo-*). Migrations,\n-- the system path and seeding outside withTenant() mark nothing.\n--\n-- change_seq counts marking transactions; a backup records the change_seq it\n-- saw in its snapshot (backed_up_seq) and clears pending only when nothing\n-- newer has been marked since, so a change committed while a backup runs is\n-- never lost. Row-level security as on every other company table; quality_app may\n-- read, insert and update its own company's row (never delete it).\nCREATE TABLE IF NOT EXISTS backup_state (\n  company_id text PRIMARY KEY,\n  last_change_at timestamptz,\n  last_backup_at timestamptz,\n  pending boolean NOT NULL DEFAULT false,\n  change_seq bigint NOT NULL DEFAULT 0,\n  backed_up_seq bigint NOT NULL DEFAULT 0,\n  backup_started_at timestamptz\n);",
+   "CREATE INDEX IF NOT EXISTS backup_state_pending ON backup_state (company_id) WHERE pending;",
+   "ALTER TABLE backup_state ENABLE ROW LEVEL SECURITY;",
+   "ALTER TABLE backup_state FORCE ROW LEVEL SECURITY;",
+   "DROP POLICY IF EXISTS tenant_isolation ON backup_state;",
+   "CREATE POLICY tenant_isolation ON backup_state USING (company_id = current_setting('app.company_id', true)) WITH CHECK (company_id = current_setting('app.company_id', true));",
+   "DO $$ BEGIN\n  GRANT SELECT, INSERT, UPDATE ON backup_state TO quality_app;\nEXCEPTION WHEN others THEN NULL;\nEND $$;",
+   "-- Row-level, but only the first row of a transaction does any work: it marks\n-- the company and notes that in a transaction-local setting, so the rest of the\n-- transaction (an import of a thousand rows) costs one setting lookup per row.\nCREATE OR REPLACE FUNCTION backup_mark_change() RETURNS trigger LANGUAGE plpgsql SET search_path = public, pg_temp AS $$\nDECLARE c text;\nBEGIN\n  IF current_setting('app.backup_mark', true) IS DISTINCT FROM '1' THEN RETURN NULL; END IF;\n  c := current_setting('app.company_id', true);\n  IF c IS NULL OR c = '' THEN RETURN NULL; END IF;\n  INSERT INTO backup_state AS b (company_id, last_change_at, pending, change_seq) VALUES (c, clock_timestamp(), true, 1)\n    ON CONFLICT (company_id) DO UPDATE SET last_change_at = greatest(b.last_change_at, excluded.last_change_at), pending = true, change_seq = b.change_seq + 1;\n  PERFORM set_config('app.backup_mark', 'done', true);\n  RETURN NULL;\nEND $$;",
+   "DO $$\nDECLARE t text;\nBEGIN\n  FOR t IN SELECT c.table_name FROM information_schema.columns c\n    JOIN information_schema.tables k ON k.table_schema = c.table_schema AND k.table_name = c.table_name\n    WHERE c.table_schema = 'public' AND k.table_type = 'BASE TABLE' AND c.column_name = 'company_id' AND c.table_name <> 'backup_state'\n  LOOP\n    EXECUTE format('DROP TRIGGER IF EXISTS backup_mark ON %I', t);\n    EXECUTE format('CREATE TRIGGER backup_mark AFTER INSERT OR UPDATE OR DELETE ON %I FOR EACH ROW EXECUTE FUNCTION backup_mark_change()', t);\n  END LOOP;\nEND $$;",
+   "-- Companies that already hold data start pending, so the first daily sweep\n-- backs each of them up once (demo companies excepted).\nINSERT INTO backup_state (company_id, pending) SELECT company_id, true FROM companies\n  WHERE company_id <> '_demo' AND company_id NOT LIKE 'demo-%' AND kind <> 'demo'\n  ON CONFLICT (company_id) DO NOTHING;"
+  ]
  }
 ];
