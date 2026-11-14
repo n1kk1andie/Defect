@@ -19,6 +19,8 @@ import type { HistoryRow } from "@/lib/audit";
 import type { PlanSummary } from "@/lib/migrator";
 import type { UploadPreview } from "@/lib/imports";
 import type { ScorecardDef } from "@/lib/scorecard";
+import { Developer } from "@/components/screens/Developer";
+import { BulkImport } from "@/components/screens/BulkImport";
 
 export interface SettingsData {
   members: MemberRow[];
@@ -26,13 +28,14 @@ export interface SettingsData {
   historyCount: number;
   imports: { id: string; kind: string; status: string; createdBy: string; createdAt: string; committedBy: string | null; committedAt: string | null }[];
   outbox: { id: string; title: string; severity: string; recordRef: string; status: string; createdBy: string; createdAt: string }[];
+  connections: { keys: number; email: boolean; cron: boolean; turnstile: boolean };
   database: { applied: string[]; pending: string[]; kind: string; isolation: string } | null;
   legacyAvailable: boolean;
   scorecard: ScorecardDef | null;
   riskConnected: boolean;
 }
 
-type ItemId = "plan" | "setup" | "bands" | "people" | "data" | "measured" | "integrations" | "history" | "approvals" | "appearance" | "about" | "help";
+type ItemId = "plan" | "setup" | "bands" | "people" | "data" | "bulk" | "measured" | "integrations" | "api" | "alerts" | "history" | "approvals" | "appearance" | "about" | "help";
 interface Item { id: ItemId; title: string; icon: IconName; summary: string; admin?: boolean }
 
 export function Settings({ s }: { s: SettingsData }) {
@@ -58,10 +61,13 @@ export function Settings({ s }: { s: SettingsData }) {
     ] },
     { title: "Data", items: [
       { id: "data", title: "Data and uploads", icon: "upload", summary: lastImport ? `Last import ${fmtDate(lastImport.committedAt)} by ${lastImport.committedBy}` : s.legacyAvailable ? "Previous version's data ready to import" : "Templates, workbook upload, imports", admin: true },
+      { id: "bulk", title: "Bulk import", icon: "file", summary: "Locations, people or actions from Excel or CSV, with column mapping and a preview", admin: true },
       { id: "measured", title: "How it's measured", icon: "target", summary: `${settings.instanceBasis === "check" ? "Each check performed" : `Each ${settings.itemLabel.toLowerCase()}`} is a possible instance · recurring after ${settings.recurringMonths} months` },
     ] },
     { title: "Connections", items: [
       { id: "integrations", title: "Integrations", icon: "link", summary: `Pulsus Platform feed · Pulsus Risk ${s.riskConnected ? "connected" : "proposals stored until Risk connects"} (${s.outbox.length})` },
+      { id: "api", title: "API keys", icon: "key", summary: demo ? "Sample keys for the REST API" : `${s.connections.keys} active key${s.connections.keys === 1 ? "" : "s"} for the REST API`, admin: true },
+      { id: "alerts", title: "Email alerts", icon: "mail", summary: demo ? "The bell shows what needs you; the demo sends no email" : !s.connections.email ? "The bell shows what needs you; email isn't set up here" : settings.emailAlerts ? "A daily email of what needs each person" : "Daily email off for the company" },
     ] },
     { title: "Governance", items: [
       { id: "history", title: "Change history", icon: "scroll", summary: `${s.historyCount.toLocaleString("en-US")} entries, hash-chained`, admin: true },
@@ -114,6 +120,9 @@ function Page({ id, s }: { id: ItemId; s: SettingsData }) {
     case "bands": return <BandsPage history={s.history} />;
     case "people": return <PeoplePage members={s.members} />;
     case "data": return <DataPage s={s} />;
+    case "bulk": return <BulkImport />;
+    case "api": return <Developer />;
+    case "alerts": return <AlertsPage s={s} />;
     case "measured": return <MeasuredPage scorecard={s.scorecard} />;
     case "integrations": return <IntegrationsPage s={s} />;
     case "history": return <HistoryPage s={s} />;
@@ -422,16 +431,54 @@ function MeasuredPage({ scorecard }: { scorecard: ScorecardDef | null }) {
 }
 
 function IntegrationsPage({ s }: { s: SettingsData }) {
+  const { settings } = useApp();
   return (
     <div className="stack">
       <Card title="Pulsus Platform" sub="The company brief and the Quality driver read these">
-        <dl className="kv"><dt>/api/data</dt><dd>The dataset in its original row shapes (kept unchanged for the brief).</dd><dt>/api/pulse</dt><dd>A quality summary (defect, resolution and recurring rates, Operational Standard, branches below standard, open and overdue actions, recurring issues) under the suite's service grant for quality.pulse.</dd></dl>
+        <dl className="kv"><dt>/api/data</dt><dd>The dataset in its original row shapes (kept unchanged for the brief).</dd><dt>/api/pulse</dt><dd>A quality summary (defect, resolution and recurring rates, Operational Standard, branches below standard, open and overdue actions, recurring issues) and the inspections block (results, sampling, risk bands, visits) under the suite&apos;s service grant for quality.pulse.</dd></dl>
       </Card>
       <Card title="Pulsus Risk" sub={s.riskConnected ? "Connected: proposals go to Risk's review queue" : "Risk's intake isn't connected yet: proposals are stored here and sent once it is"}>
         <p style={{ marginTop: 0 }}>A supervisor can send a serious or recurring defect to Pulsus Risk as a proposed issue. A Risk Officer accepts or rejects it there; nothing enters Risk unreviewed.</p>
         {s.outbox.length ? <ul className="list">{s.outbox.map((o) => <li key={o.id}><span className="grow"><strong>{o.title}</strong><br /><span className="sub">{o.severity} · {o.createdBy} · {fmtDateTime(o.createdAt)}</span></span><span className={`status ${o.status === "sent" ? "st-closed" : o.status === "failed" ? "st-open" : "st-draft"}`}>{o.status === "stubbed" ? "Waiting for Risk" : o.status}</span></li>)}</ul> : <p className="sub">Nothing proposed yet. Send one from Insights → Recurring issues.</p>}
       </Card>
-      <Card title="API keys and webhooks" sub="Inbound REST API and webhooks out arrive in the next milestone, with inspections and scheduling."><p className="sub" style={{ margin: 0 }}>Until then, data comes in through workbook upload and reviews.</p></Card>
+      <Card title="Report an issue" sub={s.connections.turnstile ? "Protected by Cloudflare Turnstile" : "Protected by a hidden trap field and a per-phone limit"}>
+        <p className="sub" style={{ margin: 0 }}>Each {settings.unitLabel.toLowerCase()} has a public link and QR poster under <Link href="/issues?tab=links">Issues</Link>. Anyone can report an observation, hazard, near miss or complaint without signing in; a supervisor triages it.</p>
+      </Card>
+      <Card title="REST API" sub="Other systems read and raise records with an API key">
+        <p className="sub" style={{ margin: 0 }}>Admins create and revoke keys under <a href="#settings-api">API keys</a>.</p>
+      </Card>
+    </div>
+  );
+}
+
+function AlertsPage({ s }: { s: SettingsData }) {
+  const app = useApp();
+  const { actor, settings, demo } = app;
+  const admin = isAdmin(actor);
+  const [mine, setMine] = useState<boolean | null>(null);
+  const [count, setCount] = useState<number | null>(null);
+  const [msg, setMsg] = useState<{ kind: "err" | "ok" | "info"; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api<{ items: unknown[]; email: { mine: boolean } }>("/api/alerts", "GET").then((r) => { setMine(r.email.mine); setCount(r.items.length); }).catch(() => {}); }, []);
+  const run = async (f: () => Promise<void>) => { setBusy(true); setMsg(null); try { await f(); } catch (e) { setMsg({ kind: "err", text: (e as Error).message }); } setBusy(false); };
+  return (
+    <div className="stack">
+      <Card title="The bell" sub="In the top bar, on every screen">
+        <p style={{ marginTop: 0 }}>The bell counts what needs you now: inspections and reviews to approve, actions to verify, your overdue actions and those due in three days, effectiveness checks that have fallen due, and reported issues to triage. {count !== null && <strong>{count === 0 ? "Nothing needs you right now." : `${count} thing${count === 1 ? "" : "s"} need${count === 1 ? "s" : ""} you now.`}</strong>}</p>
+      </Card>
+      <Card title="Daily email" sub={demo ? "The demo never sends email" : s.connections.email ? (s.connections.cron ? "Sent each morning at about 06:20 UTC" : "Ready, but the daily schedule isn't set up (CRON_SECRET)") : "Not set up on this deployment"}>
+        <p style={{ marginTop: 0 }}>One email a day to each person with something waiting, grouped by kind, from Pulsus Quality &lt;support@pulsus.tech&gt;. Nobody gets an empty email.</p>
+        {!s.connections.email && !demo && <Msg kind="info">Email is sent through Resend once the deployment has a RESEND_API_KEY. Until then, the bell shows the same list.</Msg>}
+        {admin && (
+          <label className="row mt"><input type="checkbox" checked={settings.emailAlerts} disabled={busy} onChange={(e) => { const on = e.target.checked; run(async () => { await api("/api/settings", "PATCH", { emailAlerts: on }); app.refresh(); setMsg({ kind: "ok", text: on ? "The daily email is on for the company." : "The daily email is off for everyone." }); }); }} />Send the daily email to {actor.tenantName}&apos;s people</label>
+        )}
+        {!admin && !settings.emailAlerts && <p className="sub">A Quality admin has turned the daily email off for the company.</p>}
+        {mine !== null && (
+          <label className="row mt"><input type="checkbox" checked={mine} disabled={busy} onChange={(e) => { const on = e.target.checked; run(async () => { const r = await api<{ mine: boolean }>("/api/alerts", "POST", { emailAlerts: on }); setMine(r.mine); setMsg({ kind: "ok", text: on ? "You'll get the daily email." : "You won't get the daily email." }); }); }} />Send it to me ({actor.email})</label>
+        )}
+        {s.connections.email && !demo && <button type="button" className="btn mt" disabled={busy} onClick={() => run(async () => { const r = await api<{ message: string }>("/api/alerts", "POST", { test: true }); setMsg({ kind: "ok", text: r.message }); })}><Icon name="mail" />Send me today&apos;s email now</button>}
+        <Msg kind={msg?.kind}>{msg?.text}</Msg>
+      </Card>
     </div>
   );
 }

@@ -21,6 +21,7 @@ export async function PATCH(req: Request) {
   for (const k of ["unitLabel", "unitPlural", "itemLabel", "itemTypes", "recurringMonths", "severityWeights", "instanceBasis"] as const) {
     if (b[k] !== undefined) { (patch as Record<string, unknown>)[k] = b[k]; what.push(k); }
   }
+  if (typeof b.emailAlerts === "boolean") { patch.emailAlerts = b.emailAlerts; what.push(`daily email ${b.emailAlerts ? "on" : "off"}`); }
   if (b.bands && typeof b.bands === "object") {
     const current = (await getSettings(g.actor.tenant)).bands;
     const next: BandOverrides = { ...current };

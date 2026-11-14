@@ -13,9 +13,14 @@
 // deploy and on many cold starts at once. Admins can also run them from
 // Settings → About (POST /api/admin/database).
 //
-// withTenant(companyId, fn) opens a transaction, assumes the quality_app role
-// where it can and sets app.company_id, so row-level security admits only that
+// withTenant(companyId, fn) opens a transaction, assumes the quality_app role (no
+// BYPASSRLS) and sets app.company_id, so row-level security admits only that
 // company's rows (drizzle/0001_tenancy.sql). Nothing reads or writes outside it.
+// The login role (Neon's owner) bypasses row-level security, so assuming the
+// role is what makes the policies bind: in production the app refuses to serve
+// if it cannot (at connection and again in every tenant transaction), rather
+// than falling back to the owner role. lib/db/system.ts is the cross-company
+// path, for cron jobs only.
 import { sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as schema from "./schema";
@@ -83,15 +88,39 @@ export async function migrationStatus(): Promise<{ applied: string[]; pending: s
   };
 }
 
-async function probeAppRole(db: Db): Promise<boolean> {
+/** True in a production build or on Vercel: there a tenant transaction must not bypass row-level security. */
+export const strictIsolation = () => process.env.NODE_ENV === "production" || !!process.env.VERCEL;
+
+/** Raised when the app cannot run as quality_app, or quality_app could bypass row-level security. */
+export class TenantIsolationError extends Error {}
+
+/** Can the login role assume quality_app, and does quality_app then stay bound by row-level security? */
+async function probeAppRole(db: Db): Promise<{ ok: boolean; reason: string }> {
+  let reason = "";
   try {
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local role quality_app`);
+      const [r] = rowsOf<{ bypass: boolean | null }>(await tx.execute(sql`select rolbypassrls or rolsuper as bypass from pg_roles where rolname = current_user`));
+      reason = r?.bypass === false ? "" : "quality_app bypasses row-level security";
       throw new Error("__probe_ok__");
     });
   } catch (e) {
-    return e instanceof Error && e.message === "__probe_ok__";
+    if (e instanceof Error && e.message === "__probe_ok__") return { ok: !reason, reason };
+    return { ok: false, reason: `cannot assume quality_app: ${e instanceof Error ? (e.cause instanceof Error ? e.cause.message : e.message) : String(e)}` };
   }
+  return { ok: false, reason: "probe did not run" };
+}
+
+/** The role check's verdict: fatal in production, a loud warning elsewhere. */
+export async function checkAppRole(db: Db): Promise<boolean> {
+  const p = await probeAppRole(db);
+  if (p.ok) return true;
+  const msg = `Quality database: ${p.reason}; row-level security would not bind`;
+  if (strictIsolation()) {
+    console.error(`${msg}. Refusing to serve.`);
+    throw new TenantIsolationError(msg);
+  }
+  console.warn(`${msg}. Development only: falling back to the login role.`);
   return false;
 }
 
@@ -101,14 +130,14 @@ async function open(): Promise<Conn> {
     const p = await openPostgres(url);
     await migrate(p.migrateDb);
     await p.closeMigrate();
-    return { db: p.db, kind: "postgres", appRole: await probeAppRole(p.db), close: p.close };
+    return { db: p.db, kind: "postgres", appRole: await checkAppRole(p.db).catch(async (e) => { await p.close().catch(() => {}); throw e; }), close: p.close };
   }
   if (process.env.VERCEL && clean(process.env.ALLOW_EPHEMERAL_DB) !== "1") {
     throw new Error("DATABASE_URL is not set: Pulsus Quality needs its Postgres database on a hosted deployment.");
   }
   const p = await openPglite();
   await migrate(p.db);
-  return { db: p.db, kind: "pglite", appRole: await probeAppRole(p.db), close: p.close };
+  return { db: p.db, kind: "pglite", appRole: await checkAppRole(p.db).catch(async (e) => { await p.close().catch(() => {}); throw e; }), close: p.close };
 }
 
 /** The process's connection, opened and migrated on first use. */
@@ -132,7 +161,13 @@ export async function withTenant<T>(companyId: string, fn: (tx: Tx) => Promise<T
   const c = await connection();
   return c.db.transaction(async (tx) => {
     if (c.appRole) await tx.execute(sql`set local role quality_app`);
-    await tx.execute(sql`select set_config('app.company_id', ${companyId}, true)`);
+    const [r] = rowsOf<{ bypass: boolean | null }>(await tx.execute(
+      sql`select set_config('app.company_id', ${companyId}, true) as company, (select rolbypassrls or rolsuper from pg_roles where rolname = current_user) as bypass`,
+    ));
+    if (r?.bypass !== false && strictIsolation()) {
+      console.error("Quality database: a tenant transaction would bypass row-level security. Request refused.");
+      throw new TenantIsolationError("tenant transaction bypasses row-level security");
+    }
     return fn(tx);
   });
 }
@@ -140,4 +175,18 @@ export async function withTenant<T>(companyId: string, fn: (tx: Tx) => Promise<T
 /** Rows from a raw tx.execute(), whichever driver ran it. */
 export function rowsOf<T>(r: unknown): T[] {
   return ((r as { rows?: T[] })?.rows ?? (r as T[])) || [];
+}
+
+/**
+ * The ids of every tenant, for the daily alert email only. Runs under the reserved
+ * setting "__registry__", which a read-only policy on the companies table admits
+ * (drizzle/0009_m4_tenancy.sql); every other table stays closed to it.
+ */
+export async function listTenantIds(): Promise<string[]> {
+  const c = await connection();
+  return c.db.transaction(async (tx) => {
+    if (c.appRole) await tx.execute(sql`set local role quality_app`);
+    await tx.execute(sql`select set_config('app.company_id', '__registry__', true)`);
+    return rowsOf<{ company_id: string }>(await tx.execute(sql`select company_id from companies order by company_id`)).map((r) => r.company_id).filter((id) => TENANT_ID.test(id));
+  });
 }

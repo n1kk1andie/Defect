@@ -17,7 +17,8 @@ export interface StorageDriver {
 /** Vercel Blob R/W token — normally BLOB_READ_WRITE_TOKEN; a connected store's value always starts "vercel_blob_rw_". */
 export function vercelBlobToken(): string | undefined {
   if (process.env.BLOB_READ_WRITE_TOKEN) return process.env.BLOB_READ_WRITE_TOKEN;
-  for (const v of Object.values(process.env)) if (typeof v === "string" && v.startsWith("vercel_blob_rw_")) return v;
+  // Never another store's token: the backup store (BACKUP_BLOB_READ_WRITE_TOKEN) or a preview one.
+  for (const [k, v] of Object.entries(process.env)) if (!/^(BACKUP_|PREVIEW_)/.test(k) && typeof v === "string" && v.startsWith("vercel_blob_rw_")) return v;
   return undefined;
 }
 

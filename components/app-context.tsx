@@ -18,7 +18,7 @@ export interface Boot {
   settings: CompanySettings;
   program: Program;
   people: { email: string; name: string; roles: string[] }[];
-  counts: { awaitingApproval: number; openActions: number; overdue: number; awaitingVerification: number; myDrafts: number; awaitingInspections: number };
+  counts: { awaitingApproval: number; openActions: number; overdue: number; awaitingVerification: number; myDrafts: number; awaitingInspections: number; newIssues: number };
   demo: boolean;
   platformUrl: string;
   /** Where "View plan & billing" goes. */

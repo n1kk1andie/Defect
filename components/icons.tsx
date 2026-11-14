@@ -61,6 +61,11 @@ const P: Record<string, string> = {
   wifi: "M2 9a16 16 0 0 1 20 0M5 12.5a11 11 0 0 1 14 0M8.5 16a6 6 0 0 1 7 0M12 19.5h.01",
   play: "M7 4l13 8-13 8z",
   sliders: "M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4",
+  flag: "M5 21V4M5 4h11l-2 4 2 4H5",
+  qr: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v2h-2zM16 16h2v2h-2zM14 18h2v2h-2zM18 18h2v2h-2zM6.5 6.5h1v1h-1zM16.5 6.5h1v1h-1zM6.5 16.5h1v1h-1z",
+  key: "M15 7a4 4 0 1 1-3.5 5.9L4 20H2v-3l7.1-7.1A4 4 0 0 1 15 7zM16 8h.01",
+  compare: "M4 20V8M9 20V4M15 20v-9M20 20V6M2 20h20",
+  mail: "M3 6h18v12H3zM3 7l9 6 9-6",
   globe: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20",
 };
 
