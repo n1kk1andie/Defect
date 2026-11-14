@@ -29,15 +29,14 @@ export function SignInFrame({ brand, title, lead, children, foot, L = (s) => s }
         ) : (
           <div className="sf-brand">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="sf-emblem sf-day" src={brand.emblem} alt="" width={240} height={240} />
+            <img className="sf-emblem sf-day" src={brand.emblem} alt="" width={200} height={200} />
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="sf-emblem sf-night" src={brand.emblemNight} alt="" width={240} height={240} />
+            <img className="sf-emblem sf-night" src={brand.emblemNight} alt="" width={200} height={200} />
             <h1 className={`sf-name${nameSize(brand.word)}`}>Pulsus <span className="sf-word">{brand.word}</span></h1>
             <p className="sf-sub">{L(brand.sub)}</p>
           </div>
         )}
         <p className="sf-tag">{L("Live.")} <span className="sf-word">{L("Signal.")}</span> {L("Clarity.")}</p>
-        {brand.desc ? <p className="sf-desc">{L(brand.desc)}</p> : null}
         {title ? <h2 className="sf-title" id="sf-title">{title}</h2> : null}
         {lead ? <p className="sf-lead">{lead}</p> : null}
         {children}
