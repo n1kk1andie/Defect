@@ -127,3 +127,38 @@ html[data-theme="dark"] .sf .sf-btn { background: #c8102e; }
   html:not([data-theme="light"]) .sf .sf-night { display: block !important; }
   html:not([data-theme="light"]) .sf .sf-btn { background: #c8102e; }
 }
+
+/* The licence screen standard (app/licence, the same words and look as the licence wall in lib/licenseWall.ts). */
+.sf-notice-title { margin: 28px 0 0; font-family: "Sora", "IBM Plex Sans", system-ui, sans-serif; font-size: 24px; font-weight: 800; line-height: 1.25; text-align: center; color: var(--sf-ink); }
+.sf-notice-body { margin: 12px 0 0; font-size: 17px; line-height: 1.55; text-align: center; color: var(--sf-muted); }
+html body .sf a.sf-notice-cta, html body .sf a.sf-notice-cta:hover { display: inline-flex; align-items: center; justify-content: center; width: 100%; min-height: 56px; margin-top: 24px; text-decoration: none; color: #fff; }
+.sf-notice-note { margin: 14px 0 0; font-size: 14px; line-height: 1.5; text-align: center; color: var(--sf-muted); }
+
+/* ── The uniform brand block (the suite's owner standard, 14 Nov 2026) ─────
+   Identical in every Pulsus app apart from the emblem artwork, the app word
+   and the subtitle: the emblem only (a fixed square box, the symbol filling
+   ~92% of it), "Pulsus <App>" as live text, the subtitle in capitals, then
+   "Live. Signal. Clarity.". The name is the same size in every app at every
+   width: clamp(24px, 7.4vw, 36px), the size that keeps the suite's longest
+   name, "Pulsus Communiqué", on one line. Overrides the sizes above. */
+.sf-brand { margin: 0; }
+.sf .sf-emblem { width: 176px; height: 176px; min-width: 0; max-width: none; object-fit: contain; margin: 4px auto 0; }
+.sf .sf-name, .sf .sf-name.sf-long, .sf .sf-name.sf-xlong {
+  margin: 12px 0 0; font-family: "Sora", "IBM Plex Sans", system-ui, sans-serif; font-weight: 800;
+  font-size: clamp(24px, 7.4vw, 36px); line-height: 1.1; letter-spacing: -0.01em; white-space: nowrap; color: #0b1f4d;
+}
+.sf .sf-name .sf-word { color: #c8102e; }
+.sf .sf-sub { margin: 8px 0 0; font-family: "Sora", "IBM Plex Sans", system-ui, sans-serif; font-weight: 700; font-size: 14px; line-height: 1.3; letter-spacing: 0.16em; text-transform: uppercase; color: #0b1f4d; }
+.sf .sf-tag { margin: 22px 0 0; font-family: "Sora", "IBM Plex Sans", system-ui, sans-serif; font-weight: 700; font-size: 18px; line-height: 1.3; }
+.sf .sf-tag .sf-word { color: #c8102e; }
+@media (min-width: 600px) {
+  .sf .sf-emblem { width: 200px; height: 200px; max-width: none; }
+}
+html[data-theme="dark"] .sf .sf-name { color: #f3f4fb; }
+html[data-theme="dark"] .sf .sf-name .sf-word, html[data-theme="dark"] .sf .sf-tag .sf-word { color: #ff4d6d; }
+html[data-theme="dark"] .sf .sf-sub { color: #c6cae3; }
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) .sf .sf-name { color: #f3f4fb; }
+  html:not([data-theme="light"]) .sf .sf-name .sf-word, html:not([data-theme="light"]) .sf .sf-tag .sf-word { color: #ff4d6d; }
+  html:not([data-theme="light"]) .sf .sf-sub { color: #c6cae3; }
+}
