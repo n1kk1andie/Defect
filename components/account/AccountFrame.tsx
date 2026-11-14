@@ -11,8 +11,8 @@ export const QUALITY_BRAND: FrameBrand = {
   word: "Quality",
   sub: "Quality assurance",
   desc: "Branch reviews · defects · corrective actions",
-  emblem: "/pulsus-quality-icon-day.png",
-  emblemNight: "/pulsus-quality-icon-night.png",
+  emblem: "/pulsus-quality-emblem-day.png",
+  emblemNight: "/pulsus-quality-emblem-night.png",
 };
 
 /** The suite footer under every sign-in-like page. */
