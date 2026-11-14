@@ -11,7 +11,8 @@ test("the footer reads the suite's two lines", () => {
   assert.ok(brand.includes("Pulsus Quality · {FOOTER_SUITE}"));
   assert.ok(brand.includes('"Part of the Pulsus Intelligence Suite"'));
   assert.ok(brand.includes('"A product of Tumblehill Labs, a product studio of Tumblehill Holdings LLC."'));
-  for (const f of ["components/Shell.tsx", "components/account/AccountFrame.tsx"]) assert.ok(read(f).includes("<FooterLines"), f);
+  for (const f of ["components/Shell.tsx", "components/account/AccountFrame.tsx", "app/r/[token]/page.tsx"]) assert.ok(read(f).includes("<FooterLines"), f);
+  assert.doesNotMatch(read("app/r/[token]/page.tsx"), /Live\. Signal\. Clarity\.<\/span> ·/);
 });
 
 test("the old footer variants are gone", () => {

@@ -3,7 +3,7 @@
 import type { Metadata } from "next";
 import { resolveLink, turnstileSiteKey } from "@/lib/issues";
 import { ReportForm } from "./ReportForm";
-import { Wordmark } from "@/components/Brand";
+import { FooterLines, Wordmark } from "@/components/Brand";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Report an issue · Pulsus Quality", robots: { index: false, follow: false } };
@@ -28,7 +28,8 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
           <p className="sub">The poster or link may have been replaced. Ask someone at the site for the current one, or tell a member of staff directly.</p>
         </section>
       )}
-      <p className="sub rpt-foot"><span className="tagline">Live. Signal. Clarity.</span> · Pulsus Quality · <a href="https://pulsus.tech/privacy">Privacy</a> · In an emergency, call your local emergency number first.</p>
+      <p className="sub rpt-foot"><a href="https://pulsus.tech/privacy">Privacy</a> · In an emergency, call your local emergency number first.</p>
+      <p className="sub rpt-foot foot-lines" style={{ marginTop: 4 }}><FooterLines /></p>
     </main>
   );
 }
