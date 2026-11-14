@@ -5,7 +5,7 @@
 // and the app's own images; no scripts.
 export interface FrameBrand { word: string; sub: string; emblem: string; emblemNight: string; icon: string }
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 export function frameHtml(b: FrameBrand, p: { pageTitle: string; title: string; body: string; ctaHtml?: string; foot?: string[]; lang?: string }): string {
   const foot = (p.foot || []).map((l) => `<p>${esc(l)}</p>`).join("");
@@ -15,18 +15,21 @@ export function frameHtml(b: FrameBrand, p: { pageTitle: string; title: string; 
 *{box-sizing:border-box}html,body{margin:0;padding:0}
 body{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 16px;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 .card{width:100%;max-width:480px;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:36px 24px 32px;text-align:center;box-shadow:0 1px 2px rgba(28,20,22,.04),0 14px 40px -18px rgba(28,20,22,.18)}
-img.emblem{display:block;width:58%;min-width:180px;max-width:240px;height:auto;margin:0 auto 6px}img.night{display:none}
-.name{margin:4px 0 0;font-family:Sora,"IBM Plex Sans",system-ui,sans-serif;font-weight:800;font-size:clamp(40px,12vw,52px);line-height:1.05;letter-spacing:-.02em;color:var(--navy)}.name span{color:var(--red)}.name.long{font-size:clamp(30px,9vw,52px);white-space:nowrap}.name.xlong{font-size:clamp(28px,8.2vw,50px);white-space:nowrap}
-.sub{margin:10px 0 0;font-family:Sora,"IBM Plex Sans",system-ui,sans-serif;font-weight:600;font-size:clamp(14px,4.4vw,17px);letter-spacing:.12em;text-transform:uppercase}
-.tag{margin:22px 0 0;font-family:Sora,"IBM Plex Sans",system-ui,sans-serif;font-weight:700;font-size:18px}.tag span{color:var(--red)}
+img.emblem{display:block;width:176px;height:176px;object-fit:contain;margin:4px auto 0}img.night{display:none}
+.name{margin:12px 0 0;font-family:Sora,"IBM Plex Sans",system-ui,sans-serif;font-weight:800;font-size:clamp(24px,7.4vw,36px);line-height:1.1;letter-spacing:-.01em;white-space:nowrap;color:#0b1f4d}.name span{color:#c8102e}
+.sub{margin:8px 0 0;font-family:Sora,"IBM Plex Sans",system-ui,sans-serif;font-weight:700;font-size:14px;line-height:1.3;letter-spacing:.16em;text-transform:uppercase;color:#0b1f4d}
+.tag{margin:22px 0 0;font-family:Sora,"IBM Plex Sans",system-ui,sans-serif;font-weight:700;font-size:18px;line-height:1.3}.tag span{color:#c8102e}
+@media (prefers-color-scheme:dark){.name{color:#f3f4fb}.name span,.tag span{color:#ff4d6d}.sub{color:#c6cae3}}
 h2{margin:28px 0 0;font-family:Sora,"IBM Plex Sans",system-ui,sans-serif;font-size:24px;font-weight:800;line-height:1.25}
 .body{margin:12px 0 0;font-size:17px;line-height:1.55;color:var(--muted)}
 .cta{display:inline-flex;align-items:center;justify-content:center;width:100%;min-height:56px;margin-top:24px;background:var(--red);color:#fff;text-decoration:none;font-family:Sora,"IBM Plex Sans",system-ui,sans-serif;font-weight:700;font-size:18px;padding:12px 16px;border-radius:14px}
+.note{margin:14px 0 0;font-size:14px;line-height:1.5;color:var(--muted)}.signout{display:inline-block;margin-top:14px;font-weight:700;font-size:16px;color:var(--red);text-decoration:none}
 .cta:focus-visible,a:focus-visible{outline:3px solid #2f5bd3;outline-offset:2px}
 .foot{width:100%;max-width:480px;margin:22px auto 0;text-align:center;font-size:13px;line-height:1.6;color:var(--muted)}.foot p{margin:0}
-@media (min-width:720px){.card{padding:44px 40px 36px}img.emblem{width:260px;max-width:260px}}
-</style></head><body><main class="card"><img class="emblem day" src="${esc(b.emblem)}" alt="" width="240" height="240"><img class="emblem night" src="${esc(b.emblemNight)}" alt="" width="240" height="240"><h1 class="name${b.word.length + 7 >= 15 ? " xlong" : b.word.length + 7 >= 12 ? " long" : ""}">Pulsus <span>${esc(b.word)}</span></h1><p class="sub">${esc(b.sub)}</p><p class="tag">Live. <span>Signal.</span> Clarity.</p><h2>${esc(p.title)}</h2><p class="body">${esc(p.body)}</p>${p.ctaHtml || ""}</main>${foot ? `<footer class="foot">${foot}</footer>` : ""}</body></html>`;
+@media (min-width:600px){img.emblem{width:200px;height:200px}}
+@media (min-width:720px){.card{padding:44px 40px 36px}}
+</style></head><body><main class="card"><img class="emblem day" src="${esc(b.emblem)}" alt="" width="200" height="200"><img class="emblem night" src="${esc(b.emblemNight)}" alt="" width="200" height="200"><h1 class="name">Pulsus <span>${esc(b.word)}</span></h1><p class="sub">${esc(b.sub)}</p><p class="tag">Live. <span>Signal.</span> Clarity.</p><h2>${esc(p.title)}</h2><p class="body">${esc(p.body)}</p>${p.ctaHtml || ""}</main>${foot ? `<footer class="foot">${foot}</footer>` : ""}</body></html>`;
 }
 
 /** Pulsus Quality's own artwork and words (components/account/AccountFrame QUALITY_BRAND). */
-export const QUALITY_FRAME: FrameBrand = { word: "Quality", sub: "Quality assurance", emblem: "/pulsus-quality-icon-day.png", emblemNight: "/pulsus-quality-icon-night.png", icon: "/pulsus-quality-icon.png" };
+export const QUALITY_FRAME: FrameBrand = { word: "Quality", sub: "Quality assurance", emblem: "/pulsus-quality-emblem-day.png", emblemNight: "/pulsus-quality-emblem-night.png", icon: "/pulsus-quality-icon.png" };

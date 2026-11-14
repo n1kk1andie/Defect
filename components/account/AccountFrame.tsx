@@ -11,8 +11,8 @@ export const QUALITY_BRAND: FrameBrand = {
   word: "Quality",
   sub: "Quality assurance",
   desc: "Branch reviews · defects · corrective actions",
-  emblem: "/pulsus-quality-icon-day.png",
-  emblemNight: "/pulsus-quality-icon-night.png",
+  emblem: "/pulsus-quality-emblem-day.png",
+  emblemNight: "/pulsus-quality-emblem-night.png",
 };
 
 /** The suite footer under every sign-in-like page. */
@@ -25,8 +25,25 @@ export function AccountFoot() {
   );
 }
 
-export function AccountFrame({ title, sub, children }: { title: string; sub?: ReactNode; children?: ReactNode }) {
-  return <SignInFrame brand={QUALITY_BRAND} title={title} lead={sub} foot={<AccountFoot />}>{children}</SignInFrame>;
+/** Just the suite's two footer lines: the licence screen standard's footer. */
+export function SuiteFoot() {
+  return <p className="foot-lines"><FooterLines /></p>;
+}
+
+export function AccountFrame({ title, sub, children, foot }: { title: string; sub?: ReactNode; children?: ReactNode; foot?: ReactNode }) {
+  return <SignInFrame brand={QUALITY_BRAND} title={title} lead={sub} foot={foot ?? <AccountFoot />}>{children}</SignInFrame>;
+}
+
+/** The licence screen standard in this frame: title, sentence, the full-width red button, the note, the two footer lines. */
+export function LicenceNotice({ title, body, href, label, note }: { title: string; body: string; href: string; label: string; note: string }) {
+  return (
+    <SignInFrame brand={{ ...QUALITY_BRAND, desc: undefined }} foot={<SuiteFoot />}>
+      <h2 className="sf-notice-title">{title}</h2>
+      <p className="sf-notice-body">{body}</p>
+      <a className="sf-btn sf-notice-cta" href={href} target="_top">{label}</a>
+      <p className="sf-notice-note">{note}</p>
+    </SignInFrame>
+  );
 }
 
 export { MicrosoftButton };

@@ -7,10 +7,12 @@ import { readFileSync } from "node:fs";
 const read = (f) => readFileSync(new URL("../" + f, import.meta.url), "utf8");
 
 test("the footer reads the suite's two lines", () => {
-  const brand = read("components/Brand.tsx");
-  assert.ok(brand.includes("Pulsus Quality · {FOOTER_SUITE}"));
+  const brand = read("lib/footer.ts");
+  assert.ok(brand.includes('APP_NAME = "Pulsus Quality"'));
+  assert.ok(brand.includes("`${APP_NAME} · ${FOOTER_SUITE}`"));
   assert.ok(brand.includes('"Part of the Pulsus Intelligence Suite"'));
   assert.ok(brand.includes('"A product of Tumblehill Labs, a product studio of Tumblehill Holdings LLC."'));
+  assert.match(read("components/Brand.tsx"), /footerLines\(\)/);
   for (const f of ["components/Shell.tsx", "components/account/AccountFrame.tsx", "app/r/[token]/page.tsx"]) assert.ok(read(f).includes("<FooterLines"), f);
   assert.doesNotMatch(read("app/r/[token]/page.tsx"), /Live\. Signal\. Clarity\.<\/span> ·/);
 });
