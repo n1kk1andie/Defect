@@ -100,6 +100,7 @@ button.avatar{width:40px;height:40px;font-size:15px}
   .shell{grid-template-columns:minmax(0,1fr)}
   .side{display:none}
   .mobile-only{display:revert!important}
+  .topbar .brand.mobile-only{display:flex!important}
   .hide-sm{display:none!important}
   .topbar{padding:10px 16px;min-height:58px;padding-top:calc(10px + env(safe-area-inset-top))}
   .topbar .title{display:none}
