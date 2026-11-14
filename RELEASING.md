@@ -18,7 +18,7 @@ Accessibility check (axe, WCAG 2.2 AA) against a local demo build:
 ```sh
 npm install --no-save playwright@1.63.0 && npx playwright install chromium   # once
 DEMO_MODE=1 npm run build
-DEMO_MODE=1 npx next start -p 3652 &
+DEMO_MODE=1 DEMO_ACCESS_GATE=off npx next start -p 3652 &
 A11Y_BASE=http://localhost:3652 npm run test:a11y
 kill %1
 ```

@@ -3,7 +3,7 @@
 // at zero violations; plus no page errors and no horizontal scroll.
 //
 //   A11Y_BASE=http://localhost:3652 node --test tests/e2e/a11y.e2e.mjs
-//   (a running DEMO_MODE=1 build: it opens straight in; personas by cookie).
+//   (a running DEMO_MODE=1 DEMO_ACCESS_GATE=off build: it opens straight in; personas by cookie).
 // Needs Playwright's Chromium. Not part of `npm test` (it needs a server).
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
