@@ -27,7 +27,7 @@ export const NAV: { href: string; label: string; icon: IconName; badge?: Badge; 
   { href: "/review", label: "Review", icon: "review", badge: "approvals" },
   { href: "/actions", label: "Actions", icon: "actions", badge: "verify" },
   { href: "/register", label: "Register", icon: "register" },
-  { href: "/history", label: "History", icon: "history" },
+  { href: "/history", label: "Performance", icon: "history" },
   { href: "/insights", label: "Insights", icon: "insights" },
   { href: "/report", label: "Report", icon: "report" },
   { href: "/templates", label: "Templates", icon: "layers", build: true },
@@ -181,7 +181,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const li = lastActive(app.data);
   const latest = li >= 0 ? monthLabel(app.data.periods[li]) : null;
   const modeLabel = app.filters.mode === "standard" && app.data.scorecard ? app.data.scorecard.name : `${app.settings.unitLabel} Defects`;
-  const context = ["Pulse", "Register", "History"].includes(current) ? `${modeLabel}${latest ? ` · latest data ${latest}` : ""}` : app.actor.tenantName;
+  const context = ["Pulse", "Register", "Performance"].includes(current) ? `${modeLabel}${latest ? ` · latest data ${latest}` : ""}` : app.actor.tenantName;
   const badge = (b?: Badge) => (b === "approvals" ? app.counts.awaitingApproval : b === "verify" ? app.counts.awaitingVerification : b === "inspections" ? app.counts.awaitingInspections : b === "issues" ? app.counts.newIssues : 0);
   const main = NAV.filter((n) => n.href !== "/settings" && !n.build);
   const build = NAV.filter((n) => n.build && (n.href === "/templates" || isAdmin(app.actor)));

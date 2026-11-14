@@ -274,7 +274,7 @@ A driver with no data is left out rather than counted as zero, and the weights, 
   - The approving supervisor is the raiser.
   - The existing rule holds: the verifier is never the raiser, the owner or the submitter.
 - **Analytics.** The existing measures are:
-  - Pulse, Register, History heat-maps, Insights, recurring detection and the executive report.
+  - Pulse, Register, Performance heat-maps, Insights, recurring detection and the executive report.
 
   M2 adds:
   - inspection scores by site and template;
