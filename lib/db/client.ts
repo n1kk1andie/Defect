@@ -184,6 +184,20 @@ export async function withTenant<T>(companyId: string, fn: (tx: Tx) => Promise<T
   });
 }
 
+/**
+ * Run housekeeping writes inside a tenant transaction (the cached plan) without
+ * marking the company for backup: browsing alone never triggers a backup. Real
+ * changes in the same transaction, before or after, still mark it.
+ */
+export async function withoutBackupMark<T>(tx: Tx, fn: () => Promise<T>): Promise<T> {
+  const [r] = rowsOf<{ was: string | null }>(await tx.execute(sql`select current_setting('app.backup_mark', true) as was, set_config('app.backup_mark', '0', true) as off`));
+  try {
+    return await fn();
+  } finally {
+    await tx.execute(sql`select set_config('app.backup_mark', ${r?.was ?? "0"}, true)`).catch(() => {});
+  }
+}
+
 /** Rows from a raw tx.execute(), whichever driver ran it. */
 export function rowsOf<T>(r: unknown): T[] {
   return ((r as { rows?: T[] })?.rows ?? (r as T[])) || [];

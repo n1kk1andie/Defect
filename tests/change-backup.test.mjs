@@ -209,3 +209,20 @@ test("every company table carries the change trigger", async () => {
   const seen = rowsOf(await withTenant("acme", (tx) => tx.execute(sql`select company_id from backup_state`)));
   assert.deepEqual(seen.map((r) => r.company_id), ["acme"]);
 });
+
+test("housekeeping writes (withoutBackupMark) mark nothing; a real change in the same transaction still does", async () => {
+  const { withoutBackupMark } = await import("@/lib/db/client");
+  await withTenant("acme", (tx) => withoutBackupMark(tx, () => tx.execute(sql`update companies set name = name where company_id = 'acme'`)));
+  assert.equal(await state("acme"), undefined, "a housekeeping write alone marks nothing");
+  await withTenant("acme", async (tx) => {
+    await withoutBackupMark(tx, () => tx.execute(sql`update companies set name = name where company_id = 'acme'`));
+    await tx.execute(sql`update companies set name = name where company_id = 'acme'`);
+  });
+  assert.equal((await state("acme")).pending, true);
+  await clearMarks();
+  await withTenant("acme", async (tx) => {
+    await tx.execute(sql`update companies set name = name where company_id = 'acme'`);
+    await withoutBackupMark(tx, () => tx.execute(sql`update companies set name = name where company_id = 'acme'`));
+  });
+  assert.equal((await state("acme")).seq, 1, "marked once, and the housekeeping after it did not reset that");
+});

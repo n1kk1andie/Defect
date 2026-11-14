@@ -8,5 +8,6 @@ import type { PlanState } from "@/lib/planStatus";
 
 export async function cachePlan(companyId: string, plan: PlanState): Promise<void> {
   const v = JSON.stringify({ standing: plan.standing, trialEndsAt: plan.trialEndsAt ?? null });
-  await withTenant(companyId, (tx) => tx.execute(sql`update companies set plan = ${v}::jsonb, plan_seen_at = now() where company_id = ${companyId} and plan is distinct from ${v}::jsonb`));
+  // A cached copy of the platform's plan, not customer data: never a reason for a backup.
+  await withTenant(companyId, (tx) => tx.execute(sql`update companies set plan = ${v}::jsonb, plan_seen_at = now() where company_id = ${companyId} and plan is distinct from ${v}::jsonb`), { backup: false });
 }

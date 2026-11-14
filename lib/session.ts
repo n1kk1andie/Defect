@@ -10,7 +10,7 @@
 // roles) gets in; anyone else sees "no access".
 import { cache } from "react";
 import { headers } from "next/headers";
-import { withTenant } from "@/lib/db/client";
+import { withTenant, withoutBackupMark } from "@/lib/db/client";
 import { DEMO, ensureCompany, findMember, OWN, provisionMember } from "@/lib/company";
 import { record } from "@/lib/audit";
 import { defaultRolesForPlatformRole, type Actor, type Role, type TenantKind } from "@/lib/roles";
@@ -78,7 +78,7 @@ export async function resolveActor(info: RequestInfo): Promise<Actor> {
   return withTenant(info.tenant, async (tx) => {
     await ensureCompany(tx, info.tenant, info.tenantName, info.kind);
     // Cache the plan the platform signed into this session, for the REST API (lib/planCache.ts).
-    if (info.kind === "company" && info.plan) { const v = JSON.stringify({ standing: info.plan.standing, trialEndsAt: info.plan.trialEndsAt ?? null }); await tx.execute(sql`update companies set plan = ${v}::jsonb, plan_seen_at = now() where company_id = ${info.tenant} and plan is distinct from ${v}::jsonb`); }
+    if (info.kind === "company" && info.plan) { const v = JSON.stringify({ standing: info.plan.standing, trialEndsAt: info.plan.trialEndsAt ?? null }); await withoutBackupMark(tx, () => tx.execute(sql`update companies set plan = ${v}::jsonb, plan_seen_at = now() where company_id = ${info.tenant} and plan is distinct from ${v}::jsonb`)); }
     let m = await findMember(tx, info.tenant, info.email);
     if (!m) {
       let roles: Role[] | null;
