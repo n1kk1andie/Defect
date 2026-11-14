@@ -575,3 +575,20 @@ html[data-theme="dark"] .bell-n{color:#1a0008}
 .scopes legend{font-size:13px;font-weight:600;color:var(--ink-2);padding:0;margin-bottom:4px}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em;background:var(--well);padding:1px 5px;border-radius:6px;word-break:break-word}
+
+/* ---------- hero tone: the headline card's colour carries the status ----------
+   Suite rule: black = good (World class, Strong, Healthy / on target), amber =
+   mixed (Watch, or a summary where some measures are fine and some are not),
+   red = not good (Attention, Escalate / below target), black with "No reading
+   yet" = no data. White text clears WCAG AA (4.5:1) on every stop, day and
+   night, also at 85% opacity. By night: lighter charcoal (stands apart from
+   the navy page and its cards), muted amber, deepened red. Set by lib/hero-tone. */
+.hero.tone-good, .hero.tone-none { background: linear-gradient(160deg, #23232E 0%, #14141A 100%); box-shadow: 0 18px 40px -22px rgba(20, 20, 26, .75); color: #fff; }
+.hero.tone-mixed { background: linear-gradient(160deg, #9C4509 0%, #7C3A0B 100%); box-shadow: 0 18px 40px -22px rgba(124, 58, 11, .75); color: #fff; }
+.hero.tone-bad { background: linear-gradient(160deg, #BE0A28 0%, #8A0019 100%); box-shadow: 0 18px 40px -22px rgba(138, 0, 25, .75); color: #fff; }
+html[data-theme="dark"] .hero.tone-good, html[data-theme="dark"] .hero.tone-none { background: linear-gradient(160deg, #353946 0%, #2A2D38 100%); border: 1px solid rgba(255, 255, 255, .18); box-shadow: 0 14px 34px -16px rgba(0, 0, 0, .7); }
+html[data-theme="dark"] .hero.tone-mixed { background: linear-gradient(160deg, #7F5A1E 0%, #6B4A17 100%); border: 1px solid rgba(255, 255, 255, .12); box-shadow: 0 14px 34px -16px rgba(0, 0, 0, .7); }
+html[data-theme="dark"] .hero.tone-bad { background: linear-gradient(160deg, #93001C 0%, #650012 100%); border: 1px solid rgba(255, 255, 255, .12); box-shadow: 0 14px 34px -16px rgba(0, 0, 0, .7); }
+.hero-tone { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 2px 10px; border-radius: 999px; background: rgba(0, 0, 0, .28); border: 1px solid rgba(255, 255, 255, .35); color: #fff; font-weight: 700; font-size: 12px; line-height: 1.2; letter-spacing: .01em; }
+.hero-tone::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+html[data-theme="dark"] .hero[class*="tone-"] .pill { background: rgba(12, 12, 16, .62); } /* band chips stay readable on every night tone */
