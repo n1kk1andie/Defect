@@ -19,7 +19,7 @@ export function registerTable(d: QualityData, f: Filter, group: "unit" | "area",
 
 export function historyTable(d: QualityData, f: Filter, metric: MetricKey, unitLabel: string): Table {
   const g = heatGrid(d, f, metric);
-  return { name: "History", header: [unitLabel, ...g.months.map((p) => monthLabel(d.periods[p])), "All months"], rows: g.units.map((u) => [u.name, ...u.cells.map(r4), r4(u.total)]) };
+  return { name: "Performance", header: [unitLabel, ...g.months.map((p) => monthLabel(d.periods[p])), "All months"], rows: g.units.map((u) => [u.name, ...u.cells.map(r4), r4(u.total)]) };
 }
 
 export function actionsTable(list: ActionView[], areaName: (id: string | null) => string, unitLabel: string): Table {
