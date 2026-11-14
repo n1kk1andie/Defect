@@ -10,6 +10,8 @@
 //                     unset → wall from LICENSE_WALL_AT onwards
 //   LICENSE_WALL_AT   ISO 8601 instant to start walling (default below)
 
+import { frameHtml, QUALITY_FRAME } from "./frame-html";
+
 const LICENSE_WALL_DEFAULT_AT = "2026-09-03T05:00:00.000Z"; // 3 Sep 2026, 00:00 Jamaica
 const clean = (v: unknown) => (typeof v === "string" ? v.trim().replace(/^["']+|["']+$/g, "").trim().toLowerCase() : "");
 const OFF = new Set(["off", "0", "false", "no", "disabled"]);
@@ -26,7 +28,13 @@ export function licenseWallActive(now: number = Date.now()): boolean {
 export const LICENSE_WALL_TITLE = "License Required";
 export const LICENSE_WALL_MESSAGE = "Please contact your organisation’s administrator for further information.";
 
-const HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><meta name="robots" content="noindex, nofollow"/><title>License Required · Pulsus Intelligence Suite</title><style>*{box-sizing:border-box}html,body{margin:0;padding:0}body{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(160deg,#e4012b,#a60020);font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#1a2230}.card{width:100%;max-width:380px;background:#fff;border-radius:16px;padding:32px 28px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.25)}h1{margin:0 0 10px;font-size:22px;font-weight:800;color:#111827}.sub{margin:0;font-size:14px;line-height:1.55;color:#6b7280}.rule{height:1px;background:#eceff3;margin:22px 0 16px}.product{margin:0;font-size:13px;font-weight:600;color:#111827}.owner{margin:4px 0 0;font-size:11.5px;color:#6b7280}</style></head><body><main class="card"><h1>License Required</h1><p class="sub">Please contact your organisation’s administrator for further information.</p><div class="rule"></div><p class="product">Pulsus Intelligence Suite</p><p class="owner">A Tumblehill Holdings LLC Product</p></main></body></html>`;
+// The notice in the Pulsus sign-in standard's frame (lib/frame-html.ts).
+const HTML = frameHtml(QUALITY_FRAME, {
+  pageTitle: "License Required · Pulsus Intelligence Suite",
+  title: LICENSE_WALL_TITLE,
+  body: LICENSE_WALL_MESSAGE,
+  foot: ["Pulsus Intelligence Suite", "A Tumblehill Holdings LLC Product"],
+});
 
 const HEADERS = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
 

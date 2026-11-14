@@ -3,17 +3,19 @@
 // the Pulsus account (one for every Pulsus product): this page calls the
 // account service's sign-in from the browser, which answers this address with
 // CORS and sets the shared session cookie on .pulsus.tech, so the visitor never
-// leaves Quality. Steps: email + password + quick check → (two-step code) → in.
+// leaves Quality. Steps: email + password → (two-step code) → in. The human
+// check is Cloudflare Turnstile when the account service offers it, out of
+// sight unless Cloudflare needs a click; never a sum (components/HumanCheck).
 // "Sign in with Microsoft" shows only when the account service has Microsoft
 // sign-in switched on (its GET /api/login says sso: true). A company that
 // requires single sign-on is sent straight to its identity provider.
 import { useCallback, useEffect, useState } from "react";
 import { AccountFrame, hubPost, MicrosoftButton } from "@/components/account/AccountFrame";
-import { Msg } from "@/components/ui";
+import { HumanCheckBox, useHumanCheck, type HumanOffer } from "@/components/HumanCheck";
 import { SIGNIN_ERRORS } from "@/lib/turnstile";
 
 type Mode = "signin" | "activate" | "mfa" | "forgot" | "sent" | "reset";
-interface Challenge { a: number; b: number; exp: number; sig: string; sso?: boolean }
+type Challenge = NonNullable<HumanOffer> & { sso?: boolean };
 const GENERIC = "Something went wrong. Please try again.";
 const isDemo = (process.env.NEXT_PUBLIC_DEMO_MODE || "") === "1";
 
@@ -22,7 +24,6 @@ export function SignIn({ hub, next, error }: { hub: string; next: string; error:
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [answer, setAnswer] = useState("");
   const [code, setCode] = useState("");
   const [ch, setCh] = useState<Challenge | null>(null);
   const [sso, setSso] = useState(false);
@@ -32,12 +33,12 @@ export function SignIn({ hub, next, error }: { hub: string; next: string; error:
   const [msg, setMsg] = useState<{ kind: "err" | "ok" | "info"; text: string } | null>(error ? { kind: "err", text: SIGNIN_ERRORS[error] || GENERIC } : null);
   const fail = (c?: unknown) => setMsg({ kind: "err", text: SIGNIN_ERRORS[String(c)] || GENERIC });
 
+  const human = useHumanCheck(isDemo ? null : ch);
   const loadChallenge = useCallback(async () => {
-    setAnswer("");
     try {
       const r = await fetch(hub + "/api/login", { cache: "no-store", credentials: "include" });
-      const d = (await r.json()) as Partial<Challenge>;
-      setCh(typeof d.a === "number" ? (d as Challenge) : null);
+      const d = (await r.json()) as Challenge;
+      setCh(d);
       setSso(d.sso === true);
     } catch { setCh(null); }
   }, [hub]);
@@ -50,17 +51,17 @@ export function SignIn({ hub, next, error }: { hub: string; next: string; error:
   }, [loadChallenge]);
 
   const go = () => window.location.replace(next);
-  const quick = ch ? { answer: Number(answer), exp: ch.exp, sig: ch.sig } : {};
+  // The human check's fields for one send (each is single-use).
+  const quick = async () => { const f = await human.fields(); human.next(); return f; };
   const toSso = (path: string) => { window.location.href = hub + path; };
 
   const signIn = async () => {
     if (busy) return;
     if (!email.trim() || !pw) return fail("credentials");
-    if (!ch || !answer) return setMsg({ kind: "err", text: "Answer the quick check first." });
     if (mode === "activate") { if (pw.length < 12) return fail("weak_password"); if (pw !== confirm) return fail("mismatch"); }
     setBusy(true); setMsg(null);
     try {
-      const r = await hubPost(hub, "/api/login", { email: email.trim(), password: pw, ...quick, ...(mode === "activate" ? { confirm } : {}), product: "quality" });
+      const r = await hubPost(hub, "/api/login", { email: email.trim(), password: pw, ...(await quick()), ...(mode === "activate" ? { confirm } : {}), product: "quality" });
       const b = r.body;
       if (b.ok) return go();
       if (b.mfa === "verify" && typeof b.ticket === "string") { setTicket(b.ticket); setMode("mfa"); setBusy(false); return; }
@@ -69,7 +70,7 @@ export function SignIn({ hub, next, error }: { hub: string; next: string; error:
       if (b.activate) { setMode("activate"); setMsg({ kind: "info", text: "First time signing in: choose a password of at least 12 characters and confirm it." }); }
       else fail(b.error);
       await loadChallenge();
-    } catch { fail(); await loadChallenge(); }
+    } catch (e) { fail(e); await loadChallenge(); }
     setBusy(false);
   };
 
@@ -96,12 +97,11 @@ export function SignIn({ hub, next, error }: { hub: string; next: string; error:
   const requestReset = async () => {
     if (busy) return;
     if (!email.trim()) return setMsg({ kind: "err", text: "Enter your email address first." });
-    if (!ch || !answer) return setMsg({ kind: "err", text: "Answer the quick check first." });
     setBusy(true); setMsg(null);
     try {
-      const r = await hubPost(hub, "/api/login", { action: "requestReset", email: email.trim(), ...quick, product: "quality", login: window.location.origin + "/login" });
+      const r = await hubPost(hub, "/api/login", { action: "requestReset", email: email.trim(), ...(await quick()), product: "quality", login: window.location.origin + "/login" });
       if (r.body.ok) setMode("sent"); else { fail(r.body.error); await loadChallenge(); }
-    } catch { fail(); }
+    } catch (e) { fail(e); await loadChallenge(); }
     setBusy(false);
   };
 
@@ -119,59 +119,63 @@ export function SignIn({ hub, next, error }: { hub: string; next: string; error:
     setBusy(false);
   };
 
-  const enter = (f: () => void) => (e: React.KeyboardEvent) => { if (e.key === "Enter") f(); };
+  const note = msg ? <p className={`sf-msg ${msg.kind}`} role={msg.kind === "err" ? "alert" : "status"}>{msg.text}</p> : null;
+  const form = (onSubmit: () => void, children: React.ReactNode) => <form className="sf-form" noValidate onSubmit={(e) => { e.preventDefault(); onSubmit(); }}>{children}</form>;
 
   if (isDemo) return (
     <AccountFrame title="The demo opens straight in" sub="No sign-in needed: everything in the demo is a fictional company's sample data.">
-      <a className="btn primary mt2" style={{ width: "100%" }} href="/">Open the demo</a>
+      <div className="sf-form"><a className="sf-btn2" href="/">Open the demo</a></div>
     </AccountFrame>
   );
 
   if (mode === "reset") return (
     <AccountFrame title="Set a new password" sub="At least 12 characters.">
-      <label className="field"><span>New password</span><input className="input" type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} /></label>
-      <label className="field"><span>Confirm password</span><input className="input" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} onKeyDown={enter(setNewPassword)} /></label>
-      {msg && <Msg kind={msg.kind}>{msg.text}</Msg>}
-      <button className="btn primary mt" style={{ width: "100%" }} disabled={busy} onClick={setNewPassword}>{busy ? "Saving…" : "Save and sign in"}</button>
+      {form(setNewPassword, <>
+        <label className="sf-field"><span>New password</span><input className="sf-input" type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} /></label>
+        <label className="sf-field"><span>Confirm password</span><input className="sf-input" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} /></label>
+        {note}
+        <button className="sf-btn" disabled={busy}>{busy ? "Saving…" : "Save and sign in"}</button>
+      </>)}
     </AccountFrame>
   );
 
   if (mode === "mfa") return (
     <AccountFrame title="Two-step sign-in" sub="Enter the 6-digit code from your authenticator app, or one of your recovery codes.">
-      <label className="field"><span>Code</span><input className="input" style={{ letterSpacing: ".2em", textAlign: "center" }} inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} onKeyDown={enter(verifyCode)} /></label>
-      {msg && <Msg kind={msg.kind}>{msg.text}</Msg>}
-      <button className="btn primary mt" style={{ width: "100%" }} disabled={busy} onClick={verifyCode}>{busy ? "Checking…" : "Verify"}</button>
-      <p className="mt"><button className="linkbtn" onClick={() => { setMode("signin"); setCode(""); setPw(""); setMsg(null); loadChallenge(); }}>Back</button></p>
+      {form(verifyCode, <>
+        <label className="sf-field"><span>Code</span><input className="sf-input" style={{ letterSpacing: ".2em", textAlign: "center" }} inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} /></label>
+        {note}
+        <button className="sf-btn" disabled={busy}>{busy ? "Checking…" : "Verify"}</button>
+      </>)}
+      <div className="sf-links"><button type="button" className="sf-link" onClick={() => { setMode("signin"); setCode(""); setPw(""); setMsg(null); loadChallenge(); }}>Back</button></div>
     </AccountFrame>
   );
 
   if (mode === "sent") return (
     <AccountFrame title="Check your email" sub="If that address has a Pulsus account, we've emailed it a link to set a new password. The link works for one hour.">
-      <p className="mt"><button className="linkbtn" onClick={() => { setMode("signin"); setMsg(null); loadChallenge(); }}>Back to sign in</button></p>
+      <div className="sf-links"><button type="button" className="sf-link" onClick={() => { setMode("signin"); setMsg(null); loadChallenge(); }}>Back to sign in</button></div>
     </AccountFrame>
   );
 
   const forgot = mode === "forgot";
   return (
-    <AccountFrame title={forgot ? "Reset your password" : "Sign in to Pulsus Quality"} sub={forgot ? "We'll email you a link to set a new password." : "Use your Pulsus account."}>
-      <label className="field"><span>Work email</span><input id="si-email" className="input" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-      {!forgot && <>
-        <label className="field"><span>{mode === "activate" ? "Choose a password" : "Password"}</span><input className="input" type="password" autoComplete={mode === "activate" ? "new-password" : "current-password"} value={pw} onChange={(e) => setPw(e.target.value)} /></label>
-        {mode === "activate" && <label className="field"><span>Confirm password</span><input className="input" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} /></label>}
-      </>}
-      <label className="field"><span>Quick check</span>
-        <span className="row"><span className="sora" style={{ fontWeight: 700, whiteSpace: "nowrap" }} aria-hidden="true">{ch ? `${ch.a} + ${ch.b} =` : "…"}</span>
-          <input className="input" inputMode="numeric" autoComplete="off" aria-label={ch ? `What is ${ch.a} plus ${ch.b}?` : "Quick check answer"} value={answer} onChange={(e) => setAnswer(e.target.value.replace(/[^0-9]/g, ""))} onKeyDown={enter(forgot ? requestReset : signIn)} /></span>
-      </label>
-      {msg && <Msg kind={msg.kind}>{msg.text}</Msg>}
-      <button className="btn primary mt" style={{ width: "100%" }} disabled={busy || !ch} onClick={forgot ? requestReset : signIn}>
-        {busy ? "Please wait…" : forgot ? "Email me a link" : mode === "activate" ? "Set password and sign in" : "Sign in"}
-      </button>
-      {!forgot && sso && <><div className="or">or</div><MicrosoftButton onClick={microsoft} disabled={busy} /></>}
-      <p className="mt" style={{ fontSize: 14 }}>
-        {forgot ? <button className="linkbtn" onClick={() => { setMode("signin"); setMsg(null); }}>Back to sign in</button> : <button className="linkbtn" onClick={() => { setMode("forgot"); setMsg(null); }}>Forgot password?</button>}
-      </p>
-      {!forgot && <p className="sub" style={{ fontSize: 14 }}>New to Pulsus Quality? <a href="/signup" style={{ fontWeight: 700 }}>Start a free trial</a></p>}
+    <AccountFrame title={forgot ? "Reset your password" : "Sign in"} sub={forgot ? "We'll email you a link to set a new password." : undefined}>
+      {form(forgot ? requestReset : signIn, <>
+        <label className="sf-field"><span>Work email</span><input id="si-email" className="sf-input" type="email" autoComplete="username" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+        {!forgot && <>
+          <label className="sf-field"><span>{mode === "activate" ? "Choose a password" : "Password"}</span><input className="sf-input" type="password" autoComplete={mode === "activate" ? "new-password" : "current-password"} value={pw} onChange={(e) => setPw(e.target.value)} /></label>
+          {mode === "activate" && <label className="sf-field"><span>Confirm password</span><input className="sf-input" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} /></label>}
+        </>}
+        <HumanCheckBox check={human} />
+        {note}
+        <button className="sf-btn" disabled={busy || !ch}>
+          {busy ? "Please wait…" : forgot ? "Email me a link" : mode === "activate" ? "Set password and sign in" : "Sign in"}
+        </button>
+        {!forgot && sso && <><div className="sf-or">or</div><MicrosoftButton onClick={microsoft} disabled={busy} /></>}
+      </>)}
+      <div className="sf-links">
+        {forgot ? <button type="button" className="sf-link" onClick={() => { setMode("signin"); setMsg(null); }}>Back to sign in</button> : <button type="button" className="sf-link" onClick={() => { setMode("forgot"); setMsg(null); }}>Forgot password?</button>}
+        {!forgot && <p>New to Pulsus Quality? <a href="/signup">Start a 14-day free trial</a></p>}
+      </div>
     </AccountFrame>
   );
 }

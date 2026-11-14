@@ -1,13 +1,16 @@
-// The Pulsus Quality marks: the shield with its heartbeat (navy by day, light
-// by night), the PULSUS / QUALITY wordmark and the suite tagline.
+// The Pulsus Quality marks: the emblem (day and night artwork), the PULSUS /
+// QUALITY wordmark and the suite tagline.
 
-export function ShieldMark({ className = "brand-mark", title }: { className?: string; title?: string }) {
+export function QualityMark({ className = "brand-mark" }: { className?: string }) {
+  // The owner's Pulsus Quality emblem (rosette with a tick over a heartbeat in
+  // the navy and red ring); the night artwork by night. Decorative: the name sits beside it.
   return (
-    <svg className={className} viewBox="0 0 48 48" role={title ? "img" : undefined} aria-label={title} aria-hidden={title ? undefined : true}>
-      <path d="M24 3.5 40 9.3v12.4c0 10.6-6.8 18.7-16 22.8C14.8 40.4 8 32.3 8 21.7V9.3z" fill="none" stroke="var(--navy)" strokeWidth="3.2" strokeLinejoin="round" />
-      <path d="M5 23h9.5l2.6-6.5 3.6 12.5 3.3-16 3.4 13.5 2.4-3.5H43" fill="none" stroke="#E4012B" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M19 34.5l4 3.6 7-7" fill="none" stroke="var(--navy)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <span className={`${className} brand-emblem`} aria-hidden="true">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="mark-day" src="/pulsus-quality-icon-192.png" alt="" width={40} height={40} />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="mark-night" src="/pulsus-quality-icon-night-192.png" alt="" width={40} height={40} />
+    </span>
   );
 }
 

@@ -1,6 +1,8 @@
-// Cloudflare Turnstile on the sign-up page: shown when the Pulsus account
-// service hands out a site key (its GET /api/signup), else its signed sum is
-// asked. A demo never shows it. Pure.
+// The human check on the sign-in and sign-up pages (components/HumanCheck):
+// Cloudflare Turnstile when the Pulsus account service hands out a site key
+// (its GET /api/login and /api/signup), out of sight unless Cloudflare needs a
+// click; otherwise the service's signed one-time check, which the page
+// completes itself. Never a sum to answer. A demo has no check. Pure.
 export const TURNSTILE_JS = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 
 export function turnstileKey(check: { turnstile?: unknown } | null | undefined, demo: boolean): string {
@@ -22,8 +24,9 @@ export const SIGNIN_ERRORS: Record<string, string> = {
   mismatch: "The passwords don't match.",
   too_many: "Too many attempts. Please wait a few minutes and try again.",
   storage: "Couldn't save your password just now. Please try again.",
-  challenge: "Please answer the quick check again.",
-  challenge_expired: "The quick check expired. Please answer the new one.",
+  challenge: "The security check didn't pass. Please try again.",
+  challenge_expired: "The security check timed out. Please try again.",
+  check_failed: "The security check couldn't load. Please refresh the page and try again.",
   reset_invalid: "This link is invalid or has expired. Use “Forgot password?” to get a new one.",
   reset_used: "This link has already been used. Use “Forgot password?” to get a new one.",
   bad_code: "That code didn't work. Try the newest code from your authenticator app.",

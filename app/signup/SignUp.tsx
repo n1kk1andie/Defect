@@ -3,17 +3,16 @@
 // service, called from this page with CORS as the sign-in page does. Its
 // confirmation email links back here (?token=…), where the owner chooses a
 // password and goes straight into Pulsus Quality. The human check is Cloudflare
-// Turnstile when the account service hands out a site key, else its signed sum.
+// Turnstile when the account service hands out a site key, else its signed
+// one-time check, which the page completes itself — never a sum (components/HumanCheck).
 // A demo has no sign-up: it opens straight into the fictional company.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AccountFrame, hubPost } from "@/components/account/AccountFrame";
-import { Msg } from "@/components/ui";
-import { TURNSTILE_JS, turnstileKey } from "@/lib/turnstile";
+import { HumanCheckBox, useHumanCheck, type HumanOffer } from "@/components/HumanCheck";
 import { money, qualityPrice, type QualityPrice } from "@/lib/pricing";
 import { CURRENCY_BY_COUNTRY, countryOptions, currencyOptions, guessRegion } from "@/lib/regionOptions";
 
-interface Check { turnstile?: string; a?: number; b?: number; exp?: number; sig?: string }
-interface TurnstileApi { render: (el: HTMLElement, o: Record<string, unknown>) => string; reset: (id?: string) => void; remove: (id?: string) => void }
+type Check = NonNullable<HumanOffer>;
 
 const ERR: Record<string, string> = {
   signup_closed: "Sign-up isn't open yet. Contact us to get started.",
@@ -24,8 +23,9 @@ const ERR: Record<string, string> = {
   email_reserved: "That email already has a Pulsus account. Sign in instead.",
   email_taken: "That email already belongs to a company on Pulsus. Sign in instead.",
   terms_required: "Please accept the Terms of Use to continue.",
-  challenge: "The verification check didn't pass. Please try it again.",
-  challenge_expired: "The quick check expired. Please answer the new one.",
+  challenge: "The security check didn't pass. Please try again.",
+  challenge_expired: "The security check timed out. Please try again.",
+  check_failed: "The security check couldn't load. Please refresh the page and try again.",
   too_many: "Too many attempts. Please wait a while and try again.",
   email_failed: "We couldn't send the confirmation email just now. Please try again.",
   link_invalid: "This link is invalid or has expired. Start again below.",
@@ -46,8 +46,6 @@ export function SignUp({ hub, demo }: { hub: string; demo: boolean }) {
   const [country, setCountry] = useState("");
   const [currency, setCurrency] = useState("");
   const [timezone, setTimezone] = useState("UTC");
-  const [answer, setAnswer] = useState("");
-  const [cf, setCf] = useState("");
   const [terms, setTerms] = useState(false);
   const [pw, setPw] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -57,12 +55,10 @@ export function SignUp({ hub, demo }: { hub: string; demo: boolean }) {
   const [price, setPrice] = useState<QualityPrice | null>(null);
   const [countries, setCountries] = useState<[string, string][]>([]);
   const [currencies, setCurrencies] = useState<[string, string][]>([]);
-  const box = useRef<HTMLDivElement>(null);
-  const widget = useRef<string | null>(null);
   const fail = (c?: unknown) => setMsg(ERR[String(c)] || ERR.generic);
 
+  const human = useHumanCheck(demo ? null : check);
   const loadCheck = useCallback(async () => {
-    setAnswer("");
     try { const r = await fetch(hub + "/api/signup", { cache: "no-store", credentials: "include" }); setCheck((await r.json()) as Check); } catch { setCheck(null); }
   }, [hub]);
 
@@ -78,34 +74,17 @@ export function SignUp({ hub, demo }: { hub: string; demo: boolean }) {
     if (g.country) { setCountry(g.country); setCurrency(CURRENCY_BY_COUNTRY[g.country] || "USD"); }
   }, [loadCheck, demo, hub]);
 
-  const siteKey = turnstileKey(check, demo);
-  useEffect(() => {
-    if (!siteKey || !box.current) return;
-    let gone = false;
-    const w = window as unknown as { turnstile?: TurnstileApi };
-    const draw = () => {
-      if (gone || !box.current || !w.turnstile) return;
-      widget.current = w.turnstile.render(box.current, { sitekey: siteKey, callback: (v: string) => { setCf(v); setMsg(""); }, "expired-callback": () => setCf(""), "error-callback": () => { setCf(""); setMsg("The verification check couldn't load. Please refresh the page and try again."); } });
-    };
-    if (w.turnstile) draw();
-    else { const s = document.createElement("script"); s.src = TURNSTILE_JS; s.async = true; s.onload = draw; s.onerror = () => setMsg("The verification check couldn't load. Please refresh the page and try again."); document.head.appendChild(s); }
-    return () => { gone = true; if (widget.current && w.turnstile) w.turnstile.remove(widget.current); widget.current = null; };
-  }, [siteKey]);
-
-  const again = async () => {
-    const w = window as unknown as { turnstile?: TurnstileApi };
-    if (siteKey) { setCf(""); if (widget.current && w.turnstile) w.turnstile.reset(widget.current); } else await loadCheck();
-  };
-
   const start = async () => {
     if (busy || !check) return;
     setBusy(true); setMsg("");
     try {
       const origin = window.location.origin;
-      const r = await hubPost(hub, "/api/signup", { action: "start", company, name, email, acceptTerms: terms, country, currency, timezone, ...(siteKey ? { turnstile: cf } : { answer: Number(answer), exp: check.exp, sig: check.sig }), product: "quality", return: origin + "/", page: origin + "/signup" });
+      const proof = await human.fields();
+      human.next();
+      const r = await hubPost(hub, "/api/signup", { action: "start", company, name, email, acceptTerms: terms, country, currency, timezone, ...proof, product: "quality", return: origin + "/", page: origin + "/signup" });
       if (r.body.ok) setSent({ link: typeof r.body.link === "string" ? r.body.link : undefined });
-      else { fail(r.body.error); await again(); }
-    } catch { fail(); await again(); }
+      else { fail(r.body.error); await loadCheck(); }
+    } catch (e) { fail(e); await loadCheck(); }
     setBusy(false);
   };
 
@@ -122,46 +101,45 @@ export function SignUp({ hub, demo }: { hub: string; demo: boolean }) {
     setBusy(false);
   };
 
-  if (demo) return <AccountFrame title="No sign-up needed for the demo" sub="The demo opens straight into a fictional company's quality data."><a className="btn primary mt2" style={{ width: "100%" }} href="/">Open the demo</a></AccountFrame>;
+  const note = msg ? <p className="sf-msg err" role="alert">{msg}</p> : null;
+  if (demo) return <AccountFrame title="No sign-up needed for the demo" sub="The demo opens straight into a fictional company's quality data."><div className="sf-form"><a className="sf-btn2" href="/">Open the demo</a></div></AccountFrame>;
   if (token) return (
     <AccountFrame title="Finish setting up Pulsus Quality" sub="Choose a password of at least 12 characters.">
-      <label className="field"><span>Password</span><input className="input" type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} /></label>
-      <label className="field"><span>Confirm password</span><input className="input" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") complete(); }} /></label>
-      <Msg>{msg}</Msg>
-      <button className="btn primary mt" style={{ width: "100%" }} disabled={busy} onClick={complete}>{busy ? "Setting up…" : "Open Pulsus Quality"}</button>
+      <form className="sf-form" noValidate onSubmit={(e) => { e.preventDefault(); complete(); }}>
+        <label className="sf-field"><span>Password</span><input className="sf-input" type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} /></label>
+        <label className="sf-field"><span>Confirm password</span><input className="sf-input" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} /></label>
+        {note}
+        <button className="sf-btn" disabled={busy}>{busy ? "Setting up…" : "Open Pulsus Quality"}</button>
+      </form>
     </AccountFrame>
   );
   if (sent) return (
     <AccountFrame title="Check your email" sub={`We sent a confirmation link to ${email}. Open it within 24 hours to finish setting up ${company}.`}>
-      {sent.link && <Msg kind="info">Test mode: no email is sent here. <a href={sent.link}>Continue setting up</a></Msg>}
+      {sent.link && <p className="sf-msg info" role="status">Test mode: no email is sent here. <a href={sent.link}>Continue setting up</a></p>}
+      <div className="sf-links"><a href="/login">Back to sign in</a></div>
     </AccountFrame>
   );
-  const ready = !!check && (siteKey ? !!cf : !!answer);
   return (
-    <AccountFrame title="Start your free Pulsus Quality trial" sub={`Free for ${price?.trialDays ?? 14} days. No card needed.`}>
-      {price && <p className="sub" style={{ marginTop: 4 }}>After the trial, {price.product} is {money(price.monthly, price.currency)} a month{price.includes ? ` and includes ${price.includes}` : ""}.</p>}
-      <label className="field"><span>Company name</span><input className="input" value={company} autoComplete="organization" onChange={(e) => setCompany(e.target.value)} /></label>
-      <label className="field"><span>Your name</span><input className="input" value={name} autoComplete="name" onChange={(e) => setName(e.target.value)} /></label>
-      <label className="field"><span>Work email</span><input className="input" type="email" value={email} autoComplete="email" onChange={(e) => setEmail(e.target.value)} /></label>
-      <div className="row wrap" style={{ alignItems: "flex-start" }}>
-        <label className="field grow" style={{ minWidth: 160 }}><span>Country</span>
-          <select className="select" style={{ width: "100%" }} value={country} onChange={(e) => { setCountry(e.target.value); if (CURRENCY_BY_COUNTRY[e.target.value]) setCurrency(CURRENCY_BY_COUNTRY[e.target.value]); }}><option value="">Choose…</option>{countries.map(([c, n]) => <option key={c} value={c}>{n}</option>)}</select></label>
-        <label className="field grow" style={{ minWidth: 120 }}><span>Currency</span>
-          <select className="select" style={{ width: "100%" }} value={currency} onChange={(e) => setCurrency(e.target.value)}><option value="">Choose…</option>{currencies.map(([c, n]) => <option key={c} value={c}>{n}</option>)}</select></label>
-      </div>
-      <div className="field"><span>Verify you&apos;re human</span>
-        {siteKey ? <div ref={box} style={{ minHeight: 65 }} /> : (
-          <span className="row"><span className="sora" style={{ fontWeight: 700 }} aria-hidden="true">{check && typeof check.a === "number" ? `${check.a} + ${check.b} =` : "…"}</span>
-            <input className="input" inputMode="numeric" autoComplete="off" aria-label={check && typeof check.a === "number" ? `What is ${check.a} plus ${check.b}?` : "Quick check answer"} value={answer} onChange={(e) => setAnswer(e.target.value.replace(/[^0-9]/g, ""))} /></span>
-        )}
-      </div>
-      <label className="row mt" style={{ alignItems: "flex-start", fontSize: 14, cursor: "pointer" }}>
-        <input type="checkbox" checked={terms} onChange={(e) => setTerms(e.target.checked)} style={{ marginTop: 4 }} />
-        <span>I agree to the <a href={`${hub}/legal/terms`} target="_blank" rel="noreferrer">Terms of Use</a> and <a href={`${hub}/legal/privacy`} target="_blank" rel="noreferrer">Privacy Policy</a> on behalf of my company.</span>
-      </label>
-      <Msg>{msg}</Msg>
-      <button className="btn primary mt" style={{ width: "100%" }} disabled={busy || !ready} onClick={start}>{busy ? "Sending…" : "Start free trial"}</button>
-      <p className="sub mt" style={{ fontSize: 14 }}>Already on Pulsus? <a href="/login" style={{ fontWeight: 700 }}>Sign in</a></p>
+    <AccountFrame title="Start your free trial" sub={<>Free for {price?.trialDays ?? 14} days. No card needed.{price ? <> After the trial, {price.product} is {money(price.monthly, price.currency)} a month{price.includes ? ` and includes ${price.includes}` : ""}.</> : null}</>}>
+      <form className="sf-form" noValidate onSubmit={(e) => { e.preventDefault(); start(); }}>
+        <label className="sf-field"><span>Company name</span><input className="sf-input" value={company} autoComplete="organization" onChange={(e) => setCompany(e.target.value)} /></label>
+        <label className="sf-field"><span>Your name</span><input className="sf-input" value={name} autoComplete="name" onChange={(e) => setName(e.target.value)} /></label>
+        <label className="sf-field"><span>Work email</span><input className="sf-input" type="email" value={email} autoComplete="email" placeholder="you@company.com" onChange={(e) => setEmail(e.target.value)} /></label>
+        <div className="sf-row">
+          <label className="sf-field" style={{ flex: 1.4 }}><span>Country</span>
+            <select className="sf-input" value={country} onChange={(e) => { setCountry(e.target.value); if (CURRENCY_BY_COUNTRY[e.target.value]) setCurrency(CURRENCY_BY_COUNTRY[e.target.value]); }}><option value="">Choose…</option>{countries.map(([c, n]) => <option key={c} value={c}>{n}</option>)}</select></label>
+          <label className="sf-field"><span>Currency</span>
+            <select className="sf-input" value={currency} onChange={(e) => setCurrency(e.target.value)}><option value="">Choose…</option>{currencies.map(([c, n]) => <option key={c} value={c}>{n}</option>)}</select></label>
+        </div>
+        <label className="sf-check">
+          <input type="checkbox" checked={terms} onChange={(e) => setTerms(e.target.checked)} />
+          <span>I agree to the <a href={`${hub}/legal/terms`} target="_blank" rel="noreferrer">Terms of Use</a> and <a href={`${hub}/legal/privacy`} target="_blank" rel="noreferrer">Privacy Policy</a> on behalf of my company.</span>
+        </label>
+        <HumanCheckBox check={human} />
+        {note}
+        <button className="sf-btn" disabled={busy || !check}>{busy ? "Sending…" : "Start free trial"}</button>
+      </form>
+      <div className="sf-links"><p>Already on Pulsus? <a href="/login">Sign in</a></p></div>
     </AccountFrame>
   );
 }
