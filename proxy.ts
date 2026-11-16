@@ -48,9 +48,14 @@ const DEMO_PERSONAS = ["guest", "admin", "taylor.reid", "robin.ellis", "jordan.b
 
 const PUBLIC = /^\/(?:login|signup|licence|api\/health|api\/logout|manifest\.webmanifest|icon\.png|apple-icon\.png|apple-touch-icon\.png|favicon\.ico|pulsus-quality[\w.-]*\.png|r|api\/public|api\/v1|api\/cron)(?:\/|$)/;
 const MACHINE = /^\/(?:api\/health|api\/logout|api\/pulse|api\/data|api\/v1|api\/cron)(?:\/|$)/;
-// A signed-out visitor at the front door (/ only) goes to the product's own site;
-// everything else (sign-in, the licence wall, demo deployments) is unchanged.
+// The front door: on the live host only, a signed-out visitor at / whose browser
+// has never signed in here goes to the product's own site. A browser that has
+// (pulsus_known, set on every signed-in response) gets the sign-in page as before.
+// Every other path, the licence wall, demo and preview deployments are unchanged.
 const ABOUT_SITE = "https://aboutquality.pulsus.tech/";
+const LIVE_HOST = "quality.pulsus.tech";
+const KNOWN_COOKIE = "pulsus_known";
+const KNOWN = `${KNOWN_COOKIE}=1; Path=/; Max-Age=34560000; Secure; SameSite=Lax`;
 const isDemo = () => (process.env.DEMO_MODE || "").trim().replace(/^["']+|["']+$/g, "") === "1";
 
 function forward(req: NextRequest, id: Record<string, string> | null): NextResponse {
@@ -88,6 +93,19 @@ function refuse(pathname: string, status: number, title: string, body: string): 
   );
 }
 
+/** Marks this browser as one that has signed in here (no secret; it only steers a signed-out "/"). */
+function known<T extends Response>(res: T): T {
+  res.headers.append("Set-Cookie", KNOWN);
+  return res;
+}
+
+/** A signed-out "/" on the live host from a browser that has never signed in here: the product site. */
+function frontDoor(req: NextRequest): NextResponse | null {
+  if (req.nextUrl.pathname !== "/" || isDemo() || req.cookies.has(KNOWN_COOKIE)) return null;
+  const host = (req.headers.get("host") || "").toLowerCase().replace(/:\d+$/, "");
+  return host === LIVE_HOST ? NextResponse.redirect(ABOUT_SITE, 302) : null;
+}
+
 export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   const api = pathname.startsWith("/api/");
@@ -109,13 +127,13 @@ export async function proxy(req: NextRequest) {
   if (token && claimedIssuer(token) === COMPANY_JWT_ISSUER) {
     const s = await platformSession(token);
     if (s?.company) {
-      if (!s.company.modules.includes(MODULE_KEY)) return refuse(pathname, 403, "Pulsus Quality isn't switched on for your organisation", "Your organisation's owner or administrator can add it on the company page in Pulsus Platform.");
+      if (!s.company.modules.includes(MODULE_KEY)) return known(refuse(pathname, 403, "Pulsus Quality isn't switched on for your organisation", "Your organisation's owner or administrator can add it on the company page in Pulsus Platform."));
       const lapsed = licenceLapsed(s.company.plan);
       if (lapsed) {
-        if (api) return NextResponse.json({ error: "licence_required", plan: billingUrl() }, { status: 402 });
-        if (pathname !== "/licence") { const u = req.nextUrl.clone(); u.pathname = "/licence"; u.search = `?reason=${lapsed}`; return NextResponse.redirect(u); }
+        if (api) return known(NextResponse.json({ error: "licence_required", plan: billingUrl() }, { status: 402 }));
+        if (pathname !== "/licence") { const u = req.nextUrl.clone(); u.pathname = "/licence"; u.search = `?reason=${lapsed}`; return known(NextResponse.redirect(u)); }
       }
-      return forward(req, companyIdentity(s));
+      return known(forward(req, companyIdentity(s)));
     }
   }
 
@@ -123,13 +141,15 @@ export async function proxy(req: NextRequest) {
   // visitor who isn't signed in at all goes to the sign-in page instead (with its
   // free-trial link), as in every Pulsus app; a dead-end notice is no front door.
   if (licenseWallActive()) {
-    if (pathname === "/" && !(token && (await platformSession(token)))) return NextResponse.redirect(ABOUT_SITE, 302);
+    const signedIn = !!token && !!(await platformSession(token));
+    const door = signedIn ? null : frontDoor(req);
+    if (door) return door;
     if (!token && !api) {
       const u = req.nextUrl.clone(); u.pathname = "/login";
       u.search = pathname && pathname !== "/" ? `?next=${encodeURIComponent(pathname + search)}` : "";
       return NextResponse.redirect(u);
     }
-    return licenseWallResponse(pathname);
+    return signedIn ? known(licenseWallResponse(pathname)) : licenseWallResponse(pathname);
   }
 
   if (/^\/api\/data\/?$/.test(pathname) && req.method === "GET") {
@@ -143,11 +163,12 @@ export async function proxy(req: NextRequest) {
 
   if (token) {
     const s = await platformSession(token);
-    if (s && !s.company) return forward(req, { [H.tenant]: OWN, [H.email]: s.email, [H.platformRole]: "staff", ...(s.operator ? { [H.operator]: "1" } : {}) });
+    if (s && !s.company) return known(forward(req, { [H.tenant]: OWN, [H.email]: s.email, [H.platformRole]: "staff", ...(s.operator ? { [H.operator]: "1" } : {}) }));
   }
 
   if (api) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
-  if (pathname === "/") return NextResponse.redirect(ABOUT_SITE, 302);
+  const door = frontDoor(req);
+  if (door) return door;
   const url = req.nextUrl.clone();
   url.pathname = "/login";
   url.search = pathname && pathname !== "/" ? `?next=${encodeURIComponent(pathname + search)}` : "";
