@@ -186,7 +186,7 @@ export interface TriageInput { to?: unknown; note?: unknown; title?: unknown; pr
 
 /** A supervisor turns a report into an action or an inspection, or closes it with a reason. */
 export async function triage(a: Actor, id: string, input: TriageInput, requestId?: string): Promise<Result<IssueView>> {
-  if (!isLead(a)) return { ok: false, error: "A supervisor triages reported issues.", status: 403 };
+  if (!can.triageIssues(a)) return { ok: false, error: "A supervisor triages reported issues.", status: 403 };
   const rep = await withTenant(a.tenant, async (tx) => (await tx.select().from(issueReports).where(and(eq(issueReports.companyId, a.tenant), eq(issueReports.id, id))).limit(1))[0]);
   if (!rep || !inScope(a, rep.unitId)) return { ok: false, error: "Report not found.", status: 404 };
   if (rep.status !== "new") return { ok: false, error: "This report has already been triaged.", status: 409 };
@@ -213,7 +213,7 @@ export async function triage(a: Actor, id: string, input: TriageInput, requestId
     const assignee = clean(input.assignee, 254).toLowerCase();
     if (assignee) {
       const m = await withTenant(a.tenant, async (tx) => (await tx.select().from(members).where(and(eq(members.companyId, a.tenant), eq(members.email, assignee))).limit(1))[0]);
-      if (!m || !(m.roles as string[]).some((x) => x === "inspector" || x === "supervisor" || x === "admin")) return { ok: false, error: "Assign it to someone who carries out inspections.", status: 400 };
+      if (!m || !(m.roles as string[]).some((x) => x === "inspector" || x === "supervisor")) return { ok: false, error: "Assign it to someone who carries out inspections.", status: 400 };
       await withTenant(a.tenant, async (tx) => { await tx.update(inspections).set({ inspectorEmail: assignee, note: `From reported issue ${rep.ref}` }).where(and(eq(inspections.companyId, a.tenant), eq(inspections.id, inspectionId!))); });
     }
   }

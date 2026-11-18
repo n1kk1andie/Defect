@@ -56,7 +56,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         awaitingApproval: isSupervisor(actor) ? Number(n?.approvals ?? 0) : 0, myDrafts: Number(n?.drafts ?? 0),
         openActions: Number(n?.open ?? 0), actionsAwaiting: Number(n?.awaiting ?? 0), overdue: Number(n?.overdue ?? 0), awaitingVerification: isSupervisor(actor) ? Number(n?.verify ?? 0) : 0,
         awaitingInspections: isSupervisor(actor) ? Number(n?.inspections ?? 0) : 0,
-        newIssues: isLead(actor) ? Number(n?.issues ?? 0) : 0,
+        newIssues: can.triageIssues(actor) ? Number(n?.issues ?? 0) : 0,
       },
       demo, platformUrl: hub, billingUrl: `${hub}/company#billing`, now: new Date().toISOString(),
     };
