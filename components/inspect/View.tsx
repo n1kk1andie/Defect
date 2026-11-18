@@ -82,7 +82,7 @@ export function InspectionView({ inspection: r, def }: { inspection: IV; def: Te
           </div>
         </Card>
       )}
-      {r.status === "submitted" && block && app.actor.roles.includes("supervisor") && <Msg kind="info">{block}</Msg>}
+      {r.status === "submitted" && block && app.actor.roles.some((x) => x === "admin" || x === "supervisor") && <Msg kind="info">{block}</Msg>}
 
       <div className="mt2"><InspectionForm def={def} state={{ answers: r.answers, items: r.items }} readOnly photoUrl={(id) => (id.startsWith("local-") ? null : `/api/evidence/${id}?inline=1`)} /></div>
 

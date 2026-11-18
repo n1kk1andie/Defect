@@ -142,7 +142,7 @@ export async function commitBulk(a: Actor, kind: BulkKind, raw: unknown, request
       const res = await createAction(a, {
         title: v.title, unitId: us.find((u) => norm(u.name) === norm(v.site))!.id, dueDate: toIsoDate(v.due), priority: norm(v.priority || "medium"), kind: norm(v.kind || "corrective"),
         details: v.details, rootCause: v.rootCause, ownerEmail: owner.includes("@") ? owner : "", ownerName: owner.includes("@") ? "" : owner || "To be assigned", sourceType: "import",
-      }, requestId, { bulkImport: true });
+      }, requestId);
       if (res.ok) added++; else errors.push({ n: r.n, message: res.error });
     }
   }

@@ -28,7 +28,7 @@ Quality management and inspections for multi-site organisations: banks and credi
 - Next.js 16 (App Router, `proxy.ts`), React 19, TypeScript.
 - Postgres via Drizzle (`lib/db/schema.ts`, migrations in `drizzle/`, embedded by `scripts/embed-migrations.mjs`). Neon in production; PGlite locally and in the tests.
 - **Tenancy:** every table carries `company_id`; row-level security admits only the transaction's company (`lib/db/client.ts withTenant`), as the `quality_app` role. The institution is tenant `_own`; the demo `_demo`.
-- **People:** the Pulsus Platform session (company members, or the institution's staff on its allow-list). Quality roles per member: admin, supervisor, inspector, branch manager, viewer, optionally scoped to units. No shared passwords. Admins set things up; everything else needs a role: a Quality admin configures the programme (settings, people and roles, bands, imports, scorecards, risk model, API keys, templates and programmes) and reads every record, and does any other work only through a role also given to them.
+- **People:** the Pulsus Platform session (company members, or the institution's staff on its allow-list). Quality roles per member: admin, supervisor, inspector, branch manager, viewer, optionally scoped to units. No shared passwords.
 - **Change history:** every change, with before → after, hash-chained per company and append-only (`lib/audit.ts`, `lib/auditchain.ts`).
 - Evidence in private Blob storage, hashed (`lib/evidence.ts`).
 - The pure figures (`lib/metrics.ts`, `lib/bands.ts`, `lib/scorecard.ts`) are shared by the server and the browser.

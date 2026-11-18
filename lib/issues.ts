@@ -15,7 +15,7 @@ import { companies, evidence, inspections, issueReports, members, reportLinks, u
 import { record } from "@/lib/audit";
 import { nextRef } from "@/lib/refs";
 import { loadSettings } from "@/lib/company";
-import { can, inScope, isLead, type Actor } from "@/lib/roles";
+import { can, inScope, isSupervisor, type Actor } from "@/lib/roles";
 import { getStorage, storageIsDurable } from "@/lib/storage";
 import { createAction } from "@/lib/actions";
 import { saveInspection } from "@/lib/inspections";
@@ -40,7 +40,7 @@ export const reportUrl = (token: string) => `${appUrl()}/r/${token}`;
 
 /** Every active site's link, creating any that are missing (supervisors and admins). */
 export async function listLinks(a: Actor): Promise<LinkView[]> {
-  if (!isLead(a)) return [];
+  if (!isSupervisor(a)) return [];
   return withTenant(a.tenant, async (tx) => {
     const us = (await tx.select().from(units).where(and(eq(units.companyId, a.tenant), eq(units.active, true)))).filter((u) => inScope(a, u.id)).sort((x, y) => x.sort - y.sort || x.name.localeCompare(y.name));
     let links = await tx.select().from(reportLinks).where(eq(reportLinks.companyId, a.tenant));
@@ -69,7 +69,7 @@ export async function tokenFor(companyId: string, unitId: string, by: string): P
 
 /** Replace a site's link (a poster went missing, or the link was misused): the old one stops working at once. */
 export async function rotateLink(a: Actor, unitId: string, requestId?: string): Promise<Result<{ token: string }>> {
-  if (!isLead(a) || !inScope(a, unitId)) return { ok: false, error: "A supervisor for this site replaces its link.", status: 403 };
+  if (!isSupervisor(a) || !inScope(a, unitId)) return { ok: false, error: "A supervisor for this site replaces its link.", status: 403 };
   const token = makeToken(a.tenant);
   return withTenant(a.tenant, async (tx) => {
     const u = (await tx.select().from(units).where(and(eq(units.companyId, a.tenant), eq(units.id, unitId))).limit(1))[0];
@@ -167,7 +167,7 @@ export async function submitReport(token: string, input: ReportInput, photo: { t
 
 
 export async function listReports(a: Actor): Promise<IssueView[]> {
-  if (!can.inspect(a) && !isLead(a)) return [];
+  if (!can.inspect(a) && !isSupervisor(a)) return [];
   return withTenant(a.tenant, async (tx) => {
     const rows = (await tx.select().from(issueReports).where(eq(issueReports.companyId, a.tenant)).orderBy(desc(issueReports.createdAt)).limit(500)).filter((r) => inScope(a, r.unitId));
     if (!rows.length) return [];
@@ -186,7 +186,7 @@ export interface TriageInput { to?: unknown; note?: unknown; title?: unknown; pr
 
 /** A supervisor turns a report into an action or an inspection, or closes it with a reason. */
 export async function triage(a: Actor, id: string, input: TriageInput, requestId?: string): Promise<Result<IssueView>> {
-  if (!can.triageIssues(a)) return { ok: false, error: "A supervisor triages reported issues.", status: 403 };
+  if (!isSupervisor(a)) return { ok: false, error: "A supervisor triages reported issues.", status: 403 };
   const rep = await withTenant(a.tenant, async (tx) => (await tx.select().from(issueReports).where(and(eq(issueReports.companyId, a.tenant), eq(issueReports.id, id))).limit(1))[0]);
   if (!rep || !inScope(a, rep.unitId)) return { ok: false, error: "Report not found.", status: 404 };
   if (rep.status !== "new") return { ok: false, error: "This report has already been triaged.", status: 409 };
@@ -213,7 +213,7 @@ export async function triage(a: Actor, id: string, input: TriageInput, requestId
     const assignee = clean(input.assignee, 254).toLowerCase();
     if (assignee) {
       const m = await withTenant(a.tenant, async (tx) => (await tx.select().from(members).where(and(eq(members.companyId, a.tenant), eq(members.email, assignee))).limit(1))[0]);
-      if (!m || !(m.roles as string[]).some((x) => x === "inspector" || x === "supervisor")) return { ok: false, error: "Assign it to someone who carries out inspections.", status: 400 };
+      if (!m || !(m.roles as string[]).some((x) => x === "inspector" || x === "supervisor" || x === "admin")) return { ok: false, error: "Assign it to someone who carries out inspections.", status: 400 };
       await withTenant(a.tenant, async (tx) => { await tx.update(inspections).set({ inspectorEmail: assignee, note: `From reported issue ${rep.ref}` }).where(and(eq(inspections.companyId, a.tenant), eq(inspections.id, inspectionId!))); });
     }
   }
