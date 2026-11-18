@@ -22,7 +22,7 @@ const randomSeed = () => `${new Date().toISOString().slice(0, 10)}-${Math.random
 export function Sampling({ plans, templates }: { plans: PlanView[]; templates: { id: string; name: string }[] }) {
   const app = useApp();
   const [creating, setCreating] = useState(false);
-  const planner = can.buildTemplates(app.actor);
+  const planner = can.planSamples(app.actor);
   const evaluated = plans.filter((p) => p.evaluation);
   return (
     <>
@@ -138,7 +138,7 @@ export function PlanDetail({ plan: p, population }: { plan: PlanView; population
   const [dev, setDev] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const planner = can.buildTemplates(app.actor);
+  const planner = can.planSamples(app.actor);
   const [tab, setTab] = useState<"selection" | "method">("selection");
   useEffect(() => setCheck(null), [p.id]);
   const recheck = () => {

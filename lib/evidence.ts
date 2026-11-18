@@ -32,13 +32,13 @@ async function entityVisible(a: Actor, entityType: string, entityId: string, for
     if (entityType === "review") {
       const r = (await tx.select().from(reviews).where(and(eq(reviews.companyId, a.tenant), eq(reviews.id, entityId))).limit(1))[0];
       if (!r) return false;
-      if (forWrite) return (r.inspectorEmail === a.email || a.roles.includes("admin")) && (r.status === "draft" || r.status === "returned");
+      if (forWrite) return r.inspectorEmail === a.email && (r.status === "draft" || r.status === "returned");
       return canSeeReview(a, r);
     }
     if (entityType === "inspection") {
       const r = (await tx.select().from(inspections).where(and(eq(inspections.companyId, a.tenant), eq(inspections.id, entityId))).limit(1))[0];
       if (!r) return false;
-      if (forWrite) return (r.inspectorEmail === a.email || a.roles.includes("admin")) && (r.status === "draft" || r.status === "returned");
+      if (forWrite) return r.inspectorEmail === a.email && (r.status === "draft" || r.status === "returned");
       return canSeeInspection(a, r);
     }
     if (entityType === "issue_report") {
