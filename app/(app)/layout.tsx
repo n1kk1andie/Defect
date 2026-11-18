@@ -8,7 +8,7 @@ import { withTenant, rowsOf } from "@/lib/db/client";
 import { buildDataset } from "@/lib/dataset";
 import { loadProgram, loadSettings } from "@/lib/company";
 import { members } from "@/lib/db/schema";
-import { can, isSupervisor } from "@/lib/roles";
+import { can, isLead, isSupervisor } from "@/lib/roles";
 import { platformUrl } from "@/lib/platform-jwt";
 import { ensureDemoSeeded } from "@/lib/demo/seed";
 import { AppProvider, type Boot } from "@/components/app-context";
@@ -28,18 +28,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     const [data, program, people, c] = await Promise.all([
       buildDataset(tx, actor.tenant, settings),
       loadProgram(tx, actor.tenant),
-      isSupervisor(actor) ? tx.select({ email: members.email, name: members.name, roles: members.roles }).from(members).where(and(eq(members.companyId, actor.tenant), eq(members.status, "active"))) : Promise.resolve([]),
+      isLead(actor) ? tx.select({ email: members.email, name: members.name, roles: members.roles }).from(members).where(and(eq(members.companyId, actor.tenant), eq(members.status, "active"))) : Promise.resolve([]),
       tx.execute(sql`select
         (select count(*) from reviews where status = 'submitted' and inspector_email <> ${actor.email})::int as approvals,
         (select count(*) from inspections where status = 'submitted' and inspector_email <> ${actor.email})::int as inspections,
         (select count(*) from reviews where status in ('draft','returned') and inspector_email = ${actor.email})::int as drafts,
-        (select count(*) from actions where status <> 'closed')::int as open,
+        (select count(*) from actions where status in ('open','in_progress'))::int as open,
+        (select count(*) from actions where status = 'awaiting_verification')::int as awaiting,
         (select count(*) from issue_reports where status = 'new')::int as issues,
         (select count(*) from actions where status <> 'closed' and due_date < current_date)::int as overdue,
         (select count(*) from actions a where status = 'awaiting_verification' and raised_by <> ${actor.email} and coalesce(owner_email,'') <> ${actor.email}
            and coalesce((select e.by from action_events e where e.action_id = a.id and e.status = 'awaiting_verification' order by e.at desc limit 1),'') <> ${actor.email})::int as verify`),
     ]);
-    const n = rowsOf<{ approvals: number; inspections: number; drafts: number; open: number; overdue: number; verify: number; issues: number }>(c)[0];
+    const n = rowsOf<{ approvals: number; inspections: number; drafts: number; open: number; awaiting: number; overdue: number; verify: number; issues: number }>(c)[0];
     // Someone scoped to some units sees only those units' figures.
     if (actor.unitIds.length) {
       const keep = new Set(data.units.map((u, i) => (actor.unitIds.includes(u.id) ? i : -1)).filter((i) => i >= 0));
@@ -53,9 +54,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       people: people.map((p) => ({ email: p.email, name: p.name, roles: p.roles })),
       counts: {
         awaitingApproval: isSupervisor(actor) ? Number(n?.approvals ?? 0) : 0, myDrafts: Number(n?.drafts ?? 0),
-        openActions: Number(n?.open ?? 0), overdue: Number(n?.overdue ?? 0), awaitingVerification: isSupervisor(actor) ? Number(n?.verify ?? 0) : 0,
+        openActions: Number(n?.open ?? 0), actionsAwaiting: Number(n?.awaiting ?? 0), overdue: Number(n?.overdue ?? 0), awaitingVerification: isSupervisor(actor) ? Number(n?.verify ?? 0) : 0,
         awaitingInspections: isSupervisor(actor) ? Number(n?.inspections ?? 0) : 0,
-        newIssues: isSupervisor(actor) ? Number(n?.issues ?? 0) : 0,
+        newIssues: isLead(actor) ? Number(n?.issues ?? 0) : 0,
       },
       demo, platformUrl: hub, billingUrl: `${hub}/company#billing`, now: new Date().toISOString(),
     };

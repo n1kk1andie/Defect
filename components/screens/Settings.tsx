@@ -319,6 +319,7 @@ function PeoplePage({ members }: { members: MemberRow[] }) {
           {edit.isNew && <><Field label="Work email"><input className="input" type="email" value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} /></Field><Field label="Name"><input className="input" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></Field></>}
           <fieldset style={{ border: 0, padding: 0, margin: "12px 0 0" }}><legend className="eyebrow">Roles</legend>
             <div className="row wrap" style={{ marginTop: 6 }}>{ROLES.map((r) => <label key={r} className="chip" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}><input type="checkbox" checked={edit.roles.includes(r)} onChange={(e) => setEdit({ ...edit, roles: e.target.checked ? [...edit.roles, r] : edit.roles.filter((x) => x !== r) })} />{ROLE_INFO[r].label}</label>)}</div>
+            {edit.roles.includes("admin") && <p className="sub" style={{ margin: "8px 0 0" }}>{edit.roles.includes("supervisor") ? "Admin and Supervisor: sets things up, and approves and verifies other people's work." : "A Quality admin sets things up but approves and verifies nothing. Tick Supervisor as well to let them approve."}</p>}
           </fieldset>
           <fieldset style={{ border: 0, padding: 0, margin: "12px 0 0" }}><legend className="eyebrow">{settings.unitPlural} (none ticked = all)</legend>
             <div className="row wrap" style={{ marginTop: 6 }}>{program.units.filter((u) => u.active).map((u) => <label key={u.id} className="chip" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}><input type="checkbox" checked={edit.unitIds.includes(u.id)} onChange={(e) => setEdit({ ...edit, unitIds: e.target.checked ? [...edit.unitIds, u.id] : edit.unitIds.filter((x) => x !== u.id) })} />{u.name}</label>)}</div>
@@ -515,6 +516,7 @@ function ApprovalsPage() {
         <Rule t="Reviews are approved before they count">A review reaches the dashboards only when a supervisor publishes it. A returned review comes back with a note.</Rule>
         <Rule t="Nobody approves their own review">The supervisor who approves must not be the inspector who keyed it.</Rule>
         <Rule t="Independent verification of actions">Whoever raised an action, whoever submitted its closure and its owner can never verify it.</Rule>
+        <Rule t="Admins set up; supervisors sign off">Being a Quality admin approves, verifies and signs off nothing. An admin does so only when also given the Supervisor role under People and roles.</Rule>
         <Rule t="Granting yourself a role changes nothing">The rules look at who did the work, not at the roles someone holds.</Rule>
         <Rule t="Evidence before closure">A closure says what was done; photos and files attach to the action, hashed and kept private.</Rule>
       </ul>
