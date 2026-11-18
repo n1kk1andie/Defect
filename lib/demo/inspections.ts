@@ -145,10 +145,14 @@ export async function seedInspections(tx: Tx, now: Date, unitIds: Map<string, st
         const id = randomUUID();
         const inspector = p.key === "bank-mystery-shop" ? insp[1] : insp[(ui + mi) % 2];
         const sup = sups[(ui + mi) % 2];
-        const day = 4 + Math.floor(r() * 18);
-        const started = new Date(Date.parse(m + "T08:30:00Z") + day * 864e5 + Math.floor(r() * 300) * 60000);
-        const submitted = new Date(started.getTime() + (25 + Math.floor(r() * 70)) * 60000);
-        const approved = new Date(submitted.getTime() + (1 + Math.floor(r() * 3)) * 864e5);
+        // This month's visits fall before today (with room for the approval after them), never after it.
+        const day = Math.min(4 + Math.floor(r() * 18), latest ? Math.max(0, now.getUTCDate() - 6) : 31);
+        let started = new Date(Date.parse(m + "T08:30:00Z") + day * 864e5 + Math.floor(r() * 300) * 60000);
+        let submitted = new Date(started.getTime() + (25 + Math.floor(r() * 70)) * 60000);
+        let approved = new Date(submitted.getTime() + (1 + Math.floor(r() * 3)) * 864e5);
+        // Early in a month there is no such room: the whole visit moves back so its last step was a day ago.
+        const over = (status === "approved" || status === "returned" ? approved : submitted).getTime() - (now.getTime() - 864e5);
+        if (over > 0) { started = new Date(started.getTime() - over); submitted = new Date(submitted.getTime() - over); approved = new Date(approved.getTime() - over); }
         const [lat, lng] = GEO[u];
         const iref = `INS-${String(++ref).padStart(4, "0")}`;
         rows.push({
@@ -180,6 +184,8 @@ export async function seedInspections(tx: Tx, now: Date, unitIds: Map<string, st
   for (let i = 0; i < events.length; i += 300) await tx.insert(inspectionEvents).values(events.slice(i, i + 300));
   await tx.insert(counters).values({ companyId: DEMO, name: "inspection", value: ref }).onConflictDoUpdate({ target: [counters.companyId, counters.name], set: { value: ref } });
 
+  // What followed an approval happened by now, at the latest an hour ago.
+  const upTo = (ms: number) => new Date(Math.max(Math.min(ms, now.getTime() - 3600e3), 0));
   for (const x of raised.slice(0, 18)) {
     const id = randomUUID();
     const due = new Date(x.at.getTime() + (x.q.action?.dueDays ?? 14) * 864e5).toISOString().slice(0, 10);
@@ -189,11 +195,11 @@ export async function seedInspections(tx: Tx, now: Date, unitIds: Map<string, st
       title: (x.q.critical ? "Critical: " : "") + x.q.label, details: `Failed in ${x.ref} (${x.tplName}, version ${x.version}).${x.q.reference ? `\nStandard: ${x.q.reference}.` : ""}${x.q.guidance ? `\nGuidance: ${x.q.guidance}` : ""}`,
       priority: x.q.action?.priority ?? "high", ownerEmail: owner.email, ownerName: owner.name, dueDate: due, status: x.status, raisedBy: x.sup,
       closureNote: x.status === "awaiting_verification" ? "Procedure re-briefed at the morning huddle; the log is now countersigned daily. Evidence attached." : "",
-      sourceType: "inspection", sourceId: `${x.inspId}:${x.q.id}`, createdAt: x.at, updatedAt: new Date(x.at.getTime() + 2 * 864e5),
+      sourceType: "inspection", sourceId: `${x.inspId}:${x.q.id}`, createdAt: x.at, updatedAt: upTo(x.at.getTime() + 2 * 864e5),
     });
     const ev: (typeof actionEvents.$inferInsert)[] = [{ companyId: DEMO, actionId: id, kind: "status", status: "open", by: x.sup, at: x.at, note: `Raised from ${x.ref}` }];
-    if (x.status !== "open") ev.push({ companyId: DEMO, actionId: id, kind: "status", status: "in_progress", by: owner.email ?? insp[0], at: new Date(x.at.getTime() + 864e5) });
-    if (x.status === "awaiting_verification") ev.push({ companyId: DEMO, actionId: id, kind: "status", status: "awaiting_verification", by: owner.email ?? insp[0], at: new Date(x.at.getTime() + 2 * 864e5), note: "Procedure re-briefed at the morning huddle; the log is now countersigned daily. Evidence attached." });
+    if (x.status !== "open") ev.push({ companyId: DEMO, actionId: id, kind: "status", status: "in_progress", by: owner.email ?? insp[0], at: upTo(x.at.getTime() + 864e5) });
+    if (x.status === "awaiting_verification") ev.push({ companyId: DEMO, actionId: id, kind: "status", status: "awaiting_verification", by: owner.email ?? insp[0], at: upTo(x.at.getTime() + 2 * 864e5), note: "Procedure re-briefed at the morning huddle; the log is now countersigned daily. Evidence attached." });
     await tx.insert(actionEvents).values(ev);
   }
   await tx.insert(counters).values({ companyId: DEMO, name: "action", value: act }).onConflictDoUpdate({ target: [counters.companyId, counters.name], set: { value: act } });

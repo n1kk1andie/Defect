@@ -75,8 +75,9 @@ export async function clearDemo(tx: Tx): Promise<void> {
  *   3  Milestone 3: programmes, sampling plans, risk factors per branch
  *   4  Meridian Financial Group wording
  *   5  Milestone 4: subsidiaries and groups, reported issues, root cause and effectiveness, API keys
+ *   6  Nothing recorded after today (this month's inspections and what followed them were up to a week ahead)
  */
-export const DEMO_SEED_VERSION = 5;
+export const DEMO_SEED_VERSION = 6;
 
 async function seedVersion(tx: Tx): Promise<number> {
   return Number(rowsOf<{ v: number }>(await tx.execute(sql`select value as v from counters where name = 'demo_seed'`))[0]?.v ?? 1);
@@ -130,7 +131,29 @@ export async function upgradeDemo(tx: Tx, now = new Date()): Promise<void> {
     const m4 = (await hasM4(tx)) ? { entities: 0, issues: 0 } : await seedM4(tx, now, unitIds);
     await record(tx, DEMO, { actor: "demo", action: "demo.upgrade", entityType: "company", entityId: DEMO, summary: `Demo sample data brought up to version 5: ${m4.entities} subsidiaries, ${m4.issues} reported issues, API keys` });
   }
+  if (from < 6 && (await recordsAfter(tx, now))) {
+    // A demo seeded by an earlier release can show this month's inspections, and the
+    // actions that followed them, a few days ahead of today. Dates can't be moved
+    // safely one by one, so the sample data is seeded again; the change history
+    // (append-only) keeps a record of it.
+    await clearDemo(tx);
+    await seedDemo(tx, now);
+    await record(tx, DEMO, { actor: "demo", action: "demo.upgrade", entityType: "company", entityId: DEMO, summary: "Demo sample data brought up to version 6: reseeded so that nothing is dated after today" });
+    return;
+  }
   await setSeedVersion(tx, DEMO_SEED_VERSION);
+}
+
+/** Whether the demo holds anything recorded after now (inspections, reviews, actions and their histories). */
+export async function recordsAfter(tx: Tx, now = new Date()): Promise<boolean> {
+  const t = now.toISOString();
+  const [r] = rowsOf<{ n: number }>(await tx.execute(sql`select (
+    (select count(*) from inspections where company_id = ${DEMO} and greatest(created_at, updated_at, coalesce(submitted_at, created_at), coalesce(approved_at, created_at)) > ${t}) +
+    (select count(*) from inspection_events where company_id = ${DEMO} and at > ${t}) +
+    (select count(*) from review_items where company_id = ${DEMO} and resolved_at > ${t}) +
+    (select count(*) from actions where company_id = ${DEMO} and greatest(created_at, updated_at) > ${t}) +
+    (select count(*) from action_events where company_id = ${DEMO} and at > ${t}))::int as n`));
+  return Number(r?.n ?? 0) > 0;
 }
 
 export async function seedDemo(tx: Tx, now = new Date()): Promise<void> {
@@ -208,7 +231,7 @@ export async function seedDemo(tx: Tx, now = new Date()): Promise<void> {
           if (failed) nature = u === "Summit" && (p.area === "Card Applications" || p.area === "Payments") && rand() < 0.7 ? "Missing customer verification" : p.natures[Math.floor(rand() * p.natures.length)][0];
           const recurring = failed > 0 && (nature === "Missing customer verification" && u === "Summit" ? rand() < 0.6 : rand() < 0.12);
           const resolved = failed > 0 && status === "published" && rand() < (RESOLVE[u] - (isLatest ? 0.25 : 0.05));
-          itemRows.push({ id: randomUUID(), companyId: DEMO, reviewId: id, idx: i, areaId: areaIds.get(p.area)!, itemType: ["New", "Change", "Maintenance"][Math.floor(rand() * 3)], reference: `MS-${iso.slice(2, 4)}${iso.slice(5, 7)}-${String(ui * 1000 + i + 101)}`, checks: marks, defects: failed, nature, recurring, status: resolved ? "resolved" : "open", resolvedAt: resolved ? new Date(addDays(entryDate, 6) + "T12:00:00Z") : null, resolvedBy: resolved ? supervisor : null });
+          itemRows.push({ id: randomUUID(), companyId: DEMO, reviewId: id, idx: i, areaId: areaIds.get(p.area)!, itemType: ["New", "Change", "Maintenance"][Math.floor(rand() * 3)], reference: `MS-${iso.slice(2, 4)}${iso.slice(5, 7)}-${String(ui * 1000 + i + 101)}`, checks: marks, defects: failed, nature, recurring, status: resolved ? "resolved" : "open", resolvedAt: resolved ? new Date(Math.min(Date.parse(addDays(entryDate, 6) + "T12:00:00Z"), now.getTime() - 3600e3)) : null, resolvedBy: resolved ? supervisor : null });
         }
       }
     }

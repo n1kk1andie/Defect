@@ -9,7 +9,7 @@ import { BandPill, Card, Empty, Field, fmtDate, fmtDateTime, Msg, PageHead, Seg,
 import { Icon } from "@/components/icons";
 import { CATEGORY_INFO, STATUS_INFO, type IssueView, type LinkView } from "@/lib/issueInfo";
 import { KIND_LABEL, type ActionKind } from "@/lib/actionRules";
-import { isSupervisor } from "@/lib/roles";
+import { isLead } from "@/lib/roles";
 
 type Tab = "new" | "done" | "all" | "links";
 const CAT_BAND = { hazard: "escalate", near_miss: "attention", observation: "watch", complaint: "watch", other: "healthy" } as const;
@@ -19,7 +19,7 @@ const inDays = (n: number) => new Date(Date.now() + n * 864e5).toISOString().sli
 export function Issues({ issues, links, templates, turnstile }: { issues: IssueView[]; links: LinkView[]; templates: { id: string; name: string }[]; turnstile: boolean }) {
   const app = useApp();
   const params = useSearchParams();
-  const sup = isSupervisor(app.actor);
+  const sup = isLead(app.actor);
   const [tab, setTab] = useState<Tab>(params.get("tab") === "links" ? "links" : "new");
   const [openId, setOpenId] = useState<string | null>(params.get("open"));
   const [unit, setUnit] = useState("all");
@@ -109,7 +109,7 @@ function Links({ links, turnstile }: { links: LinkView[]; turnstile: boolean }) 
 function IssueSheet({ i, templates, onClose }: { i: IssueView; templates: { id: string; name: string }[]; onClose: () => void }) {
   const app = useApp();
   const router = useRouter();
-  const sup = isSupervisor(app.actor);
+  const sup = isLead(app.actor);
   const [to, setTo] = useState<"action" | "inspection" | "dismiss">(i.category === "hazard" ? "action" : "action");
   const [f, setF] = useState({ title: i.description.slice(0, 120), kind: (i.category === "hazard" ? "containment" : "corrective") as ActionKind, priority: i.category === "hazard" ? "high" : "medium", dueDate: inDays(i.category === "hazard" ? 2 : 14), ownerEmail: "", ownerName: `${i.unitName} ${app.settings.unitLabel.toLowerCase()} manager`, templateId: templates[0]?.id ?? "", assignee: "", note: "" });
   const [busy, setBusy] = useState(false);

@@ -107,8 +107,8 @@ export const STOPS: Stop[] = [
   {
     id: "roles", path: "/templates", target: ["@.topbar button.avatar"],
     title: "Try it as one of the team",
-    text: "Choose a person from the menu at the top right. Inspectors carry out inspections and key reviews; supervisors approve them and verify actions; branch managers work their branch's actions. The quality admin supports the set-up. Nobody signs off their own work.",
-    say: "You can try the demo as one of the team, from the menu at the top right. Inspectors carry out the inspections and key the reviews. Supervisors approve them, and verify the actions. Branch managers work the actions for their branch. The quality admin supports the set-up. And nobody signs off their own work.",
+    text: "Choose a person from the menu at the top right. Inspectors carry out inspections and key the reviews; supervisors approve them and verify the actions; branch managers work their branch's actions. Nobody signs off their own work.",
+    say: "You can try the demo as one of the team, from the menu at the top right. Inspectors carry out the inspections and key the reviews. Supervisors approve them, and verify the actions. Branch managers work the actions for their branch. And nobody signs off their own work.",
   },
   {
     id: "data", path: "/settings", menu: true, target: ["card:Data", ".sgroup"],

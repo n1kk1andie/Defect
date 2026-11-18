@@ -46,3 +46,13 @@ test("the tour and the card show only on a demo build", () => {
   const card = read("components/GettingStarted.tsx");
   assert.equal((card.match(/\{ path: "/g) || []).length, 6);
 });
+
+test("the roles stop: inspectors enter, supervisors approve, nobody signs off their own work; no administrator", () => {
+  const roles = STOPS.find((s) => s.id === "roles");
+  for (const w of [roles.text, roles.say]) {
+    assert.match(w, /Inspectors carry out (the )?inspections and key the reviews/);
+    assert.match(w, /[Ss]upervisors approve them,? and verify the actions/);
+    assert.match(w, /nobody signs off their own work/i);
+  }
+  for (const s of STOPS) assert.doesNotMatch(words(s), /\badmin(istrator)?\b/i, s.id);
+});

@@ -1,8 +1,8 @@
 {
   "voice": "pFZP5JQG7iQjIQuC4Bku",
   "model": "eleven_multilingual_v2",
-  "file": "tour-77fc7283f0.mp3",
-  "duration": 301.009,
+  "file": "tour-cde8ab916f.mp3",
+  "duration": 299.059,
   "marks": [
     {
       "id": "welcome",
@@ -67,17 +67,17 @@
     {
       "id": "roles",
       "start": 244.718,
-      "end": 265.569
+      "end": 263.619
     },
     {
       "id": "data",
-      "start": 266.469,
-      "end": 287.925
+      "start": 264.519,
+      "end": 285.974
     },
     {
       "id": "end",
-      "start": 288.825,
-      "end": 300.109
+      "start": 286.874,
+      "end": 298.159
     }
   ]
 }
