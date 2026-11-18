@@ -11,6 +11,6 @@ export async function GET() {
 
 /** Create a plan: population, method, seed. The selection is made and recorded here. */
 export async function POST(req: Request) {
-  const g = await actorOr(can.planSamples); if ("response" in g) return g.response;
+  const g = await actorOr(can.buildTemplates); if ("response" in g) return g.response;
   return result(await createPlan(g.actor, await body(req), g.requestId), (plan) => ({ plan }));
 }

@@ -10,7 +10,7 @@ export default async function InspectionPage({ params }: { params: Promise<{ id:
   const actor = (await getActor())!;
   const r = await getInspection(actor, (await params).id);
   if (!r) notFound();
-  const mine = r.inspection.inspectorEmail === actor.email;
+  const mine = r.inspection.inspectorEmail === actor.email || actor.roles.includes("admin");
   if (mine && (r.inspection.status === "draft" || r.inspection.status === "returned")) return <Capture def={r.def} templateId={r.inspection.templateId} version={r.inspection.templateVersion} inspection={r.inspection} />;
   return <InspectionView inspection={r.inspection} def={r.def} />;
 }
