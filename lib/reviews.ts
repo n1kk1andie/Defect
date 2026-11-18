@@ -11,7 +11,7 @@ import { evidence, reviewEvents, reviewItems, reviews, scorecardEntries, scoreca
 import { loadProgram, loadSettings } from "@/lib/company";
 import { record } from "@/lib/audit";
 import { nextRef } from "@/lib/refs";
-import { approveBlocker, can, inScope, isLead, type Actor } from "@/lib/roles";
+import { approveBlocker, can, inScope, isSupervisor, type Actor } from "@/lib/roles";
 import { AUDIT_POINTS } from "@/lib/bands";
 import { evaluate, type ScorecardDef } from "@/lib/scorecard";
 import type { CompanySettings } from "@/lib/settings";
@@ -37,7 +37,7 @@ const clean = (v: unknown, max: number) => String(v ?? "").replace(/\s+/g, " ").
 /** Who may see a review: supervisors and admins (in scope) see all; inspectors their own; everyone else published ones in scope. */
 export function canSeeReview(a: Actor, r: { inspectorEmail: string; status: string; unitId: string }): boolean {
   if (!inScope(a, r.unitId) && r.inspectorEmail !== a.email) return false;
-  if (isLead(a)) return true;
+  if (isSupervisor(a)) return true;
   if (r.inspectorEmail === a.email) return true;
   return r.status === "published";
 }
@@ -151,7 +151,7 @@ export async function saveReview(a: Actor, input: ReviewInput, requestId?: strin
     let before: unknown = null;
     if (id && !row) return { ok: false as const, error: "Review not found.", status: 404 };
     if (row) {
-      if (row.inspectorEmail !== a.email) return { ok: false as const, error: "You can only edit your own reviews.", status: 403 };
+      if (row.inspectorEmail !== a.email && !a.roles.includes("admin")) return { ok: false as const, error: "You can only edit your own reviews.", status: 403 };
       if (row.status === "submitted" || row.status === "published") return { ok: false as const, error: `This review is locked: it's already ${row.status}.`, status: 409 };
       before = { unitId: row.unitId, period: iso(row.period), status: row.status };
       await tx.update(reviews).set({ kind, unitId, period, entryDate, scorecardValues: values, auditGrade, updatedAt: now }).where(eq(reviews.id, row.id));
@@ -182,7 +182,7 @@ export async function deleteReview(a: Actor, id: string, requestId?: string): Pr
   return withTenant(a.tenant, async (tx) => {
     const r = (await tx.select().from(reviews).where(and(eq(reviews.companyId, a.tenant), eq(reviews.id, id))).limit(1))[0];
     if (!r) return { ok: true as const, value: true as const };
-    if (r.inspectorEmail !== a.email) return { ok: false as const, error: "You can only delete your own reviews.", status: 403 };
+    if (r.inspectorEmail !== a.email && !a.roles.includes("admin")) return { ok: false as const, error: "You can only delete your own reviews.", status: 403 };
     if (r.status === "published") return { ok: false as const, error: "Published reviews can't be deleted.", status: 409 };
     await tx.delete(reviewItems).where(and(eq(reviewItems.companyId, a.tenant), eq(reviewItems.reviewId, id)));
     await tx.delete(reviews).where(eq(reviews.id, id));

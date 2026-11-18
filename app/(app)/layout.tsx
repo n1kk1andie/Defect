@@ -8,7 +8,7 @@ import { withTenant, rowsOf } from "@/lib/db/client";
 import { buildDataset } from "@/lib/dataset";
 import { loadProgram, loadSettings } from "@/lib/company";
 import { members } from "@/lib/db/schema";
-import { can, isLead, isSupervisor } from "@/lib/roles";
+import { can, isSupervisor } from "@/lib/roles";
 import { platformUrl } from "@/lib/platform-jwt";
 import { ensureDemoSeeded } from "@/lib/demo/seed";
 import { AppProvider, type Boot } from "@/components/app-context";
@@ -28,7 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     const [data, program, people, c] = await Promise.all([
       buildDataset(tx, actor.tenant, settings),
       loadProgram(tx, actor.tenant),
-      isLead(actor) ? tx.select({ email: members.email, name: members.name, roles: members.roles }).from(members).where(and(eq(members.companyId, actor.tenant), eq(members.status, "active"))) : Promise.resolve([]),
+      isSupervisor(actor) ? tx.select({ email: members.email, name: members.name, roles: members.roles }).from(members).where(and(eq(members.companyId, actor.tenant), eq(members.status, "active"))) : Promise.resolve([]),
       tx.execute(sql`select
         (select count(*) from reviews where status = 'submitted' and inspector_email <> ${actor.email})::int as approvals,
         (select count(*) from inspections where status = 'submitted' and inspector_email <> ${actor.email})::int as inspections,
@@ -56,7 +56,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         awaitingApproval: isSupervisor(actor) ? Number(n?.approvals ?? 0) : 0, myDrafts: Number(n?.drafts ?? 0),
         openActions: Number(n?.open ?? 0), actionsAwaiting: Number(n?.awaiting ?? 0), overdue: Number(n?.overdue ?? 0), awaitingVerification: isSupervisor(actor) ? Number(n?.verify ?? 0) : 0,
         awaitingInspections: isSupervisor(actor) ? Number(n?.inspections ?? 0) : 0,
-        newIssues: can.triageIssues(actor) ? Number(n?.issues ?? 0) : 0,
+        newIssues: isSupervisor(actor) ? Number(n?.issues ?? 0) : 0,
       },
       demo, platformUrl: hub, billingUrl: `${hub}/company#billing`, now: new Date().toISOString(),
     };
