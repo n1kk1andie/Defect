@@ -35,7 +35,7 @@ export function RaiseAction({ onClose, preset = {}, edit }: { onClose: () => voi
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF((x) => ({ ...x, [k]: e.target.value }));
-  const supervisors = people.filter((p) => (p.roles.includes("supervisor") || p.roles.includes("admin")) && p.email !== actor.email);
+  const supervisors = people.filter((p) => p.roles.includes("supervisor") && p.email !== actor.email);
   const save = async () => {
     setBusy(true); setErr("");
     try {

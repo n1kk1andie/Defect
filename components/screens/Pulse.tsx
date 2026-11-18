@@ -89,7 +89,7 @@ function DefectsPulse() {
             </Card>
           </div>
           <div className="grid g3">
-            <Stat icon="actions" value={num(counts.openActions)} label="Open actions" href="/actions" />
+            <Stat icon="actions" value={num(counts.openActions)} label={`Open actions${counts.actionsAwaiting ? ` · ${num(counts.actionsAwaiting)} awaiting verification` : ""}`} href="/actions" />
             <Stat icon="clock" value={num(counts.overdue)} label="Overdue actions" band={counts.overdue ? "escalate" : "worldClass"} href="/actions" />
             <Stat icon="stamp" value={num(counts.awaitingApproval + counts.awaitingVerification)} label="Waiting for your sign-off" href={counts.awaitingApproval ? "/review" : "/actions"} />
           </div>
