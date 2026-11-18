@@ -4,7 +4,8 @@ import { isAdmin, isRole, listAccounts, removeAccount, upsertAccount } from "@/l
 export const dynamic = "force-dynamic";
 
 // Account management — admin only. Lets an admin create the inspector and supervisor
-// logins whose role decides which screens they see after signing in.
+// logins whose role decides which screens they see after signing in. An admin account
+// approves nothing unless created with `supervisor: true` (lib/approval.ts).
 
 async function requireAdmin() {
   return (await isAdmin(Date.now())) ? null : NextResponse.json({ ok: false, error: "Admin sign-in required." }, { status: 401 });
@@ -17,10 +18,10 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const denied = await requireAdmin(); if (denied) return denied;
-  let username = "", password = "", role = "", branch: string | null = null;
-  try { const b = await req.json(); username = b?.username || ""; password = b?.password || ""; role = b?.role || ""; branch = b?.branch ?? null; } catch { /* empty */ }
+  let username = "", password = "", role = "", branch: string | null = null, supervisor = false;
+  try { const b = await req.json(); username = b?.username || ""; password = b?.password || ""; role = b?.role || ""; branch = b?.branch ?? null; supervisor = b?.supervisor === true; } catch { /* empty */ }
   if (!isRole(role)) return NextResponse.json({ ok: false, error: "Choose a role." }, { status: 400 });
-  const res = await upsertAccount({ username, password, role, branch });
+  const res = await upsertAccount({ username, password, role, branch, supervisor });
   if (!res.ok) return NextResponse.json({ ok: false, error: res.error }, { status: 400 });
   return NextResponse.json({ ok: true, accounts: await listAccounts() });
 }

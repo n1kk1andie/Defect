@@ -7,6 +7,7 @@
 import { randomUUID } from "node:crypto";
 import { getStorage } from "@/lib/storage";
 import type { Role, Session } from "@/lib/auth";
+import { resolveBlocker, reviewBlocker } from "@/lib/approval";
 import { loadDatasetPayload, persistMergedDataset } from "@/lib/data";
 
 const SUBMISSIONS_BLOB = "submissions.json";
@@ -134,9 +135,10 @@ export function canSee(s: Session, sub: Submission): boolean {
   if (s.role === "admin" || s.role === "supervisor") return true;
   return sub.inspector === s.username; // inspector
 }
-/** Whether a session may review (approve/return) — every supervisor and admin, any branch. */
+/** Whether a session may review (approve/return): a supervisor (or an admin account also
+ *  made a supervisor), any branch — never the person who keyed it (lib/approval.ts). */
 export function canReview(s: Session, sub: Submission): boolean {
-  return s.role === "admin" || s.role === "supervisor";
+  return reviewBlocker(s, sub) === null;
 }
 
 /** Submissions visible to this session, newest activity first. */
@@ -315,7 +317,8 @@ export async function reviewSubmission(session: Session, id: string, decision: "
   const list = await readAll();
   const sub = findById(list, id);
   if (!sub) return { ok: false, error: "Submission not found.", status: 404 };
-  if (!canReview(session, sub)) return { ok: false, error: "You can’t review this submission.", status: 403 };
+  const blocked = reviewBlocker(session, sub);
+  if (blocked) return { ok: false, error: blocked, status: 403 };
   if (sub.status !== "submitted") return { ok: false, error: "Only submitted work can be reviewed.", status: 409 };
   const now = new Date().toISOString();
 
@@ -341,9 +344,10 @@ export interface DefectRef { id: string; index: number; }
 
 /** Set the resolution status of individual defect line items (by submission id + item
  *  index) and re-aggregate the affected published reviews into the live dataset, so the
- *  resolution rate reflects the change. Supervisors (their branch) and admins only. */
+ *  resolution rate reflects the change. Supervisors only (an admin only when also a supervisor). */
 export async function resolveDefects(session: Session, refs: DefectRef[], resolved: boolean): Promise<{ ok: true; submissions: Submission[]; changed: number } | { ok: false; error: string; status?: number }> {
-  if (session.role !== "supervisor" && session.role !== "admin") return { ok: false, error: "Only supervisors and admins can change resolution status.", status: 403 };
+  const blocked = resolveBlocker(session);
+  if (blocked) return { ok: false, error: blocked, status: 403 };
   const list = await readAll();
   const byId = new Map<string, number[]>();
   for (const r of refs || []) { const i = Math.trunc(Number(r?.index)); const id = String(r?.id || ""); if (!id || !Number.isFinite(i) || i < 0) continue; (byId.get(id) || byId.set(id, []).get(id)!).push(i); }

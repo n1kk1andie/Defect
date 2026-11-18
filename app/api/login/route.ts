@@ -39,6 +39,7 @@ export async function GET() {
     username: s?.username ?? null,
     branch: s?.branch ?? null,
     admin: s?.role === "admin",
+    supervisor: s?.supervisor === true,
     configured: await adminConfigured(),
   });
   if (bootstrap) {
@@ -75,5 +76,5 @@ export async function POST(req: NextRequest) {
   const result = await checkLogin(body?.username || "", body?.password || "");
   if (!result) return NextResponse.json({ ok: false, error: "Incorrect password." }, { status: 401 });
   (await cookies()).set(SESSION_COOKIE, createSessionToken(Date.now(), result), sessionCookieOptions);
-  return NextResponse.json({ ok: true, role: result.role, username: result.username, branch: result.branch });
+  return NextResponse.json({ ok: true, role: result.role, username: result.username, branch: result.branch, supervisor: result.supervisor === true });
 }

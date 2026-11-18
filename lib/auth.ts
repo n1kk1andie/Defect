@@ -1,7 +1,9 @@
 // Server-side auth. Historically this was a single admin password exchanged for a
 // signed, httpOnly session cookie. It now supports **named accounts with roles**:
 //
-//   • admin      — full access (data upload/export, account management, every screen)
+//   • admin      — sets the tracker up (data upload/export, accounts, role passwords,
+//                  every screen) but approves, returns and resolves nothing, unless
+//                  the admin account is explicitly also a supervisor (lib/approval.ts)
 //   • supervisor — reviews & publishes inspector submissions for their branch
 //   • inspector  — keys reviews for their branch, tracked until a supervisor publishes
 //
@@ -22,7 +24,7 @@ export const ROLES: Role[] = ["inspector", "supervisor", "admin"];
 export function isRole(x: unknown): x is Role { return typeof x === "string" && (ROLES as string[]).includes(x); }
 
 /** A decoded, verified session — who is signed in and what they may do. */
-export interface Session { role: Role; username: string; branch: string | null; exp: number; }
+export interface Session { role: Role; username: string; branch: string | null; exp: number; /** An admin account explicitly given the supervisor right. */ supervisor?: boolean; }
 
 /** The admin password from env, or null when none is configured. No built-in
  *  default — a public default would let anyone sign in as admin. */
@@ -33,9 +35,9 @@ function envAdminPassword(): string | null {
 interface StoredCredential { alg: "scrypt"; salt: string; hash: string; updatedAt: string; }
 
 /** A named account. Passwords are stored scrypt-hashed, never in plaintext. */
-export interface Account { username: string; role: Role; alg: "scrypt"; salt: string; hash: string; branch: string | null; createdAt: string; }
+export interface Account { username: string; role: Role; alg: "scrypt"; salt: string; hash: string; branch: string | null; createdAt: string; /** Admin accounts only: also a supervisor, so may approve and resolve. */ supervisor?: boolean; }
 /** Account without secrets — safe to send to the client. */
-export interface PublicAccount { username: string; role: Role; branch: string | null; createdAt: string; }
+export interface PublicAccount { username: string; role: Role; branch: string | null; createdAt: string; supervisor: boolean; }
 
 // Fails CLOSED: no baked-in constant. This secret signs the session token (any
 // role, incl. admin) — a default would let anyone forge an admin session.
@@ -49,8 +51,9 @@ function b64url(s: string): string { return Buffer.from(s).toString("base64url")
 function sign(payload: string): string { return createHmac("sha256", secret()).update(payload).digest("base64url"); }
 
 /** Mint a signed session token carrying the account's role, username and branch. */
-export function createSessionToken(now: number, session: { role: Role; username: string; branch: string | null }): string {
-  const body = b64url(JSON.stringify({ role: session.role, user: session.username, branch: session.branch ?? null, exp: now + MAX_AGE * 1000 }));
+export function createSessionToken(now: number, session: { role: Role; username: string; branch: string | null; supervisor?: boolean }): string {
+  const sup = session.role === "admin" && session.supervisor === true;
+  const body = b64url(JSON.stringify({ role: session.role, user: session.username, branch: session.branch ?? null, ...(sup ? { sup: true } : {}), exp: now + MAX_AGE * 1000 }));
   return `${body}.${sign(body)}`;
 }
 function safeEqual(a: string, b: string): boolean {
@@ -69,7 +72,7 @@ export function readSessionToken(token: string | undefined, now: number): Sessio
   try {
     const p = JSON.parse(Buffer.from(body, "base64url").toString());
     if (!isRole(p.role) || typeof p.exp !== "number" || p.exp <= now) return null;
-    return { role: p.role, username: typeof p.user === "string" ? p.user : p.role, branch: typeof p.branch === "string" ? p.branch : null, exp: p.exp };
+    return { role: p.role, username: typeof p.user === "string" ? p.user : p.role, branch: typeof p.branch === "string" ? p.branch : null, exp: p.exp, ...(p.role === "admin" && p.sup === true ? { supervisor: true } : {}) };
   } catch { return null; }
 }
 
@@ -179,7 +182,7 @@ async function writeAccounts(list: Account[]): Promise<void> {
   await getStorage().write(ACCOUNTS_BLOB, Buffer.from(JSON.stringify({ accounts: list }, null, 2), "utf8"), "application/json");
 }
 
-function toPublic(a: Account): PublicAccount { return { username: a.username, role: a.role, branch: a.branch, createdAt: a.createdAt }; }
+function toPublic(a: Account): PublicAccount { return { username: a.username, role: a.role, branch: a.branch, createdAt: a.createdAt, supervisor: a.role === "admin" && a.supervisor === true }; }
 
 /** All named accounts, secrets stripped — the "admin" login is implicit and not listed. */
 export async function listAccounts(): Promise<PublicAccount[]> {
@@ -188,7 +191,7 @@ export async function listAccounts(): Promise<PublicAccount[]> {
 }
 
 /** Create (or overwrite) a named account. Username is stored lowercased and unique. */
-export async function upsertAccount(input: { username: string; password: string; role: Role; branch?: string | null }): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function upsertAccount(input: { username: string; password: string; role: Role; branch?: string | null; supervisor?: boolean }): Promise<{ ok: true } | { ok: false; error: string }> {
   const username = normUser(input.username);
   if (!/^[a-z0-9._-]{2,32}$/.test(username)) return { ok: false, error: "Username must be 2–32 chars: letters, numbers, . _ -" };
   if (username === "admin") return { ok: false, error: "“admin” is reserved for the built-in admin login." };
@@ -201,6 +204,8 @@ export async function upsertAccount(input: { username: string; password: string;
     username, role: input.role, alg: "scrypt", salt, hash,
     branch: input.branch?.trim() || null,
     createdAt: existing?.createdAt || new Date().toISOString(),
+    // Only an admin account carries the extra supervisor right; it must be asked for explicitly.
+    ...(input.role === "admin" && input.supervisor === true ? { supervisor: true } : {}),
   };
   const next = list.filter((a) => a.username !== username).concat(account);
   await writeAccounts(next);
@@ -217,7 +222,7 @@ export async function removeAccount(username: string): Promise<void> {
 /** Verify a username + password and, on success, return the role/branch to put in the
  *  session. The built-in admin login ("admin", or a blank username) is checked against
  *  the legacy admin password so existing deployments keep working. */
-export async function checkLogin(username: string, password: string): Promise<{ role: Role; username: string; branch: string | null } | null> {
+export async function checkLogin(username: string, password: string): Promise<{ role: Role; username: string; branch: string | null; supervisor?: boolean } | null> {
   const uname = normUser(username);
   const pw = (password || "").trim();
 
@@ -225,7 +230,7 @@ export async function checkLogin(username: string, password: string): Promise<{ 
   if (uname && uname !== "admin") {
     const acct = (await readAccounts()).find((a) => a.username === uname);
     if (!acct) return null;
-    return safeEqual(hashPassword(pw, acct.salt), acct.hash) ? { role: acct.role, username: acct.username, branch: acct.branch } : null;
+    return safeEqual(hashPassword(pw, acct.salt), acct.hash) ? { role: acct.role, username: acct.username, branch: acct.branch, ...(acct.role === "admin" && acct.supervisor === true ? { supervisor: true } : {}) } : null;
   }
 
   // Built-in admin login: blank username or "admin".

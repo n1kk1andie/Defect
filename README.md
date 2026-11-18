@@ -27,6 +27,11 @@ authentication.
 - **Register** — per-branch (or per-process-area) table, sortable, with totals.
 - **Settings** (admin) — download/upload the dataset workbook and change the
   admin password.
+- **Who signs off** — officers key reviews; a **supervisor** approves or returns
+  them and marks defects resolved. An **admin** sets the tracker up and approves,
+  returns or resolves nothing, unless the admin account is created as also a
+  supervisor (`POST /api/accounts` with `"supervisor": true`) or they sign in as a
+  Supervisor. Nobody approves a submission they keyed (`lib/approval.ts`).
 
 Global filters (year, branch, and — for Branch Defects — process area) apply
 across all tabs. The header ⤓ button exports the current filtered scope to CSV.

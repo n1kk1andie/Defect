@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { initTracker } from "@/lib/engine";
 
-type Session = { role: "inspector" | "supervisor" | "admin"; username: string; branch: string | null } | null;
+type Session = { role: "inspector" | "supervisor" | "admin"; username: string; branch: string | null; supervisor?: boolean } | null;
 
 export default function TrackerApp({ datasets, initialSession, ssoEnabled }: { datasets: any; initialSession: Session; ssoEnabled?: boolean }) {
   const started = useRef(false);
