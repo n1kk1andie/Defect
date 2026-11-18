@@ -8,20 +8,14 @@
 //   • whoever raised a corrective action cannot verify or close it, nor can the
 //     person who submitted it for verification, nor its owner;
 //   • granting yourself a role changes none of that: the rules look at who did
-//     the work, not at what roles they hold;
-//   • admins set things up; everything else needs a role. Being a Quality admin
-//     configures the programme (settings, people and roles, bands, imports,
-//     scorecards, the risk model, API keys, templates and programmes) and reads
-//     every record, but keys, inspects, raises, works, approves, verifies,
-//     triages and signs off nothing: an admin does that work only through a role
-//     also given to them (Settings → People and roles: roles are a list).
+//     the work, not at what roles they hold.
 // Pure: used by the server and the browser alike.
 
 export const ROLES = ["admin", "supervisor", "inspector", "branch_manager", "viewer"] as const;
 export type Role = (typeof ROLES)[number];
 
 export const ROLE_INFO: Record<Role, { label: string; blurb: string }> = {
-  admin: { label: "Quality admin", blurb: "Sets things up: the programme, people, bands, imports, templates and scorecards. Everything else needs a role: tick Supervisor, Inspector or Branch manager as well." },
+  admin: { label: "Quality admin", blurb: "Sets up the programme, people, bands and imports. Can do everything a supervisor can." },
   supervisor: { label: "Supervisor", blurb: "Approves reviews, resolves defects, raises actions and verifies other people's closures." },
   inspector: { label: "Inspector", blurb: "Keys reviews for a supervisor to approve, and works actions for their branches." },
   branch_manager: { label: "Branch manager", blurb: "Works the actions for their branches and submits them, with evidence, for verification." },
@@ -49,10 +43,7 @@ export interface Actor {
 
 export const has = (a: Pick<Actor, "roles">, ...roles: Role[]) => roles.some((r) => a.roles.includes(r));
 export const isAdmin = (a: Pick<Actor, "roles">) => has(a, "admin");
-/** Approves, verifies and signs off: only the supervisor role, never admin on its own. */
-export const isSupervisor = (a: Pick<Actor, "roles">) => has(a, "supervisor");
-/** Reads every record and configures (templates, programmes, report links) without doing or signing off any of the work. */
-export const isLead = (a: Pick<Actor, "roles">) => has(a, "admin", "supervisor");
+export const isSupervisor = (a: Pick<Actor, "roles">) => has(a, "admin", "supervisor");
 
 /** Whether the person's scope covers a unit. */
 export function inScope(a: Pick<Actor, "unitIds">, unitId: string | null | undefined): boolean {
@@ -62,23 +53,18 @@ export function inScope(a: Pick<Actor, "unitIds">, unitId: string | null | undef
 
 export const can = {
   view: (a: Actor) => a.roles.length > 0,
-  keyReviews: (a: Actor) => has(a, "supervisor", "inspector"),
+  keyReviews: (a: Actor) => has(a, "admin", "supervisor", "inspector"),
   approveReviews: (a: Actor) => isSupervisor(a),
   resolveDefects: (a: Actor) => isSupervisor(a),
   raiseActions: (a: Actor) => isSupervisor(a),
   planActions: (a: Actor) => isSupervisor(a),
-  workActions: (a: Actor) => has(a, "supervisor", "inspector", "branch_manager"),
+  workActions: (a: Actor) => has(a, "admin", "supervisor", "inspector", "branch_manager"),
   verifyActions: (a: Actor) => isSupervisor(a),
-  /** Removing an action changes the record, not the set-up: a supervisor's call. */
-  deleteActions: (a: Actor) => isSupervisor(a),
+  deleteActions: (a: Actor) => isAdmin(a),
   manage: (a: Actor) => isAdmin(a),
   sendToRisk: (a: Actor) => isSupervisor(a),
-  /** Configuration: templates and visit programmes. */
-  buildTemplates: (a: Actor) => isLead(a),
-  /** Sampling plans and their results are review work, not set-up. */
-  planSamples: (a: Actor) => isSupervisor(a),
-  triageIssues: (a: Actor) => isSupervisor(a),
-  inspect: (a: Actor) => has(a, "supervisor", "inspector"),
+  buildTemplates: (a: Actor) => isSupervisor(a),
+  inspect: (a: Actor) => has(a, "admin", "supervisor", "inspector"),
   approveInspections: (a: Actor) => isSupervisor(a),
 };
 

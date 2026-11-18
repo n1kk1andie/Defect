@@ -91,7 +91,7 @@ export function planFrom(input: PlanInput): { ok: true; value: { items: PopItem[
 }
 
 export async function createPlan(a: Actor, input: PlanInput, requestId?: string): Promise<Result<PlanView>> {
-  if (!can.planSamples(a)) return { ok: false, error: "A supervisor plans samples.", status: 403 };
+  if (!can.buildTemplates(a)) return { ok: false, error: "Supervisors and admins plan samples.", status: 403 };
   const name = String(input.name || "").replace(/\s+/g, " ").trim().slice(0, 120);
   if (!name) return { ok: false, error: "Name the sampling plan.", status: 400 };
   const p = planFrom(input);
@@ -142,7 +142,7 @@ export async function startPlanInspection(a: Actor, id: string, requestId?: stri
 
 /** Enter the deviations found (for a plan reviewed outside an inspection). */
 export async function evaluatePlan(a: Actor, id: string, deviations: unknown, requestId?: string): Promise<Result<PlanView>> {
-  if (!can.planSamples(a)) return { ok: false, error: "A supervisor records sample results.", status: 403 };
+  if (!can.buildTemplates(a)) return { ok: false, error: "Supervisors and admins evaluate samples.", status: 403 };
   const d = Math.round(Number(deviations));
   return withTenant(a.tenant, async (tx) => {
     const r = (await tx.select().from(samplingPlans).where(and(eq(samplingPlans.companyId, a.tenant), eq(samplingPlans.id, id))).limit(1))[0];

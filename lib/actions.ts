@@ -116,9 +116,8 @@ async function readFields(tx: Tx, a: Actor, input: ActionInput, fixedUnit?: stri
 }
 
 /** Raise an action (supervisors and admins). */
-export async function createAction(a: Actor, input: ActionInput, requestId?: string, opts: { bulkImport?: boolean } = {}): Promise<Result<ActionView>> {
-  // A supervisor raises actions; an admin's bulk import (lib/bulk.ts) brings existing ones in as set-up.
-  if (!can.raiseActions(a) && !(opts.bulkImport && can.manage(a))) return { ok: false, error: "A supervisor raises actions.", status: 403 };
+export async function createAction(a: Actor, input: ActionInput, requestId?: string): Promise<Result<ActionView>> {
+  if (!can.raiseActions(a)) return { ok: false, error: "Only supervisors and admins raise actions.", status: 403 };
   return withTenant(a.tenant, async (tx) => {
     const f = await readFields(tx, a, input);
     if (!f.ok) return { ok: false as const, error: f.error, status: 400 };
@@ -150,7 +149,7 @@ export async function createAction(a: Actor, input: ActionInput, requestId?: str
 
 /** Change the plan: title, details, root cause, priority, owner, due date, verifier. Supervisors and admins, while not closed. */
 export async function editAction(a: Actor, id: string, input: ActionInput, requestId?: string): Promise<Result<ActionView>> {
-  if (!can.planActions(a)) return { ok: false, error: "A supervisor changes an action's plan.", status: 403 };
+  if (!can.planActions(a)) return { ok: false, error: "Only supervisors and admins change an action's plan.", status: 403 };
   return withTenant(a.tenant, async (tx) => {
     const r = (await tx.select().from(actions).where(and(eq(actions.companyId, a.tenant), eq(actions.id, id))).limit(1))[0];
     if (!r) return { ok: false as const, error: "Action not found.", status: 404 };
@@ -255,14 +254,12 @@ export async function stepAction(a: Actor, id: string, step: ActionStep, input: 
   });
 }
 
-/** Delete an action raised in error: a supervisor who neither raised nor owns it (as with verifying); everyone else closes or reopens. */
+/** Delete an action raised in error. Admins only; everyone else closes or reopens. */
 export async function deleteAction(a: Actor, id: string, requestId?: string): Promise<Result<true>> {
-  if (!can.deleteActions(a)) return { ok: false, error: "A supervisor deletes an action.", status: 403 };
+  if (!can.deleteActions(a)) return { ok: false, error: "Only an admin can delete an action.", status: 403 };
   return withTenant(a.tenant, async (tx) => {
     const r = (await tx.select().from(actions).where(and(eq(actions.companyId, a.tenant), eq(actions.id, id))).limit(1))[0];
     if (!r) return { ok: false as const, error: "Action not found.", status: 404 };
-    const me = a.email.toLowerCase();
-    if (r.raisedBy.toLowerCase() === me || (r.ownerEmail ?? "").toLowerCase() === me) return { ok: false as const, error: "You raised or own this action, so another supervisor must delete it.", status: 403 };
     await tx.delete(actionEvents).where(and(eq(actionEvents.companyId, a.tenant), eq(actionEvents.actionId, id)));
     await tx.delete(actions).where(eq(actions.id, id));
     await record(tx, a.tenant, { actor: a.email, action: "action.delete", entityType: "action", entityId: id, summary: `Deleted ${r.ref}: ${r.title}`, before: { ref: r.ref, title: r.title, status: r.status }, requestId });
