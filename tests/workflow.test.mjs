@@ -73,7 +73,8 @@ test("corrective actions: whoever raised, submitted or owns it can't verify it",
   assert.equal((await editAction(sup1, id, { title: "y", priority: "low", ownerName: "x", dueDate: "2026-12-02" })).ok, false, "closed actions are locked");
   assert.equal((await stepAction(sup1, id, "reopen", {})).ok, false, "reopening needs a note");
   assert.ok((await stepAction(sup1, id, "reopen", { note: "Happened again" })).ok);
-  assert.equal((await deleteAction(sup1, id)).ok, false, "only admins delete");
+  assert.equal((await deleteAction(actor("acme", "ada@acme.com", ["admin"]), id)).ok, false, "an admin alone doesn't delete actions");
+  assert.equal((await deleteAction(sup1, id)).ok, false, "nor does the supervisor who raised it");
 });
 
 test("someone scoped to one branch sees only its actions", async () => {

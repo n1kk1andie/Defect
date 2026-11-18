@@ -175,7 +175,7 @@ export async function saveInspection(a: Actor, input: InspectionInput, requestId
     if (id && !row) return { ok: false as const, error: "Inspection not found.", status: 404 };
     if (!row && clientId) row = (await tx.select().from(inspections).where(and(eq(inspections.companyId, a.tenant), eq(inspections.clientId, clientId))).limit(1))[0];
     if (row) {
-      if (row.inspectorEmail !== a.email && !a.roles.includes("admin")) return { ok: false as const, error: "You can only change your own inspections.", status: 403 };
+      if (row.inspectorEmail !== a.email) return { ok: false as const, error: "You can only change your own inspections.", status: 403 };
       if (row.status === "submitted" || row.status === "approved") {
         // A retry of a submit that already landed is not an error.
         if (input.submit && row.status === "submitted") return { ok: true as const, value: (await view(tx, a.tenant, [row]))[0] };
@@ -244,7 +244,7 @@ export async function deleteInspection(a: Actor, id: string, requestId?: string)
   return withTenant(a.tenant, async (tx) => {
     const r = (await tx.select().from(inspections).where(and(eq(inspections.companyId, a.tenant), eq(inspections.id, id))).limit(1))[0];
     if (!r) return { ok: true as const, value: true as const };
-    if (r.inspectorEmail !== a.email && !a.roles.includes("admin")) return { ok: false as const, error: "You can only delete your own inspections.", status: 403 };
+    if (r.inspectorEmail !== a.email) return { ok: false as const, error: "You can only delete your own inspections.", status: 403 };
     if (r.status !== "draft" && r.status !== "returned") return { ok: false as const, error: "Only a draft can be deleted.", status: 409 };
     await tx.delete(inspectionEvents).where(and(eq(inspectionEvents.companyId, a.tenant), eq(inspectionEvents.inspectionId, id)));
     await tx.delete(inspections).where(eq(inspections.id, id));
