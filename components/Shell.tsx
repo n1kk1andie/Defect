@@ -14,6 +14,11 @@ import { ROLE_INFO, isAdmin } from "@/lib/roles";
 import { PERSONAS } from "@/lib/demo/personas";
 import DemoGuard from "@/components/DemoGuard";
 import { ALERT_KINDS, type AlertItem } from "@/lib/alertInfo";
+import DemoTour, { tourSeen } from "@/components/DemoTour";
+import GettingStarted from "@/components/GettingStarted";
+
+/** A demo deployment (build-inlined): the guided tour and the Getting started card. */
+const DEMO_UI = (process.env.NEXT_PUBLIC_DEMO_MODE || "") === "1";
 
 type Badge = "approvals" | "verify" | "inspections" | "issues";
 export const NAV: { href: string; label: string; icon: IconName; badge?: Badge; build?: boolean }[] = [
@@ -188,6 +193,15 @@ export function Shell({ children }: { children: ReactNode }) {
   const tabs = [NAV[0], NAV.find((n) => n.href === "/inspect")!, NAV.find((n) => n.href === "/actions")!, NAV.find((n) => n.href === "/risk")!, { href: "/more", label: "More", icon: "more" as IconName }];
   const moreOn = ["/issues", "/compare", "/register", "/history", "/insights", "/report", "/review", "/schedule", "/sampling", "/templates", "/scorecards", "/settings", "/more"].some(on);
   const initial = (app.actor.name || app.actor.email).trim().charAt(0).toUpperCase();
+  // The demo's guided tour (components/DemoTour.tsx): by itself the first time a
+  // browser opens Pulse, and again from "▶ Tour". It only moves between screens.
+  const tourOn = DEMO_UI && app.demo;
+  const [touring, setTouring] = useState(false);
+  useEffect(() => {
+    if (!tourOn || path !== "/" || tourSeen()) return;
+    const t = window.setTimeout(() => setTouring(true), 900);
+    return () => window.clearTimeout(t);
+  }, [tourOn]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="shell">
       <DemoGuard />
@@ -237,6 +251,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <span className="title grow" style={{ minWidth: 0 }}>{current}<small>{context}</small></span>
           <div className="tb-right">
             {app.demo && <span className="demochip hide-sm" title="Meridian Financial Group is fictional: sample data for the demo">Demo · sample data</span>}
+            {tourOn && <button type="button" className="tourbtn hide-sm" onClick={() => setTouring(true)}>▶ Tour</button>}
             <span className="hide-sm"><TrialChip /></span>
             <button type="button" className="iconbtn" onClick={app.toggleTheme} aria-label={app.theme === "dark" ? "Switch to day" : "Switch to night"} title={app.theme === "dark" ? "Day" : "Night"}>
               <Icon name={app.theme === "dark" ? "sun" : "moon"} />
@@ -246,7 +261,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <AvatarMenu />
           </div>
         </header>
-        {app.demo && <p className="demonote mobile-only">Demo · fictional sample data</p>}
+        {app.demo && <p className="demonote mobile-only">Demo · fictional sample data{tourOn && <> · <button type="button" className="tourbtn" onClick={() => setTouring(true)}>▶ Tour</button></>}</p>}
         <TrialBanner />
         {isAdmin(app.actor) && app.actor.kind === "company" && !app.settings.setupDone && !path.startsWith("/setup") && (
           <div className="trialbanner" role="region" aria-label="Set up"><div className="trialbanner-in" style={{ background: "var(--info-tint)", color: "var(--info-ink)", borderColor: "transparent" }}>
@@ -254,7 +269,10 @@ export function Shell({ children }: { children: ReactNode }) {
             <Link className="btn primary sm" href="/setup">Start set-up</Link>
           </div></div>
         )}
-        <main id="main" className="main" tabIndex={-1}>{children}</main>
+        <main id="main" className="main" tabIndex={-1} data-tour-path={tourOn ? path : undefined}>
+          {tourOn && <GettingStarted show={path === "/"} path={path} onTour={() => setTouring(true)} />}
+          {children}
+        </main>
         <footer className="foot">
           <FooterLines />
         </footer>
@@ -272,6 +290,7 @@ export function Shell({ children }: { children: ReactNode }) {
           );
         })}
       </nav>
+      {tourOn && <DemoTour open={touring} onClose={() => setTouring(false)} />}
     </div>
   );
 }

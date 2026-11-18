@@ -45,7 +45,7 @@ export function Actions({ actions }: { actions: ActionView[] }) {
   return (
     <>
       <PageHead eyebrow={`Actions · ${filters.unit >= 0 ? data.units[filters.unit]?.name : `All ${settings.unitPlural.toLowerCase()}`}`} title="Turn findings" accent="into action."
-        lede={`${k.open + k.awaiting} open, ${k.overdue} overdue and ${k.awaiting} awaiting verification. Whoever raises an action never verifies it.`}
+        lede={`${k.open} open, ${k.awaiting} awaiting verification and ${k.overdue} overdue. Whoever raises an action never verifies it.`}
         right={<>{can.raiseActions(actor) && <button className="btn primary" onClick={() => setRaise(true)}><Icon name="plus" />Raise action</button>}<a className="btn" href="/api/export?what=actions&format=xlsx"><Icon name="download" />Excel</a></>} />
       <div className="grid g4">
         <Stat icon="actions" value={k.open} label="Open" onClick={() => setTab("open")} />
@@ -170,8 +170,8 @@ function ActionSheet({ a, onClose }: { a: ActionView; onClose: () => void }) {
           <label className="field"><span>{steps.includes("submit") ? "What was done (for the verifier)" : steps.includes("effective") ? "What you checked" : "Note"}</span>
             <textarea className="textarea" value={note} onChange={(e) => setNote(e.target.value)} placeholder={steps.includes("submit") ? "What was fixed, and the evidence attached" : steps.includes("effective") ? "What you looked at to see whether the fix held" : "What still needs doing"} /></label>
         )}
-        {block && a.status === "awaiting_verification" && actor.roles.some((r) => r === "admin" || r === "supervisor") && <Msg kind="info">{block}</Msg>}
-        {effBlock && actor.roles.some((r) => r === "admin" || r === "supervisor") && <Msg kind="info">{effBlock}</Msg>}
+        {block && a.status === "awaiting_verification" && actor.roles.includes("supervisor") && <Msg kind="info">{block}</Msg>}
+        {effBlock && actor.roles.includes("supervisor") && <Msg kind="info">{effBlock}</Msg>}
         <Msg kind={msg?.kind}>{msg?.text}</Msg>
         <div className="eyebrow mt2">History</div>
         <ol className="timeline mt">

@@ -2,12 +2,12 @@
 import QRCode from "qrcode";
 import { actorOr, json } from "@/lib/api";
 import { listLinks } from "@/lib/issues";
-import { isSupervisor } from "@/lib/roles";
+import { isLead } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request, ctx: { params: Promise<{ unitId: string }> }) {
-  const g = await actorOr(isSupervisor); if ("response" in g) return g.response;
+  const g = await actorOr(isLead); if ("response" in g) return g.response;
   const { unitId } = await ctx.params;
   const link = (await listLinks(g.actor)).find((l) => l.unitId === unitId);
   if (!link) return json({ error: "Not found." }, 404);

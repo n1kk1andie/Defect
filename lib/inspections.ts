@@ -19,7 +19,7 @@ import { withTenant, type Tx } from "@/lib/db/client";
 import { actionEvents, actions, evidence, inspectionEvents, inspections, scorecardEntries, scorecards, templates, units } from "@/lib/db/schema";
 import { record } from "@/lib/audit";
 import { nextRef } from "@/lib/refs";
-import { approveBlocker, can, inScope, isSupervisor, type Actor } from "@/lib/roles";
+import { approveBlocker, can, inScope, isLead, type Actor } from "@/lib/roles";
 import { loadSettings } from "@/lib/company";
 import { loadVersion } from "@/lib/templates/store";
 import { feedScorecardFromInspections } from "@/lib/scorecards/store";
@@ -54,7 +54,7 @@ const addDays = (d: string, n: number) => new Date(Date.parse(d + "T12:00:00Z") 
 export function canSeeInspection(a: Actor, r: { inspectorEmail: string; status: string; unitId: string }): boolean {
   if (r.inspectorEmail === a.email) return true;
   if (!inScope(a, r.unitId)) return false;
-  if (isSupervisor(a)) return true;
+  if (isLead(a)) return true;
   return r.status === "approved";
 }
 

@@ -11,7 +11,7 @@ import { evidence, reviewEvents, reviewItems, reviews, scorecardEntries, scoreca
 import { loadProgram, loadSettings } from "@/lib/company";
 import { record } from "@/lib/audit";
 import { nextRef } from "@/lib/refs";
-import { approveBlocker, can, inScope, isSupervisor, type Actor } from "@/lib/roles";
+import { approveBlocker, can, inScope, isLead, type Actor } from "@/lib/roles";
 import { AUDIT_POINTS } from "@/lib/bands";
 import { evaluate, type ScorecardDef } from "@/lib/scorecard";
 import type { CompanySettings } from "@/lib/settings";
@@ -37,7 +37,7 @@ const clean = (v: unknown, max: number) => String(v ?? "").replace(/\s+/g, " ").
 /** Who may see a review: supervisors and admins (in scope) see all; inspectors their own; everyone else published ones in scope. */
 export function canSeeReview(a: Actor, r: { inspectorEmail: string; status: string; unitId: string }): boolean {
   if (!inScope(a, r.unitId) && r.inspectorEmail !== a.email) return false;
-  if (isSupervisor(a)) return true;
+  if (isLead(a)) return true;
   if (r.inspectorEmail === a.email) return true;
   return r.status === "published";
 }
