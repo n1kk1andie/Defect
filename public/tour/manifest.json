@@ -1,0 +1,83 @@
+{
+  "voice": "pFZP5JQG7iQjIQuC4Bku",
+  "model": "eleven_multilingual_v2",
+  "file": "tour-77fc7283f0.mp3",
+  "duration": 301.009,
+  "marks": [
+    {
+      "id": "welcome",
+      "start": 0,
+      "end": 24.567
+    },
+    {
+      "id": "start",
+      "start": 25.467,
+      "end": 43.578
+    },
+    {
+      "id": "pulse",
+      "start": 44.478,
+      "end": 70.16
+    },
+    {
+      "id": "branches",
+      "start": 71.06,
+      "end": 79.79
+    },
+    {
+      "id": "inspect",
+      "start": 80.69,
+      "end": 105.211
+    },
+    {
+      "id": "actions",
+      "start": 106.111,
+      "end": 128.216
+    },
+    {
+      "id": "insights",
+      "start": 129.116,
+      "end": 146.345
+    },
+    {
+      "id": "risk",
+      "start": 147.245,
+      "end": 171.208
+    },
+    {
+      "id": "sampling",
+      "start": 172.108,
+      "end": 193.331
+    },
+    {
+      "id": "compare",
+      "start": 194.231,
+      "end": 203.333
+    },
+    {
+      "id": "report",
+      "start": 204.233,
+      "end": 223.738
+    },
+    {
+      "id": "templates",
+      "start": 224.638,
+      "end": 243.818
+    },
+    {
+      "id": "roles",
+      "start": 244.718,
+      "end": 265.569
+    },
+    {
+      "id": "data",
+      "start": 266.469,
+      "end": 287.925
+    },
+    {
+      "id": "end",
+      "start": 288.825,
+      "end": 300.109
+    }
+  ]
+}
