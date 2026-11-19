@@ -1,6 +1,6 @@
 // The suite's licence screen standard: the deployment's own tenant (licence
-// wall) is offered "Contact us to renew" (an email to Pulsus support), never
-// Pulsus Platform's Plan & billing, which it has no account for; a customer
+// wall) renews self-service — "View plans & billing" opens Pulsus Quality's
+// plans page, with Pulsus support's address in the note for questions; a customer
 // company whose own subscription isn't active is offered "View plan & billing"
 // on Pulsus Platform. Both carry the suite's two footer lines.
 import { test, before, beforeEach, afterEach } from "node:test";
@@ -15,6 +15,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const JWKS = "https://platform.test/api/jwks";
 const BILLING = "https://platform.test/company#billing";
 const MAILTO = "mailto:support@pulsus.tech?subject=Pulsus%20Quality%20licence%20renewal";
+const PLANS = "https://aboutquality.pulsus.tech/plans/";
+const NOTE = "Questions about renewing? Write to support@pulsus.tech.";
 const FOOT = ["Pulsus Quality · Part of the Pulsus Intelligence Suite", "A product of Tumblehill Labs, a product studio of Tumblehill Holdings LLC."];
 delete process.env.DEMO_MODE;
 delete process.env.PLATFORM_URL;
@@ -56,7 +58,7 @@ function footerExact(html) {
   assert.deepEqual(lines, FOOT);
 }
 
-test("own-tenant licence wall: License Required, Contact us to renew (mailto), never Platform billing", async () => {
+test("own-tenant licence wall: License Required, View plans & billing (the plans page), never Platform billing", async () => {
   process.env.LICENSE_WALL = "on";
   const res = await proxy(req("/", await staff()));
   assert.equal(res.status, 403);
@@ -64,19 +66,24 @@ test("own-tenant licence wall: License Required, Contact us to renew (mailto), n
   const text = unesc(html);
   assert.match(text, /<h2>License Required<\/h2>/);
   assert.ok(text.includes("This organisation's licence has ended. Your records are kept."));
-  assert.ok(text.includes(`<a class="cta" href="${MAILTO}" target="_top">Contact us to renew</a>`));
-  assert.ok(text.includes("Your organisation's owner or administrator can contact us to renew."));
-  assert.doesNotMatch(text, /company#billing|View plan/);
+  assert.ok(text.includes(`<a class="cta" href="${PLANS}" target="_top">View plans & billing</a>`));
+  assert.ok(text.includes(`<p class="note">${NOTE}</p>`));
+  assert.equal(wall.RENEW_LABEL, "View plans & billing");
+  assert.equal(wall.PLANS_URL, PLANS);
+  assert.equal(wall.RENEW_NOTE, NOTE);
+  assert.doesNotMatch(text, /mailto:|ontact us to renew/);
+  assert.doesNotMatch(text, /company#billing|View plan &/);
   footerExact(html);
   assert.doesNotMatch(html, /Tumblehill Holdings LLC Product/);
 });
 
-test("own-tenant licence wall: an API call gets JSON (403) with the contact", async () => {
+test("own-tenant licence wall: an API call gets JSON (403) with the plans page and the contact", async () => {
   process.env.LICENSE_WALL = "on";
   const res = await proxy(req("/api/issues", await staff()));
   assert.equal(res.status, 403);
   const body = await res.json();
   assert.equal(body.error, "License Required");
+  assert.equal(body.plans, PLANS);
   assert.equal(body.contact, MAILTO);
   assert.equal(body.plan, undefined);
 });
@@ -120,6 +127,11 @@ test("Plan & billing follows the hub: the demo hub on a demo", () => {
   delete process.env.DEMO_MODE;
   assert.equal(platformUrl(), "https://executive.pulsus.tech");
   process.env.PLATFORM_JWKS_URL = JWKS;
+});
+
+test("sign-in: the walled message points to the plans, not \"contact us to renew\"", async () => {
+  const { SIGNIN_ERRORS } = await import("../lib/turnstile.ts");
+  assert.equal(SIGNIN_ERRORS.license_required, "License Required. This organisation's licence has ended. Your records are kept. Choose a plan to renew; questions to support@pulsus.tech.");
 });
 
 test("no \"Tumblehill Holdings LLC Product\" anywhere a user can see it", () => {
