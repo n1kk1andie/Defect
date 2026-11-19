@@ -18,7 +18,7 @@ export const SIGNIN_ERRORS: Record<string, string> = {
   use_reset: "Use the link in your invitation email to set your password, or choose “Forgot password?” to get a new one.",
   company_suspended: "License Required. Your organisation's Pulsus subscription is not active. Your records are kept. Only your organisation's owner can pay (View plan & billing on Pulsus Platform). Ask them, or your administrator, if you can't.",
   company_inactive: "License Required. Your organisation's Pulsus subscription is not active. Your records are kept. Only your organisation's owner can pay (View plan & billing on Pulsus Platform). Ask them, or your administrator, if you can't.",
-  license_required: "License Required. This organisation's licence has ended. Your records are kept. Choose a plan to renew; questions to support@pulsus.tech.",
+  license_required: "License Required. This organisation's licence has ended. Your records are kept. Use Renew and pay to pick up where you left off; questions to support@pulsus.tech.",
   membership_changed: "Your access changed. Please sign in again.",
   weak_password: "Choose a password of at least 12 characters.",
   mismatch: "The passwords don't match.",
