@@ -31,6 +31,7 @@
 import { sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as schema from "./schema";
+import { strictPgUrl } from "./pg-url";
 import { MIGRATIONS } from "./migrations.generated";
 import { tracksChanges } from "../backup-policy";
 import { scheduleBackupCheck } from "../backup-after";
@@ -47,12 +48,12 @@ export function databaseUrl(): string { return clean(process.env.DATABASE_URL) |
 async function openPostgres(url: string): Promise<{ db: Db; close: () => Promise<void>; migrateDb: Db; closeMigrate: () => Promise<void> }> {
   const { Pool } = await import("pg");
   const { drizzle } = await import("drizzle-orm/node-postgres");
-  const ssl = /sslmode=disable/.test(url) || /@(localhost|127\.0\.0\.1)/.test(url) ? undefined : { rejectUnauthorized: true };
-  const pool = new Pool({ connectionString: url, max: 5, ssl, idleTimeoutMillis: 10_000 });
+  // TLS is set by the connection string itself: sslmode=verify-full for any remote host (lib/db/pg-url.ts).
+  const pool = new Pool({ connectionString: strictPgUrl(url), max: 5, idleTimeoutMillis: 10_000 });
   const db = drizzle(pool, { schema }) as unknown as Db;
   const unpooled = clean(process.env.DATABASE_URL_UNPOOLED) || clean(process.env.POSTGRES_URL_NON_POOLING);
   if (unpooled && unpooled !== url) {
-    const mpool = new Pool({ connectionString: unpooled, max: 1, ssl });
+    const mpool = new Pool({ connectionString: strictPgUrl(unpooled), max: 1 });
     return { db, close: () => pool.end(), migrateDb: drizzle(mpool, { schema }) as unknown as Db, closeMigrate: () => mpool.end() };
   }
   return { db, close: () => pool.end(), migrateDb: db, closeMigrate: async () => {} };
