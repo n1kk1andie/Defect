@@ -1,0 +1,32 @@
+/* Pulsus "Renew and pay" page (pulsus-renew.js). */
+*{box-sizing:border-box}html,body{margin:0}
+body{min-height:100vh;background:#F6F7F8;color:#111316;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px}
+.rn-wrap{max-width:520px;margin:0 auto}
+.rn-brand{display:flex;align-items:center;gap:12px;justify-content:center;margin:12px 0 18px}
+.rn-brand img{height:56px;width:auto;display:block}
+.rn-brand b{font-family:Sora,Inter,sans-serif;font-size:22px;font-weight:800;color:#0B1F4D;letter-spacing:-.01em}
+.rn{background:#fff;border-radius:20px;padding:22px 20px 18px;box-shadow:0 10px 30px -12px rgba(17,19,22,.22),0 1px 3px rgba(17,19,22,.07);border-top:5px solid #D0021B}
+.rn-warn{border-top-color:#d98a00}.rn-ok{border-top-color:#1a8a4a}
+.rn-pill{display:inline-block;font-size:11.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#C8102E;background:#fdecef;border-radius:999px;padding:5px 11px}
+.rn-warn .rn-pill{color:#8a5a00;background:#fff4dc}.rn-ok .rn-pill{color:#136b39;background:#e3f5ea}
+.rn-title{font-family:Sora,Inter,sans-serif;font-size:clamp(22px,6vw,28px);line-height:1.2;font-weight:800;letter-spacing:-.01em;margin:12px 0 6px}
+.rn-lede{margin:0;font-size:15px;line-height:1.55;color:#4b5058}
+.rn-sum{margin-top:18px;border:1px solid #E2E4E8;border-radius:14px;padding:12px 16px 14px;background:#fafbfc}
+.rn-co{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#7A808A;padding-bottom:4px}
+.rn-row{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #eef0f2;font-size:15px}
+.rn-row>span:last-child{font-variant-numeric:tabular-nums;white-space:nowrap}
+.rn-qty{color:#7A808A}.rn-inc{font-size:13px;color:#6b7079;padding:10px 0 2px;line-height:1.5}
+.rn-total{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding-top:10px;font-size:14px;color:#6b7079;font-weight:600}
+.rn-total b{font-family:Sora,Inter,sans-serif;font-size:26px;color:#111316;font-weight:800}
+.rn-note{margin:10px 2px 0;font-size:13px;line-height:1.5;color:#6b7079}
+.rn-pay{display:flex;align-items:center;justify-content:center;width:100%;min-height:56px;margin-top:18px;border:0;border-radius:14px;background:#D0021B;color:#fff;font-family:Sora,Inter,sans-serif;font-size:16.5px;font-weight:800;cursor:pointer;text-decoration:none;box-shadow:0 8px 20px -6px rgba(164,1,35,.45);padding:0 16px;text-align:center}
+.rn-pay:hover{background:#A80007}.rn-pay:disabled{opacity:.6;cursor:default}
+.rn-ghost{background:#fff;color:#A80007;border:1.5px solid #E2E4E8;box-shadow:none;margin-top:10px}.rn-ghost:hover{background:#fafbfc}
+.rn-secure{display:flex;align-items:center;justify-content:center;gap:6px;margin:10px 0 0;font-size:12.5px;color:#6b7079;text-align:center}
+.rn-ask{margin-top:18px;padding:14px 16px;border-radius:12px;background:#fff4dc;color:#6b4a00;font-size:14px;font-weight:600;line-height:1.5}
+.rn-ask a{color:inherit}
+.rn-err{margin:10px 0 0;color:#A80007;font-size:13.5px;font-weight:600;text-align:center}
+.rn-links{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 18px;margin-top:16px;padding-top:14px;border-top:1px solid #eef0f2;font-size:13.5px;font-weight:700}
+.rn-links a{color:#A80007;text-decoration:none}.rn-links a:hover{text-decoration:underline}
+.rn-foot{text-align:center;font-size:12.5px;line-height:1.6;color:#7A808A;margin:18px 0 8px}
+@media (prefers-color-scheme:dark){body{background:#0a0f2c;color:#f3f4fb}.rn{background:#121a42}.rn-lede,.rn-inc,.rn-note,.rn-total,.rn-secure{color:#c6cae3}.rn-sum{background:#0f1638;border-color:rgba(255,255,255,.1)}.rn-row{border-color:rgba(255,255,255,.08)}.rn-total b{color:#fff}.rn-brand b{color:#f3f4fb}.rn-links{border-color:rgba(255,255,255,.08)}.rn-links a{color:#ff8fa3}.rn-ghost{background:transparent;color:#ff8fa3;border-color:rgba(255,255,255,.2)}.rn-foot{color:#9aa0c4}}

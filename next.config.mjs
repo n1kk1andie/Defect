@@ -16,6 +16,10 @@ const nextConfig = {
   turbopack: { resolveAlias: institutionAliases },
   // Kept out of the server bundle: native/WASM and CommonJS packages that load cleanly from node_modules.
   serverExternalPackages: ["@electric-sql/pglite", "pg", "exceljs"],
+  // Pulsus Quality's own "Renew and pay" page (public/renew.html, pulsus-renew.js).
+  async rewrites() {
+    return [{ source: "/renew", destination: "/renew.html" }];
+  },
 };
 
 export default withSecurityHeaders(nextConfig);

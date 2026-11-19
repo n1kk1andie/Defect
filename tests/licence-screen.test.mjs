@@ -1,9 +1,9 @@
 // The suite's licence screen standard: the deployment's own tenant (licence
-// wall) renews self-service — "Renew and pay" opens Pulsus Platform's renewal
-// page for Pulsus Quality, with Pulsus support's address in the note for
-// questions and a small link to the public plans page; a customer
-// company whose own subscription isn't active is offered "View plan & billing"
-// on Pulsus Platform. Both carry the suite's two footer lines.
+// wall) renews self-service — "Renew and pay" opens Pulsus Quality's own Renew
+// and pay page (/renew), with Pulsus support's address in the note for
+// questions and a small link to the public plans page; a customer company
+// whose own subscription isn't active gets "Renew and pay" to /renew too. Both
+// carry the suite's two footer lines.
 import { test, before, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -15,7 +15,7 @@ import { NextRequest } from "next/server";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const JWKS = "https://platform.test/api/jwks";
 const BILLING = "https://platform.test/company#billing";
-const RENEW = "https://platform.test/company?renew=quality";
+const RENEW = "/renew";
 const MAILTO = "mailto:support@pulsus.tech?subject=Pulsus%20Quality%20licence%20renewal";
 const PLANS = "https://aboutquality.pulsus.tech/plans/";
 const NOTE = "Questions about renewing? Write to support@pulsus.tech.";
@@ -60,7 +60,7 @@ function footerExact(html) {
   assert.deepEqual(lines, FOOT);
 }
 
-test("own-tenant licence wall: License Required, Renew and pay (Platform renewal for quality), the plans link, never Platform billing", async () => {
+test("own-tenant licence wall: License Required, Renew and pay (Pulsus Quality's own /renew), the plans link, never Platform billing", async () => {
   process.env.LICENSE_WALL = "on";
   const res = await proxy(req("/", await staff()));
   assert.equal(res.status, 403);
@@ -77,7 +77,7 @@ test("own-tenant licence wall: License Required, Renew and pay (Platform renewal
   assert.equal(wall.PLANS_URL, PLANS);
   assert.equal(wall.RENEW_NOTE, NOTE);
   assert.doesNotMatch(text, /mailto:|ontact us to renew/);
-  assert.doesNotMatch(text, /company#billing|View plan &/);
+  assert.doesNotMatch(text, /company#billing|company\?renew|View plan &/);
   footerExact(html);
   assert.doesNotMatch(html, /Tumblehill Holdings LLC Product/);
 });
@@ -102,15 +102,18 @@ test("a customer company whose subscription isn't active goes to the licence pag
   assert.match(res.headers.get("location"), /\/licence\?reason=suspended$/);
   const api = await proxy(req("/api/issues", t));
   assert.equal(api.status, 402);
-  assert.equal((await api.json()).plan, BILLING);
+  const body = await api.json();
+  assert.equal(body.plan, BILLING);
+  assert.equal(body.renew, "/renew");
 });
 
-test("the licence page (customer company): License Required, View plan & billing on Platform, the two footer lines", () => {
+test("the licence page (customer company): License Required, Renew and pay to /renew, the two footer lines", () => {
   assert.equal(wall.PAUSED_MESSAGE, "Your organisation's Pulsus subscription is not active. Your records are kept.");
   assert.equal(wall.BILLING_LABEL, "View plan & billing");
   assert.equal(wall.BILLING_NOTE, "Only your organisation's owner can pay. Ask them, or your administrator, if you can't.");
   const page = readFileSync(path.join(ROOT, "app/licence/page.tsx"), "utf8");
-  assert.match(page, /<LicenceNotice title=\{LICENSE_WALL_TITLE\} body=\{PAUSED_MESSAGE\} href=\{`\$\{platformUrl\(\)\}\/company#billing`\} label=\{BILLING_LABEL\} note=\{BILLING_NOTE\} \/>/);
+  assert.match(page, /<LicenceNotice title=\{LICENSE_WALL_TITLE\} body=\{PAUSED_MESSAGE\} href=\{renewUrl\(\)\} label=\{RENEW_LABEL\} note=\{BILLING_NOTE\} \/>/);
+  assert.doesNotMatch(page, /company#billing|BILLING_LABEL/);
   assert.match(readFileSync(path.join(ROOT, "components/account/AccountFrame.tsx"), "utf8"), /function LicenceNotice[\s\S]*foot=\{<SuiteFoot \/>\}/);
   assert.doesNotMatch(page, /mailto:/);
 });

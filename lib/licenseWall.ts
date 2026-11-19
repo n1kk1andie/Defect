@@ -13,16 +13,15 @@
 // The suite's licence screen standard: the same title, sentence, button, note
 // and two footer lines in every Pulsus app. Two kinds of visitor see it:
 //   - the deployment's own tenant (this wall): renewal is self-service —
-//     "Renew and pay" opens Pulsus Platform's renewal page for Pulsus Quality
-//     (<platform>/company?renew=quality: sign in, then pay for this product
-//     only), the note gives Pulsus support's address for questions, and a
+//     "Renew and pay" opens Pulsus Quality's own Renew and pay page (/renew,
+//     public/renew.html: sign in, then pay for Pulsus Quality only, straight
+//     to Stripe), the note gives Pulsus support's address for questions, and a
 //     small link sends newcomers to the public plans page;
 //   - a Pulsus customer company whose own subscription is paused or ended
-//     (app/licence/page.tsx): "View plan & billing" on Pulsus Platform.
+//     (app/licence/page.tsx): "Renew and pay", to /renew too.
 
 import { esc, frameHtml, QUALITY_FRAME } from "./frame-html";
 import { APP_NAME, footerLines } from "./footer";
-import { platformUrl } from "./platform-jwt";
 
 const LICENSE_WALL_DEFAULT_AT = "2026-09-03T05:00:00.000Z"; // 3 Sep 2026, 00:00 Jamaica
 const clean = (v: unknown) => (typeof v === "string" ? v.trim().replace(/^["']+|["']+$/g, "").trim().toLowerCase() : "");
@@ -46,8 +45,10 @@ export const RENEW_LABEL = "Renew and pay";
 export const RENEW_NOTE = `Questions about renewing? Write to ${SUPPORT_EMAIL}.`;
 /** Pulsus Platform's product key for Pulsus Quality. */
 export const PRODUCT_KEY = "quality";
-/** Pulsus Platform's renewal page for this product: where the own tenant renews, self-service (the demo hub's on a demo). */
-export const renewUrl = (): string => `${platformUrl()}/company?renew=${PRODUCT_KEY}`;
+/** Pulsus Quality's own "Renew and pay" page (public/renew.html): pay for
+ *  Pulsus Quality right here, straight to Stripe, without leaving it. */
+export const RENEW_PATH = "/renew";
+export const renewUrl = (): string => RENEW_PATH;
 /** Pulsus Quality's public plans page: the plans, and the free trial. */
 export const PLANS_URL = "https://aboutquality.pulsus.tech/plans/";
 export const PLANS_LINK = `New to ${APP_NAME}? See plans and start a free trial`;
