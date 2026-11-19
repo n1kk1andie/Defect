@@ -103,7 +103,35 @@ export function audienceOk(payload: Record<string, unknown> | null | undefined):
 export function sessionClaimsOk(p: Record<string, unknown>): boolean {
   if (p.iss !== PLATFORM_JWT_ISSUER && p.iss !== COMPANY_JWT_ISSUER) return false;
   if (p.iss === COMPANY_JWT_ISSUER && !(typeof p.company_id === "string" && p.company_id.trim())) return false;
+  if (!mfaSatisfied(p)) return false;
   return audienceOk(p);
+}
+
+// ── two-step sign-in (Pulsus Platform lib/mfaClaim.ts) ──────────────────────
+// Platform sets mfa_req: true on a person's session when their company
+// requires two-step sign-in (or they are a platform operator), and amr lists
+// how they signed in (["pwd"], ["pwd","otp"], ["sso"], ["sso","otp"],
+// ["sso","mfa"]). A session is acceptable only if mfa_req isn't true or amr
+// names a second factor ("otp" or "mfa"). A session without these claims is
+// accepted as before. Platform only issues such a session after the second
+// factor, so one that fails is from before the requirement was switched on:
+// the person signs in again. Sessions only — service grants are unaffected.
+export const MFA_REQUIRED_MESSAGE = "Your organisation requires two-step sign-in. Please sign in again.";
+
+/** Platform's rule: acceptable unless MFA is required and the sign-in had no second factor. */
+export function mfaSatisfied(p: { mfa_req?: unknown; amr?: unknown } | null | undefined): boolean {
+  if (!p) return false;
+  return p.mfa_req !== true || (Array.isArray(p.amr) && p.amr.some((a) => a === "otp" || a === "mfa"));
+}
+
+/** Does this token claim mfa_req without a second factor? Unverified — it only
+ *  picks the message for a refusal already made; it never lets anything in. */
+export function mfaShortfall(token: string | undefined): boolean {
+  if (!token || token.split(".").length !== 3) return false;
+  try {
+    const p = JSON.parse(b64urlStr(token.split(".")[1]));
+    return !!p && typeof p === "object" && !mfaSatisfied(p);
+  } catch { return false; }
 }
 
 /** Signature (a published kid, RS256), expiry and the caller's claim checks → the payload, or null. */
