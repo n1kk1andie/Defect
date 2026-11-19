@@ -12,9 +12,9 @@
 //
 // The suite's licence screen standard: the same title, sentence, button, note
 // and two footer lines in every Pulsus app. Two kinds of visitor see it:
-//   - the deployment's own tenant (this wall): it has no Pulsus Platform company
-//     account, so Plan & billing can never work for it — "Contact us to renew"
-//     opens an email to Pulsus support instead;
+//   - the deployment's own tenant (this wall): renewal is self-service —
+//     "View plans & billing" opens Pulsus Quality's plans page (choose a plan
+//     and pay there), and the note gives Pulsus support's address for questions;
 //   - a Pulsus customer company whose own subscription is paused or ended
 //     (app/licence/page.tsx): "View plan & billing" on Pulsus Platform.
 
@@ -39,8 +39,10 @@ export const LICENSE_WALL_TITLE = "License Required";
 export const SUPPORT_EMAIL = "support@pulsus.tech";
 /** The own tenant's licence has ended. */
 export const LICENSE_WALL_MESSAGE = "This organisation's licence has ended. Your records are kept.";
-export const RENEW_LABEL = "Contact us to renew";
-export const RENEW_NOTE = "Your organisation's owner or administrator can contact us to renew.";
+export const RENEW_LABEL = "View plans & billing";
+export const RENEW_NOTE = `Questions about renewing? Write to ${SUPPORT_EMAIL}.`;
+/** Pulsus Quality's plans page: where the own tenant renews, self-service. */
+export const PLANS_URL = "https://aboutquality.pulsus.tech/plans/";
 export const RENEW_MAILTO = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`${APP_NAME} licence renewal`)}`;
 /** A Pulsus customer company's own subscription is paused or ended. */
 export const PAUSED_MESSAGE = "Your organisation's Pulsus subscription is not active. Your records are kept.";
@@ -56,16 +58,16 @@ const HTML = frameHtml(QUALITY_FRAME, {
   pageTitle: `${LICENSE_WALL_TITLE} · ${APP_NAME}`,
   title: LICENSE_WALL_TITLE,
   body: LICENSE_WALL_MESSAGE,
-  ctaHtml: ctaHtml(RENEW_MAILTO, RENEW_LABEL, RENEW_NOTE),
+  ctaHtml: ctaHtml(PLANS_URL, RENEW_LABEL, RENEW_NOTE),
   foot: footerLines(),
 });
 
 const HEADERS = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
 
-/** The notice: JSON for an API path, the page otherwise. 403 — no credential fixes it; `contact` says who renews it. */
+/** The notice: JSON for an API path, the page otherwise. 403 — no credential fixes it; `plans` is where to renew, `contact` is support for questions. */
 export function licenseWallResponse(pathname: string): Response {
   if (pathname.startsWith("/api/")) {
-    return new Response(JSON.stringify({ error: LICENSE_WALL_TITLE, message: LICENSE_WALL_MESSAGE, contact: RENEW_MAILTO }), { status: 403, headers: { ...HEADERS, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: LICENSE_WALL_TITLE, message: LICENSE_WALL_MESSAGE, plans: PLANS_URL, contact: RENEW_MAILTO }), { status: 403, headers: { ...HEADERS, "Content-Type": "application/json" } });
   }
   return new Response(HTML, { status: 403, headers: { ...HEADERS, "Content-Type": "text/html; charset=utf-8" } });
 }
