@@ -35,7 +35,7 @@ import { BILLING_LABEL, BILLING_NOTE, ctaHtml, licenseWallActive, licenseWallRes
 import { frameHtml, QUALITY_FRAME } from "./lib/frame-html";
 import { footerLines } from "./lib/footer";
 import { demoAccessGate } from "./lib/demoAccess";
-import { claimedIssuer, COMPANY_JWT_ISSUER, platformSession, platformUrl, PLATFORM_COOKIE, type PlatformSession } from "./lib/platform-jwt";
+import { claimedIssuer, COMPANY_JWT_ISSUER, mfaShortfall, MFA_REQUIRED_MESSAGE, platformSession, platformUrl, PLATFORM_COOKIE, type PlatformSession } from "./lib/platform-jwt";
 
 const MODULE_KEY = "quality";
 const OWN = "_own";
@@ -150,6 +150,7 @@ export async function proxy(req: NextRequest) {
       u.search = pathname && pathname !== "/" ? `?next=${encodeURIComponent(pathname + search)}` : "";
       return NextResponse.redirect(u);
     }
+    if (api && !signedIn && mfaShortfall(token)) return NextResponse.json({ error: MFA_REQUIRED_MESSAGE }, { status: 401, headers: { "Cache-Control": "no-store" } });
     return signedIn ? known(licenseWallResponse(pathname)) : licenseWallResponse(pathname);
   }
 
@@ -167,7 +168,8 @@ export async function proxy(req: NextRequest) {
     if (s && !s.company) return known(forward(req, { [H.tenant]: OWN, [H.email]: s.email, [H.platformRole]: "staff", ...(s.operator ? { [H.operator]: "1" } : {}) }));
   }
 
-  if (api) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
+  // A session refused only for want of two-step sign-in says so (lib/platform-jwt.ts mfaSatisfied).
+  if (api) return NextResponse.json({ error: mfaShortfall(token) ? MFA_REQUIRED_MESSAGE : "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
   const door = frontDoor(req);
   if (door) return door;
   const url = req.nextUrl.clone();
