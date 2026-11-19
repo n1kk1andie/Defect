@@ -21,7 +21,7 @@ export const apiJson = (body: unknown, status = 200) => NextResponse.json(body, 
 
 /** 402 with code "licence_required": the company's plan has lapsed (the same rule as the licence wall). */
 export const licenceRefusal = () =>
-  NextResponse.json({ error: { code: "licence_required", message: LICENCE_MESSAGE }, plan: `${platformUrl()}/company#billing` }, { status: 402, headers: { "Cache-Control": "no-store", "X-Pulsus-Api-Version": API_VERSION } });
+  NextResponse.json({ error: { code: "licence_required", message: LICENCE_MESSAGE }, plan: `${platformUrl()}/company#billing`, renew: "/renew" }, { status: 402, headers: { "Cache-Control": "no-store", "X-Pulsus-Api-Version": API_VERSION } });
 
 /** Authenticate, check the licence, the scope and the rate limit, then run. */
 export async function withKey(req: Request, scope: Scope, fn: (k: KeyActor) => Promise<Response>): Promise<Response> {

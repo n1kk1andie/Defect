@@ -2,8 +2,9 @@
 //
 // 1. Every request loses any x-pq-* header it arrived with; only this file
 //    sets them (lib/session.ts reads them back), so they can't be forged.
-// 2. Public: the sign-in and sign-up pages, the licence page, health, the
-//    web manifest and icons. GET /api/pulse checks its own service grant.
+// 2. Public: the sign-in and sign-up pages, the licence page, Renew and pay
+//    (/renew, public/renew.html and its two files), health, the web manifest
+//    and icons. GET /api/pulse checks its own service grant.
 //    Each of these checks its own credential instead of a session: the
 //    report-an-issue page and form (/r/<token>, /api/public/report/<token>:
 //    the site's link token, Turnstile), the REST API (/api/v1: an API key),
@@ -30,7 +31,7 @@
 // Otherwise: 401 for an API, /login for a page.
 import { licenceLapsed } from "./lib/planStatus";
 import { NextRequest, NextResponse } from "next/server";
-import { BILLING_LABEL, BILLING_NOTE, ctaHtml, licenseWallActive, licenseWallResponse } from "./lib/licenseWall";
+import { BILLING_LABEL, BILLING_NOTE, ctaHtml, licenseWallActive, licenseWallResponse, renewUrl } from "./lib/licenseWall";
 import { frameHtml, QUALITY_FRAME } from "./lib/frame-html";
 import { footerLines } from "./lib/footer";
 import { demoAccessGate } from "./lib/demoAccess";
@@ -46,7 +47,7 @@ const H = {
 const PERSONA_COOKIE = "pq_persona";
 const DEMO_PERSONAS = ["guest", "admin", "taylor.reid", "robin.ellis", "jordan.blake", "sam.foster"].map((p) => `${p}@demo.pulsus.tech`);
 
-const PUBLIC = /^\/(?:login|signup|licence|api\/health|api\/logout|manifest\.webmanifest|icon\.png|apple-icon\.png|apple-touch-icon\.png|favicon\.ico|pulsus-quality[\w.-]*\.png|r|api\/public|api\/v1|api\/cron)(?:\/|$)/;
+const PUBLIC = /^\/(?:login|signup|licence|renew|renew\.html|pulsus-renew\.(?:js|css)|api\/health|api\/logout|manifest\.webmanifest|icon\.png|apple-icon\.png|apple-touch-icon\.png|favicon\.ico|pulsus-quality[\w.-]*\.png|r|api\/public|api\/v1|api\/cron)(?:\/|$)/;
 const MACHINE = /^\/(?:api\/health|api\/logout|api\/pulse|api\/data|api\/v1|api\/cron)(?:\/|$)/;
 // The front door: on the live host only, a signed-out visitor at / whose browser
 // has never signed in here goes to the product's own site. A browser that has
@@ -130,7 +131,7 @@ export async function proxy(req: NextRequest) {
       if (!s.company.modules.includes(MODULE_KEY)) return known(refuse(pathname, 403, "Pulsus Quality isn't switched on for your organisation", "Your organisation's owner or administrator can add it on the company page in Pulsus Platform."));
       const lapsed = licenceLapsed(s.company.plan);
       if (lapsed) {
-        if (api) return known(NextResponse.json({ error: "licence_required", plan: billingUrl() }, { status: 402 }));
+        if (api) return known(NextResponse.json({ error: "licence_required", plan: billingUrl(), renew: renewUrl() }, { status: 402 }));
         if (pathname !== "/licence") { const u = req.nextUrl.clone(); u.pathname = "/licence"; u.search = `?reason=${lapsed}`; return known(NextResponse.redirect(u)); }
       }
       return known(forward(req, companyIdentity(s)));

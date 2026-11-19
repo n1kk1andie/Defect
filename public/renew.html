@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Renew and pay · Pulsus Quality</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..800&amp;family=Sora:wght@700;800&amp;display=swap">
+<link rel="stylesheet" href="/pulsus-renew.css">
+<link rel="icon" type="image/png" href="/pulsus-quality-icon.png">
+</head>
+<!-- Pulsus Quality's own "Renew and pay" page (/renew). Payment goes straight to
+     Stripe for Pulsus Quality only, through Pulsus Platform's billing service
+     (/api/billing/renew); see pulsus-renew.js. -->
+<body data-product="quality" data-name="Pulsus Quality" data-signin="/login?next=%2Frenew"
+      data-plans="https://aboutquality.pulsus.tech/plans/" data-home="/">
+<div class="rn-wrap">
+  <div class="rn-brand"><img src="/pulsus-quality-emblem-day.png" alt=""><b>Pulsus Quality</b></div>
+  <main id="rn-root"><section class="rn"><p class="rn-lede">Loading your plan…</p></section></main>
+  <p class="rn-foot">Pulsus Quality · Part of the Pulsus Intelligence Suite<br>A product of Tumblehill Labs, a product studio of Tumblehill Holdings LLC.</p>
+</div>
+<script src="/pulsus-renew.js"></script>
+</body>
+</html>
