@@ -60,7 +60,7 @@
       return;
     }
     if (!v.company) {
-      card("", "warn", "Renew " + NAME, "You're signed in as <b>" + esc(v.email) + "</b>, which isn't part of a customer company on Pulsus. Sign in with your company's owner account to pay, or start a free trial.",
+      card("", "warn", "Renew " + NAME, "This sign-in isn't linked to a customer company on Pulsus. Sign in with your company's owner account to pay, or start a free trial.",
         link("Sign in with your company account", signin()) + (d.plans ? link("Start a free trial", d.plans, true) : ""));
       return;
     }
