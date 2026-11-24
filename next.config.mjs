@@ -5,8 +5,6 @@ import { withSecurityHeaders } from "./security-headers.mjs";
 // time, swaps the owner's institution (institution/) for neutral stand-ins
 // (demo-institution/), so no real name, person or figure can reach a demo.
 const DEMO_MODE = (process.env.DEMO_MODE || "").trim().replace(/^["']+|["']+$/g, "") === "1" ? "1" : "";
-// A demo is read-only unless DEMO_READONLY=0 (lib/demoReadOnly.ts); mirrored so the Demo chip can say so.
-const DEMO_READONLY = DEMO_MODE && (process.env.DEMO_READONLY || "").trim().replace(/^["']+|["']+$/g, "") !== "0" ? "1" : "";
 const institutionAliases = DEMO_MODE
   ? { "@/institution/data": "./demo-institution/data.ts", "@/institution": "./demo-institution/index.ts" }
   : {};
@@ -14,7 +12,7 @@ const institutionAliases = DEMO_MODE
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  env: { NEXT_PUBLIC_DEMO_MODE: DEMO_MODE, NEXT_PUBLIC_DEMO_READONLY: DEMO_READONLY },
+  env: { NEXT_PUBLIC_DEMO_MODE: DEMO_MODE },
   turbopack: { resolveAlias: institutionAliases },
   // Kept out of the server bundle: native/WASM and CommonJS packages that load cleanly from node_modules.
   serverExternalPackages: ["@electric-sql/pglite", "pg", "exceljs"],
