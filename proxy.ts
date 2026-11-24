@@ -16,6 +16,9 @@
 //    channels (health, feeds, REST API, jobs) stay open; the public report
 //    link (/r, /api/public) is gated too in a demo — the demo has no outside
 //    reporters, and a registered visitor can still try it.
+// 2b. A demo is shared by default; while the operator console (or
+//    DEMO_READONLY=1) makes it read-only, writes to the API are refused with a
+//    pointer to the free trial (lib/demoReadOnly.ts).
 // 4. A demo deployment (DEMO_MODE=1) opens straight into its fictional
 //    company as the chosen persona (guest viewer by default): no sign-in, no
 //    licence wall, no trial banner.
@@ -35,6 +38,7 @@ import { BILLING_LABEL, BILLING_NOTE, ctaHtml, licenseWallActive, licenseWallRes
 import { frameHtml, QUALITY_FRAME } from "./lib/frame-html";
 import { footerLines } from "./lib/footer";
 import { demoAccessGate } from "./lib/demoAccess";
+import { demoReadOnly, demoReadOnlyResponse, demoWriteCandidate } from "./lib/demoReadOnly";
 import { claimedIssuer, COMPANY_JWT_ISSUER, mfaShortfall, MFA_REQUIRED_MESSAGE, platformSession, platformUrl, PLATFORM_COOKIE, type PlatformSession } from "./lib/platform-jwt";
 
 const MODULE_KEY = "quality";
@@ -116,6 +120,9 @@ export async function proxy(req: NextRequest) {
   }
   const gate = await demoAccessGate(req, { app: MODULE_KEY, exempt: (p) => MACHINE.test(p) });
   if (gate) return gate;
+  // Demo only: refused while the operator has the demo read-only (lib/demoReadOnly.ts;
+  // shared by default). The platform is asked only for a write that could be refused.
+  if (demoWriteCandidate({ demo: isDemo(), method: req.method, path: pathname }) && (await demoReadOnly())) return demoReadOnlyResponse();
   if (PUBLIC.test(pathname) || /^\/api\/pulse\/?$/.test(pathname)) return forward(req, null);
 
   if (isDemo()) {
