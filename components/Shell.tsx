@@ -19,6 +19,8 @@ import GettingStarted from "@/components/GettingStarted";
 
 /** A demo deployment (build-inlined): the guided tour and the Getting started card. */
 const DEMO_UI = (process.env.NEXT_PUBLIC_DEMO_MODE || "") === "1";
+/** A read-only demo (DEMO_READONLY isn't "0"; lib/demoReadOnly.ts): the Demo chip says nothing is saved. */
+const DEMO_RO = (process.env.NEXT_PUBLIC_DEMO_READONLY || "") === "1";
 
 type Badge = "approvals" | "verify" | "inspections" | "issues";
 export const NAV: { href: string; label: string; icon: IconName; badge?: Badge; build?: boolean }[] = [
@@ -250,7 +252,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </Link>
           <span className="title grow" style={{ minWidth: 0 }}>{current}<small>{context}</small></span>
           <div className="tb-right">
-            {app.demo && <span className="demochip hide-sm" title="Meridian Financial Group is fictional: sample data for the demo">Demo · sample data</span>}
+            {app.demo && <span className="demochip hide-sm" title={`Meridian Financial Group is fictional: sample data for the demo${DEMO_RO ? ". Read-only: nothing you change is saved. Start a 14-day free trial to work with your own data." : ""}`}>Demo · sample data{DEMO_RO && " · read-only"}</span>}
             {tourOn && <button type="button" className="tourbtn hide-sm" onClick={() => setTouring(true)}>▶ Tour</button>}
             <span className="hide-sm"><TrialChip /></span>
             <button type="button" className="iconbtn" onClick={app.toggleTheme} aria-label={app.theme === "dark" ? "Switch to day" : "Switch to night"} title={app.theme === "dark" ? "Day" : "Night"}>
@@ -261,7 +263,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <AvatarMenu />
           </div>
         </header>
-        {app.demo && <p className="demonote mobile-only">Demo · fictional sample data{tourOn && <> · <button type="button" className="tourbtn" onClick={() => setTouring(true)}>▶ Tour</button></>}</p>}
+        {app.demo && <p className="demonote mobile-only">Demo · fictional sample data{DEMO_RO && " · read-only"}{tourOn && <> · <button type="button" className="tourbtn" onClick={() => setTouring(true)}>▶ Tour</button></>}</p>}
         <TrialBanner />
         {isAdmin(app.actor) && app.actor.kind === "company" && !app.settings.setupDone && !path.startsWith("/setup") && (
           <div className="trialbanner" role="region" aria-label="Set up"><div className="trialbanner-in" style={{ background: "var(--info-tint)", color: "var(--info-ink)", borderColor: "transparent" }}>
