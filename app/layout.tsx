@@ -30,6 +30,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
       </head>
+        {/* Visit counter (no cookies; no IP address is kept): executive.pulsus.tech/t.js */}
+        <script src="https://executive.pulsus.tech/t.js" async />
       <body>{demo ? <DemoBeacon app="quality" /> : null}{children}</body>
     </html>
   );
