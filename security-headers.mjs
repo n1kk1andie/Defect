@@ -18,7 +18,7 @@ const csp = [
   "img-src 'self' data: blob: https:",
   "font-src 'self' https://fonts.gstatic.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  `script-src 'self' 'unsafe-inline' ${TURNSTILE}${dev ? " 'unsafe-eval'" : ""}`,
+  `script-src 'self' https://executive.pulsus.tech 'unsafe-inline' ${TURNSTILE}${dev ? " 'unsafe-eval'" : ""}`,
   `connect-src 'self' ${ACCOUNT_HOSTS} ${TURNSTILE}`,
   `frame-src 'self' ${TURNSTILE}`,
 ].join("; ");
